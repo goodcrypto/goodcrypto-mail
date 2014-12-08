@@ -13,10 +13,10 @@ from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import crypto_software
-from goodcrypto.mail.messages import mime_constants
-from goodcrypto.mail.messages.constants import PUBLIC_KEY_HEADER, TAGLINE_DELIMITER
-from goodcrypto.mail.messages.email_message import EmailMessage
-from goodcrypto.mail.messages.message_exception import MessageException
+from goodcrypto.mail.message import mime_constants
+from goodcrypto.mail.message.constants import PUBLIC_KEY_HEADER, TAGLINE_DELIMITER
+from goodcrypto.mail.message.email_message import EmailMessage
+from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.utils.dirs import get_test_directory
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -532,7 +532,7 @@ def log_message_exception(exception_error, message, log_msg):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message_exception(Exception, 'message', 'log message')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.utils.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
         True
         >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
         True
@@ -554,12 +554,12 @@ def log_exception(log_msg, exception_error=None):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_exception('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.utils.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
         True
         >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
         True
         >>> log_exception('test', exception_error=Exception)
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.utils.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
         True
         >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
         True
@@ -582,7 +582,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.utils.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
         True
     '''
     global _log

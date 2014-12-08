@@ -11,7 +11,7 @@ import email, os
 from cStringIO import StringIO
 from threading import Thread
 
-from goodcrypto.mail.messages.message_exception import MessageException
+from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.oce.otp import OTPFile 
 
 def encrypt(mailfrom, mailto, message):

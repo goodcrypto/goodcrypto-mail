@@ -12,7 +12,7 @@ from base64 import b64decode, b64encode
 from traceback import format_exc
 
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, international_strings
-from goodcrypto.mail.messages.notices import notify_user
+from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.options import get_domain
 from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
 from goodcrypto.mail.utils import email_in_domain, gen_passcode, ok_to_modify_key

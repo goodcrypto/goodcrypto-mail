@@ -20,9 +20,9 @@ from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail.international_strings import REMOVED_BAD_HEADER_LINES
-from goodcrypto.mail.messages import constants, mime_constants
-from goodcrypto.mail.messages.validator import Validator
-from goodcrypto.mail.messages.message_exception import MessageException
+from goodcrypto.mail.message import constants, mime_constants
+from goodcrypto.mail.message.validator import Validator
+from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 
 
@@ -51,7 +51,7 @@ class EmailMessage(object):
             
              >>> email_message = EmailMessage()
              >>> type(email_message)
-             <class 'goodcrypto.mail.messages.email_message.EmailMessage'>
+             <class 'goodcrypto.mail.message.email_message.EmailMessage'>
         '''
 
         self.bad_header_lines = []
@@ -425,7 +425,7 @@ class EmailMessage(object):
             self.get_message().set_type(content_type)
 
         else:
-            from goodcrypto.mail.messages.utils import is_content_type_mime
+            from goodcrypto.mail.message.utils import is_content_type_mime
 
             EmailMessage.log_message('attaching payload for {}'.format(content_type))
             if content_type == mime_constants.OCTET_STREAM_TYPE:
@@ -1112,7 +1112,7 @@ class EmailMessage(object):
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
             >>> EmailMessage.log_message_exception(Exception, 'message', 'log message')
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.email_message.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
             True
@@ -1134,7 +1134,7 @@ class EmailMessage(object):
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
             >>> EmailMessage.log_exception('test')
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.email_message.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
             True
@@ -1164,7 +1164,7 @@ class EmailMessage(object):
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
             >>> EmailMessage.log_message('test')
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.email_message.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
         '''
         

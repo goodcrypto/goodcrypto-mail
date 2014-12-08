@@ -9,8 +9,8 @@ from StringIO import StringIO
 from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.messages import mime_constants
-from goodcrypto.mail.messages.message_exception import MessageException
+from goodcrypto.mail.message import mime_constants
+from goodcrypto.mail.message.message_exception import MessageException
 
 
 class Validator(object):

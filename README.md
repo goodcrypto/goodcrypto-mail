@@ -11,6 +11,14 @@ GoodCrypto Mail protects mail during delivery. Your mail is protected between Go
 
 
 
+##Dependencies
+
+goodcrypto-libs
+
+goodcrypto-oce
+
+
+
 ##Kudos
 
 Thanks to the authors and contributors of gpg, openssl, debian, and all the other open source projects which GoodCrypto uses.

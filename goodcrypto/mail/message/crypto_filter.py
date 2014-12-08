@@ -7,7 +7,7 @@
 from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.messages.email_message import EmailMessage
+from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.utils import parse_address
 
@@ -28,7 +28,7 @@ class CryptoFilter(object):
         ''' 
             Crypt a message.
 
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
+            >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
             >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
             >>> crypto_message = CryptoMessage(get_basic_email_message())
             >>> crypto_filter = CryptoFilter()
@@ -46,7 +46,7 @@ class CryptoFilter(object):
         '''
             Crypt a message.
 
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
+            >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
             >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
             >>> crypto_message = CryptoMessage(get_basic_email_message())
             >>> crypto_filter = CryptoFilter()
@@ -104,7 +104,7 @@ class CryptoFilter(object):
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
             >>> CryptoFilter().log_message('test')
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.crypto_filter.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.crypto_filter.log'))
             True
         '''
 

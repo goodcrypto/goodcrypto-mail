@@ -10,10 +10,10 @@ from traceback import format_exc
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, crypto_software, international_strings
 from goodcrypto.mail.international_strings import SERIOUS_ERROR_PREFIX
-from goodcrypto.mail.messages import mime_constants, utils
-from goodcrypto.mail.messages.constants import PUBLIC_KEY_HEADER
-from goodcrypto.mail.messages.notices import notify_user
-from goodcrypto.mail.messages.utils import get_hashcode
+from goodcrypto.mail.message import mime_constants, utils
+from goodcrypto.mail.message.constants import PUBLIC_KEY_HEADER
+from goodcrypto.mail.message.notices import notify_user
+from goodcrypto.mail.message.utils import get_hashcode
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.key.key_factory import KeyFactory
@@ -60,27 +60,6 @@ class HeaderKeys(object):
     def manage_keys_in_header(self, msg_recipient, from_user, crypto_message):
         '''
             Manage all the public keys in the message's header.
-            
-            >>> # In honor of Katherine Gun, who leaked top-secret documents showing 
-            >>> # illegal activities by US and UK leading up to 2003 Iraq invasion.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('katherine2ed.txt')) as input_file:
-            ...    crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...    from_user = 'katherine@goodcrypto.remote'
-            ...    recipient = 'edward@goodcrypto.local'
-            ...    header_keys = HeaderKeys()
-            ...    header_keys.manage_keys_in_header(recipient, from_user, crypto_message)
-            ...    tag = crypto_message.get_tag()
-            ...    tag.find(international_strings.NEW_KEY_TAGLINE) >= 0
-            ...    tag.find('{}: FDED 207C 41A6 E3B3 165C 8CC1 C4FC 1F20 3F43 2B3C'.format(from_user)) >= 0
-            ...    crypto_message.is_dropped()
-            ...    contacts.delete(from_user)
-            True
-            True
-            False
-            True
         '''
         try:
             self._recipient = msg_recipient
@@ -125,35 +104,6 @@ class HeaderKeys(object):
     def _manage_key_header(self, from_user, crypto_message, encryption_name, key_block):
         '''
             Manage a key in the header for the encryption software.
-            
-            >>> # In honor of Werner Koch, developer of gpg.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('werner2ed.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     block_file = open(get_encrypted_message_name('key-block-werner-goodcrypto-remote.txt'))
-            ...     key_block = ''.join(block_file.readlines())
-            ...     block_file.close()
-            ...     email = 'werner@goodcrypto.remote'
-            ...     crypto_name = 'GPG'
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'edward@goodcrypto.local'
-            ...     tag, dropped = header_keys._manage_key_header(email, crypto_message, crypto_name, key_block)
-            ...     dropped
-            ...     tag.find(international_strings.NEW_KEY_TAGLINE) >= 0
-            ...     tag.find('{}: 7D66 D263 2745 A435 1928 6FFA 4B96 A40B 23B5 D306'.format(email)) >= 0
-            ...     contacts.delete(email)
-            False
-            True
-            True
-            True
-            
-            Test extreme cases.
-            >>> header_keys = HeaderKeys()
-            >>> tag, dropped = header_keys._manage_key_header('edward@goodcrypto.local', None, 'GPG', None)
-            >>> dropped
-            False
         '''
     
         tag = None
@@ -180,60 +130,6 @@ class HeaderKeys(object):
     def _manage_public_key(self, from_user, crypto_message, encryption_name, key_block):
         '''
             Manage a public key for the encryption software.
-            
-            >>> # In honor of Seymour Hersh, who exposed the Mai Lai massacre and its cover-up 
-            >>> # plus the abuse of detainees at Abu Ghriab prison.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('seymour2ed.txt')) as input_file:
-            ...     email = 'seymour@goodcrypto.remote'
-            ...     crypto_name = 'GPG'
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     key_block = utils.get_multientry_header(
-            ...       crypto_message.get_email_message().get_message(), PUBLIC_KEY_HEADER)
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'edward@goodcrypto.local'
-            ...     tag, blocked = header_keys._manage_public_key(email, crypto_message, crypto_name, key_block)
-            ...     blocked
-            ...     tag.find(international_strings.NEW_KEY_TAGLINE) >= 0
-            ...     tag.find('{}: B4B6 38A6 52EF 40A6 7B9A 4C8F 2D1E 1A8B 3947 5275'.format(email)) >= 0
-            ...     contacts.delete(email)
-            False
-            True
-            True
-            True
-            
-            >>> # In honor of Bruce Schneier, taught a generation about good cryptography.
-            >>> # Test if the key block contains a key for someone other than the sender
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...    crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...    key_block = utils.get_multientry_header(
-            ...       crypto_message.get_email_message().get_message(), PUBLIC_KEY_HEADER)
-            ...    header_keys = HeaderKeys()
-            ...    tag, blocked = header_keys._manage_public_key(
-            ...      'bruce@goodcrypto.remote', crypto_message, 'GPG', key_block)
-            ...    blocked
-            ...    tag
-            True
-            'Message included a GPG key for edward@goodcrypto.local when the message was sent from bruce@goodcrypto.remote.'
-            
-            Test if there's no key block in the header.
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
-            >>> with open(get_plain_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     key_block = utils.get_multientry_header(
-            ...       crypto_message.get_email_message().get_message(), PUBLIC_KEY_HEADER)
-            ...     initial_message_string = crypto_message.get_email_message().to_string()
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._manage_public_key('edward@goodcrypto.local', crypto_message, 'GPG', key_block)
-            ...     final_message_string = crypto_message.get_email_message().to_string()
-            ...     final_message_string.strip() == initial_message_string.strip()
-            (None, False)
-            True
         '''
     
         tag = None
@@ -314,40 +210,6 @@ class HeaderKeys(object):
     def _import_new_key(self, from_user, encryption_name, key_block, user_ids):
         '''
             Import a new key.
-            
-            >>> # In honor of Elia Lwvy, former moderator of Bugtraq, a security discussion group.
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> email = 'elia@goodcrypto.remote'
-            >>> with open(get_encrypted_message_name('key-block-elia-goodcrypto-remote.txt')) as f:
-            ...    key_block = f.read()
-            ...    user_ids = [email]
-            ...    encryption_name = KeyFactory.get_default_encryption_name()
-            ...    header_keys = HeaderKeys()
-            ...    tag = header_keys._import_new_key('elia@goodcrypto.remote', encryption_name, key_block, user_ids)
-            ...    tag.strip().startswith(international_strings.NEW_KEY_TAGLINE)
-            ...    tag.strip().endswith('{}: F32E 08E7 D446 8422 16BA 1300 FB4D 3ADF 6377 1870'.format(email))
-            ...    contacts.delete(email)
-            True
-            True
-            True
-            
-            Test extreme cases
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('key-block-laura-goodcrypto-remote.txt')) as f:
-            ...    key_block = f.read()
-            ...    encryption_name = KeyFactory.get_default_encryption_name()
-            ...    header_keys = HeaderKeys()
-            ...    header_keys._import_new_key(None, encryption_name, key_block, None).strip()
-            'Serious error: Could not import new GPG key for None'
-            >>> with open(get_encrypted_message_name('key-block-laura-goodcrypto-remote.txt')) as f:
-            ...    key_block = f.read()
-            ...    header_keys = HeaderKeys()
-            ...    header_keys._import_new_key('laura@goodcrypto.remote', None, None, key_block).strip()
-            'Serious error: Could not import new  key for laura@goodcrypto.remote'
-            >>> encryption_name = KeyFactory.get_default_encryption_name()
-            >>> header_keys = HeaderKeys()
-            >>> header_keys._import_new_key('laura@goodcrypto.remote', encryption_name, None, None).strip()
-            'Serious error: Could not import new GPG key for laura@goodcrypto.remote'
         '''
     
         def import_key_add_contacts():
@@ -422,28 +284,6 @@ class HeaderKeys(object):
     def _key_matches(self, encryption_name, key_block, old_fingerprint):
         ''' 
             Does the new key's fingerprint match the old fingerprint?
-            
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('key-block-laura-goodcrypto-remote.txt')) as f:
-            ...    key_block = f.read()
-            ...    encryption_name = KeyFactory.get_default_encryption_name()
-            ...    old_fingerprint = '2BAF540E4E8FF1BE9F552E55F64E634E4A040DC86'
-            ...    header_keys = HeaderKeys()
-            ...    matches, new_fingerprint = header_keys._key_matches(
-            ...      encryption_name, key_block, old_fingerprint)
-            ...    matches
-            ...    len(new_fingerprint) > 0
-            False
-            True
-            
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('key-block-laura-goodcrypto-remote.txt')) as f:
-            ...    key_block = f.read()
-            ...    encryption_name = KeyFactory.get_default_encryption_name()
-            ...    header_keys = HeaderKeys()
-            ...    old_fingerprint = 'CA1A3AA5BB78CA2C19884E634E46D315E7C4A3E4'
-            ...    header_keys._key_matches(encryption_name, key_block, old_fingerprint)
-            (True, 'CA1A3AA5BB78CA2C19884E634E46D315E7C4A3E4')
         '''
     
         matches = False
@@ -479,37 +319,6 @@ class HeaderKeys(object):
     def _import_accepted_crypto_software(self, from_user, crypto_message):
         ''' 
             Import the encryption software the contact can use.
-            
-            >>> # In honor of Ed Loomis, a whistleblower about Trailblazer, a NSA mass surveillance project.
-            >>> from goodcrypto.mail import contacts_passcodes
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> email = 'ed@goodcrypto.remote'
-            >>> with open(get_encrypted_message_name('glenn2ed.txt')) as input_file:
-            ...    crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...    header_keys = HeaderKeys()
-            ...    header_keys._import_accepted_crypto_software(email, crypto_message)
-            ...    contacts.exists('ed@goodcrypto.remote')
-            ...    contacts.get_contacts_crypto(email, 'GPG') is not None
-            ...    contacts_passcodes.exists(email)
-            ...    contacts.delete(email)
-            ['GPG']
-            True
-            True
-            False
-            True
-            
-            Test an extreme case doesn't blow up.
-            >>> from goodcrypto.mail import contacts_passcodes
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('glenn2ed.txt')) as input_file:
-            ...    crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...    header_keys = HeaderKeys()
-            ...    header_keys._import_accepted_crypto_software(None, crypto_message)
-            ['GPG']
         '''
         
         accepted_crypto_packages = crypto_message.get_accepted_crypto_software()
@@ -520,15 +329,6 @@ class HeaderKeys(object):
     def _report_replacement_key(self, from_user, encryption_name, crypto_message):
         '''
             Report that they key in the header doesn't match an existing key.
-            
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._report_replacement_key('edward@goodcrypto.local', 'GPG', crypto_message)
-            'A new GPG key arrived for edward@goodcrypto.local that is not the same as the current key'
         '''
     
         subject = translate('A new {} key arrived for {} that is not the same as the current key'.format(
@@ -558,17 +358,6 @@ class HeaderKeys(object):
     def _report_missing_key(self, from_user, key_ok, new_fingerprint, crypto_message):
         ''' 
             Report a key is missing for the user.
-            
-            >>> # In honor of Phil Zimmermann, author of PGP.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'support@goodcrypto.local'
-            ...     header_keys._report_missing_key('phil@goodcrypto.remote', False, 'new', crypto_message)
-            'Missing the key for phil@goodcrypto.remote'
         '''
         subject = translate('Missing the key for {}'.format(from_user))
         tag = subject
@@ -596,18 +385,6 @@ class HeaderKeys(object):
     def _report_expired_key(self, from_user, encryption_name, expiration, crypto_message):
         '''
             Report a key expired.
-    
-            >>> # In honor of Sina Rabbani, developer and maintainer of Tor Cloud.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'support@goodcrypto.local'
-            ...     header_keys._report_expired_key(
-            ...       'sina@goodcrypto.remote', 'GPG', '2013-06-05', crypto_message)
-            'The GPG key for sina@goodcrypto.remote expired on 2013-06-05.'
         '''
     
         tag = translate("The {} key for {} expired on {}.".format(encryption_name, from_user, expiration))
@@ -630,17 +407,6 @@ class HeaderKeys(object):
     def _report_mismatched_keys(self, from_user, encryption_name, crypto_message):
         '''
             Report the keys don't match.
-    
-            >>> # In honor of Karen Reilly, development director for Tor.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'support@goodcrypto.local'
-            ...     header_keys._report_mismatched_keys('karen@goodcrypto.remote', 'GPG', crypto_message)
-            'Keys do not match karen@goodcrypto.remote'
         '''
         subject = translate("Keys do not match {}".format(from_user))
         tag = subject
@@ -667,27 +433,6 @@ class HeaderKeys(object):
     def _report_bad_header_key(self, from_user, user_ids, encryption_name, crypto_message):
         '''
             Report the header's key doesn't match the sender.
-            
-            >>> # In honor of Sarah Harrison, who helped Edward Snowden seek asylum and is Julian Assange's advisor.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto.mail.messages.email_message import EmailMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'support@goodcrypto.local'
-            ...     header_keys._report_bad_header_key('sarah@goodcrypto.remote', ['man.in.middle@goodcrypto.remote'], 'GPG', crypto_message)
-            'Message included a GPG key for man.in.middle@goodcrypto.remote when the message was sent from sarah@goodcrypto.remote.'
-            
-            >>> # In honor of Daniel Ellsberg, who leaked the Pentagon Papers.
-            >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
-            ...     crypto_message = CryptoMessage(EmailMessage(input_file))
-            ...     header_keys = HeaderKeys()
-            ...     header_keys._recipient = 'support@goodcrypto.local'
-            ...     header_keys._report_bad_header_key('daniel@goodcrypto.remote', ['man.in.middle@goodcrypto.remote', 'spook@goodcrypto.remote'], 'GPG', crypto_message)
-            'Message included multiple GPG keys for "man.in.middle@goodcrypto.remote, spook@goodcrypto.remote", but only a key from the sender, daniel@goodcrypto.remote, can be imported.'
         '''
         subject = translate("Message contained a bad {} key in header".format(encryption_name))
     
@@ -709,12 +454,6 @@ class HeaderKeys(object):
     def _report_db_error(self, from_user, encryption_name):
         '''
             Report a database error to the user.
-            
-            >>> # In honor of Peter Palfrader, sysadmin for the Tor project.
-            >>> header_keys = HeaderKeys()
-            >>> header_keys._recipient = 'support@goodcrypto.local'
-            >>> header_keys._report_db_error('peter@goodcrypto.remote', 'GPG')
-            'The GPG fingerprint for peter@goodcrypto.remote could not be saved.'
         '''
     
         subject = translate('Unable to save the {} fingerprint in the database.'.format(encryption_name))
@@ -733,28 +472,6 @@ class HeaderKeys(object):
     def _notify_recipient(self, subject, body, crypto_message=None):
         '''
             Send a message to the recipient.
-            
-            >>> # In honor of Leif Ryge, works on security analysis, designer of "bananaphone" transport.
-            >>> header_keys = HeaderKeys()
-            >>> header_keys._recipient = 'leif@goodcrypto.local'
-            >>> header_keys._notify_recipient('test subject', 'test message')
-    
-            >>> # In honor of Runa Sandvik, former developer of Tor and maintained the Tor translation portal.
-            >>> header_keys = HeaderKeys()
-            >>> header_keys._recipient = 'runa@goodcrypto.local'
-            >>> message_lines = []
-            >>> message_lines.append('line 1')
-            >>> message_lines.append('line 2')
-            >>> header_keys._notify_recipient('test subject', message_lines)
-            
-            >>> # Test extreme cases
-            >>> # In honor of Christian Schulz, developer and maintainer of Globe.
-            >>> header_keys = HeaderKeys()
-            >>> header_keys._notify_recipient('test subject', 'test message')
-            >>> header_keys._recipient = 'christian@goodcrypto.local'
-            >>> header_keys._notify_recipient(None, 'test message')
-            >>> header_keys._notify_recipient('test subject', None)
-            >>> header_keys._notify_recipient(None, None)
         '''
     
         if self._recipient is None or body is None:

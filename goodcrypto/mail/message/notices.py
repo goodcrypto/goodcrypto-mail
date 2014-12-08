@@ -17,7 +17,7 @@ from email.utils import formataddr
 from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.messages import mime_constants
+from goodcrypto.mail.message import mime_constants
 from goodcrypto.mail.options import get_domain
 from goodcrypto.mail.utils.dirs import get_notices_directory
 from goodcrypto.mail.utils.exception_log import ExceptionLog
@@ -53,7 +53,7 @@ def create_notice_message(to_address, subject, text=None, attachment=None, filen
     if to_address is None or (subject is None and text is None):
         log_message('unable to send notice without to address plus subject or text')
     else:
-        from goodcrypto.mail.messages.utils import get_current_timestamp
+        from goodcrypto.mail.message.utils import get_current_timestamp
         
         if text is None:
             text = subject
@@ -158,7 +158,7 @@ def _save(message):
             notice_filename = None
             log_message('no notice to save')
         else:
-            from goodcrypto.mail.messages.utils import write_message
+            from goodcrypto.mail.message.utils import write_message
         
             log_message('saving: {}'.format(message))
             notice_filename = write_message(get_notices_directory(), message)
@@ -177,7 +177,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.notices.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.notices.log'))
         True
     '''
 

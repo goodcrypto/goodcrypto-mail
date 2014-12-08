@@ -9,7 +9,7 @@ from traceback import format_exc
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import crypto_software, international_strings
 from goodcrypto.mail.contacts import is_key_ok
-from goodcrypto.mail.messages.message_exception import MessageException
+from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.options import get_validation_code, set_validation_code
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -27,8 +27,8 @@ def add_tag_to_message(crypto_message):
         Add tag to a message.
         
         Test adding tags to text/plain
-        >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-        >>> from goodcrypto.mail.messages.email_message import EmailMessage
+        >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
+        >>> from goodcrypto.mail.message.email_message import EmailMessage
         >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
@@ -58,8 +58,8 @@ def get_tags(crypto_message):
     '''
         Get tags to add to message.
         
-        >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-        >>> from goodcrypto.mail.messages.email_message import EmailMessage
+        >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
+        >>> from goodcrypto.mail.message.email_message import EmailMessage
         >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
@@ -121,8 +121,8 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
         Check the signature if message is signed.
         
         >>> # In honor of Mike Perry, Tor Browser and Tor Performance developer.
-        >>> from goodcrypto.mail.messages.crypto_message import CryptoMessage
-        >>> from goodcrypto.mail.messages.email_message import EmailMessage
+        >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
+        >>> from goodcrypto.mail.message.email_message import EmailMessage
         >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
         >>> with open(get_plain_message_name('pgp-sig-unknown.txt')) as input_file:
         ...    email = 'mike@goodcrypto.remote'
@@ -225,7 +225,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.messages.decrypt_utils.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.decrypt_utils.log'))
         True
     '''
     global _log

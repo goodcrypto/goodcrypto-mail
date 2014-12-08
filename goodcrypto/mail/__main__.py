@@ -14,12 +14,12 @@ from django.core.validators import EmailValidator
 
 from goodcrypto.mail import international_strings 
 from goodcrypto.mail.options import get_domain, get_mail_server_address, get_mta_listen_port
-from goodcrypto.mail.messages.crypto_message import CryptoMessage
-from goodcrypto.mail.messages.decrypt_filter import DecryptFilter
-from goodcrypto.mail.messages.email_message import EmailMessage
-from goodcrypto.mail.messages.encrypt_filter import EncryptFilter
-from goodcrypto.mail.messages.message_exception import MessageException
-from goodcrypto.mail.messages.notices import notify_user
+from goodcrypto.mail.message.crypto_message import CryptoMessage
+from goodcrypto.mail.message.decrypt_filter import DecryptFilter
+from goodcrypto.mail.message.email_message import EmailMessage
+from goodcrypto.mail.message.encrypt_filter import EncryptFilter
+from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.models import LongEmailField
 from goodcrypto.mail.options import max_message_length, get_domain
 from goodcrypto.mail.utils import email_in_domain
