@@ -30,7 +30,7 @@
     </pre>
 
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-10-22
+    Last modified: 2014-11-29
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -77,7 +77,7 @@ def is_ok():
                     result_ok = passcode_ok(crypto_passcode)
         else:
             result_ok = False
-            log_message('no local crypto passcodes defined')
+            log_message('none defined')
                 
     except Exception:
         result_ok = False
@@ -100,7 +100,7 @@ def exists(email):
     _, address = parse_address(email)
     query_set = get_all_passcodes(address)
     found = query_set is not None and len(query_set) > 0
-    log_message("{} passcodes exist: {}".format(address, found))
+    log_message("{} private key exist: {}".format(address, found))
 
     return found
 
@@ -130,10 +130,12 @@ def get(email, encryption_name):
         if contacts_encryption is None:
             log_message("{} does not have a {} encryption record".format(email, encryption_name))
         else:
+            log_message("getting {} private key record for {} ({})".format(
+                encryption_name, email, contacts_encryption.fingerprint))
             contacts_passcode = ContactsPasscode.objects.get(contacts_encryption=contacts_encryption)
-            log_message("got {} passcode for {}".format(encryption_name, email))
+            log_message("found {} private key record for {}".format(encryption_name, email))
     except ContactsPasscode.DoesNotExist:
-        log_message('{} does not have a matching passcode record'.format(email))
+        log_message('{} does not have a matching private key record'.format(email))
     except Exception:
         log_message(format_exc())
         
@@ -158,9 +160,9 @@ def get_passcode(email, encryption_name):
         if contacts_passcode:
             passcode = contacts_passcode.passcode
             if passcode and len(passcode) > 0:
-                log_message("got {} passcode for {}".format(encryption_name, email))
+                log_message("private {} key configured for {}".format(encryption_name, email))
             else:
-                log_message('{} does not have a {} passcode'.format(email, encryption_name))
+                log_message('{} does not have a {} private key configured'.format(email, encryption_name))
         else:
             log_message('{} does not have a matching contact'.format(email))
     except Exception:
@@ -488,7 +490,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.contacts_passcodes.x.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.contacts_passcodes.log'))
         True
     '''
 

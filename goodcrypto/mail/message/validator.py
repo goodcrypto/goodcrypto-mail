@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-15
+    Last modified: 2014-11-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -22,7 +22,7 @@ class Validator(object):
         ''' 
             Unparsable messages are wrapped in a valid message. 
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
             >>> validator != None
@@ -42,7 +42,7 @@ class Validator(object):
              As we find different errors in messages, we should make sure this
              method catches them.
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
             >>> validator.is_message_valid()
@@ -58,7 +58,7 @@ class Validator(object):
             try:
                 self.email_message.write_to(StringIO())
                 if Validator.DEBUGGING:
-                    self.log.write("message after check:\n{}".format(self.email_message.to_string()))
+                    self.log_message("message after check:\n{}".format(self.email_message.to_string()))
 
                 self._check_content(self.email_message)
                 is_valid = True
@@ -67,9 +67,9 @@ class Validator(object):
                 is_valid = False
                 
                 #  we explicitly want to catch everything here, even NPE
-                self.log.write(format_exc())
+                self.log_message(format_exc())
 
-        self.log.write('message is valid: {}'.format(is_valid))
+        self.log_message('message is valid: {}'.format(is_valid))
 
         return is_valid
 
@@ -78,14 +78,14 @@ class Validator(object):
         '''
              Make sure we can read the content.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
             >>> validator._check_content(validator.email_message)
         '''
 
         content_type = part.get_header('Content-Type')
-        self.log.write("MIME part content type: {}".format(content_type))
+        self.log_message("MIME part content type: {}".format(content_type))
         content = part.get_content()
         if isinstance(content, MIMEMultipart):
             count = 0
@@ -93,7 +93,7 @@ class Validator(object):
             for sub_part in parts:
                 self._check_content(sub_part)
                 count += 1
-            self.log.write('parts in message: {}'.format(count))
+            self.log_message('parts in message: {}'.format(count))
             if count != parts.getCount():
                 self.why = "Unable to read all content. Reported: '{}', read: {}".format(
                     parts.getCount(), count)
@@ -104,7 +104,7 @@ class Validator(object):
         ''' 
             Gets why a message is invalid. Returns null if the message is valid. 
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
             >>> validator.get_why() is None
@@ -112,4 +112,24 @@ class Validator(object):
         '''
 
         return self.why
+
+    def log_message(self, message):
+        '''
+            Log the message to the local log.
+            
+            >>> import os.path
+            >>> from syr.log import BASE_LOG_DIR
+            >>> from syr.user import whoami
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
+            >>> good_message = get_basic_email_message()
+            >>> validator = Validator(good_message)
+            >>> validator.log_message('test')
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.validator.log'))
+            True
+        '''
+
+        if self.log is None:
+            self.log = LogFile()
+
+        self.log.write_and_flush(message)
 

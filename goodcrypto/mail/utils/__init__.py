@@ -2,7 +2,7 @@
     Mail utilities.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -97,20 +97,7 @@ def ok_to_modify_key(encryption_name, key_plugin):
         ok = False
         log.write_and_flush('no key plugin defined')
     else:
-        if key_plugin.USE_QUEUE:
-            ok = True
-        else:
-            plugin_home_dir = key_plugin.get_home_dir()
-            if plugin_home_dir:
-                statinfo = os.stat(os.path.dirname(plugin_home_dir))
-                ok = statinfo.st_uid == os.geteuid()
-                if not ok:
-                    log.write_and_flush('{} files owned by a different uid ({}) than the current uid ({})'.format(
-                        encryption_name, statinfo.st_uid, os.geteuid()))
-            else:
-                ok = True
-                log.write_and_flush('type of plugin: {}'.format(type(key_plugin)))
-                log.write_and_flush('{} does not have a home dir defined'.format(encryption_name))
+        ok = True
 
     return ok
 

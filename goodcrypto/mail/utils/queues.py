@@ -2,7 +2,7 @@
     Mail queue utilities.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -103,5 +103,10 @@ def clear_semaphores(suffix=None):
     for f in files:
         if suffix is None or f.endswith(suffix):
             os.remove(os.path.join(get_queue_directory(), f))
+
+    files = os.listdir('/tmp')
+    for f in files:
+        if f.startswith('__keygen'):
+            os.remove(os.path.join('/tmp', f))
 
 

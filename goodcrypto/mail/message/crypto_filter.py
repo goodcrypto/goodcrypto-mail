@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-15
+    Last modified: 2014-11-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -22,14 +22,14 @@ class CryptoFilter(object):
          <code>crypt_from</code> or <code>crypt_from_to</code>.
     '''
 
-    _log = None
+    log = None
 
     def crypt_from_to(self, crypto_message, from_user, to_user):
         ''' 
             Crypt a message.
 
             >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> crypto_message = CryptoMessage(get_basic_email_message())
             >>> crypto_filter = CryptoFilter()
             >>> crypto_filter.crypt_from_to(crypto_message, 'edward@goodcrypto.local', 'chelsea@goodcrypto.local')
@@ -47,7 +47,7 @@ class CryptoFilter(object):
             Crypt a message.
 
             >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> crypto_message = CryptoMessage(get_basic_email_message())
             >>> crypto_filter = CryptoFilter()
             >>> crypto_filter.crypt_from(crypto_message, 'edward@goodcrypto.local', 'chelsea@goodcrypto.local')
@@ -109,8 +109,8 @@ class CryptoFilter(object):
         '''
 
 
-        if self._log is None:
-            self._log = LogFile()
+        if self.log is None:
+            self.log = LogFile()
 
-        self._log.write(message)
+        self.log.write_and_flush(message)
 

@@ -3,7 +3,7 @@
     Send notices from the GoodCrypto Server daemon.
     
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-24
+    Last modified: 2014-12-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -112,7 +112,7 @@ def notify_user(to_address, subject, text=None, attachment=None, filename=None):
         if message is None:
             result_ok = False
         else:
-            log_message('starting to send notice to {}'.format(to_address))
+            log_message('starting to send notice to {} about {}'.format(to_address, subject))
             
             from_addr = NOTICE_FROM_EMAIL
             _, to_addr = parse_address(to_address)
@@ -186,5 +186,5 @@ def log_message(message):
     if _log is None:
         _log = LogFile()
         
-    _log.write(message)
+    _log.write_and_flush(message)
 

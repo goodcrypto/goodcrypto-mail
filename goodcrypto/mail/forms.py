@@ -2,7 +2,7 @@
     Mail app forms.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-25
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -276,15 +276,15 @@ class ExportKeyForm(forms.Form):
 
 class ImportKeyForm(forms.Form):
     
-    public_key_file = forms.FileField(max_length=100000,
+    public_key_file = forms.FileField(max_length=500000,
        help_text=international_strings.UPLOAD_PUBLIC_KEY_HELP,)
     encryption_software = forms.ModelChoiceField(
        queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
-       help_text=international_strings.SELECT_CRYPTO_FOR_KEY_HELP,)
+       help_text=international_strings.SELECT_KEY_CRYPTO_HELP,)
     user_name = forms.CharField(max_length=100, required=False,
-       help_text='Printable name of the contact in case the key does not contain it.')
+       help_text='Printable name of the contact in case the key does not contain it. Optional.')
     fingerprint = forms.CharField(max_length=100, required=False,
-       help_text="The fingerprint for the contact's public key, if known.")
+       help_text="The fingerprint for the contact's public key, if known. Optional.")
 
 
 
@@ -293,6 +293,8 @@ API_Actions = (
     (api_constants.CONFIGURE, api_constants.CONFIGURE),
     (api_constants.CREATE_USER, api_constants.CREATE_USER),
     (api_constants.IMPORT_KEY, api_constants.IMPORT_KEY),
+    (api_constants.GET_FINGERPRINT, api_constants.GET_FINGERPRINT),
+    (api_constants.GET_CONTACT_LIST, api_constants.GET_CONTACT_LIST),
 )
 
 class APIForm(forms.Form):
@@ -316,6 +318,8 @@ class APIForm(forms.Form):
 
     user_name = forms.CharField(max_length=100, required=False)
       
+    email = forms.EmailField(required=False)
+
     fingerprint = forms.CharField(max_length=100, required=False)
        
     encryption_name = forms.CharField(max_length=100, required=False)

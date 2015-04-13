@@ -10,6 +10,10 @@ GoodCrypto Mail keeps the content of your mail private. It is safe from prying e
 GoodCrypto Mail protects mail during delivery. Your mail is protected between GoodCrypto mail servers with PGP, and from the mail server to the user with SSL. Someone might possibly read your mail before it is sent, or after it arrives. But that's a lot harder, so it's rare.
 
 
+##Repository
+
+This repository acts as a backup for the source code. We strongly encourage users to <a href="https://goodcrypto.com/server/download/">download the ISO</a> which includes full source code and is preconfigured.
+
 
 ##Dependencies
 

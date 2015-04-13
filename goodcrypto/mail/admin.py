@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-13
+    Last modified: 2014-11-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -66,8 +66,8 @@ class Options(CustomModelAdmin):
     form = forms.OptionsAdminForm
     
     readonly_fields = ('domain',)
-    
-    list_display = ('mail_server_address','auto_exchange', 'create_private_keys', 'clear_sign', 'max_message_length', 'validation_code',)
+
+    list_display = ('mail_server_address','auto_exchange', 'create_private_keys', 'clear_sign', 'filter_html', 'max_message_length',)
     staff_list_display = list_display
     superuser_list_display = list_display
     list_display_links = list_display
@@ -87,8 +87,8 @@ class Options(CustomModelAdmin):
                        'create_private_keys',
                        'clear_sign',
                        'filter_html',
-                       'validation_code',
                        'max_message_length',
+                       #'validation_code',
                        #'accept_self_signed_certs',
                        #'days_between_key_alerts',
                        #'use_encrypted_content_type',

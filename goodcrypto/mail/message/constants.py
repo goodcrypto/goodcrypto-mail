@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-06-22
+    Last modified: 2014-11-22
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -47,4 +47,5 @@ TAGLINE_DELIMITER = '___________________________________________________________
 
 CRLF = '\r\n'
 
+DEFAULT_CHAR_SET = 'UTF-8'
 

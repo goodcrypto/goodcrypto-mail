@@ -3,7 +3,7 @@
     the encryption databases (i.e., keyrings).
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-17
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''

@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-15
+    Last modified: 2014-12-13
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -23,6 +23,7 @@ from goodcrypto.mail.international_strings import REMOVED_BAD_HEADER_LINES
 from goodcrypto.mail.message import constants, mime_constants
 from goodcrypto.mail.message.validator import Validator
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.utils import get_charset, is_open_pgp_mime
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 
 
@@ -37,13 +38,8 @@ class EmailMessage(object):
         and contains the original unparsable message in the body.
     '''
 
-    DEBUGGING = False
-    DEFAULT_CHAR_SET = 'UTF-8'
+    DEBUGGING = True
     
-    _last_charset = DEFAULT_CHAR_SET
-    _log = None
-    _message = None
-
     def __init__(self, message_or_file=None):
         '''
              Creates an EmailMessage from a Message or a file.
@@ -55,51 +51,53 @@ class EmailMessage(object):
         '''
 
         self.bad_header_lines = []
+        self.parser = Parser()
+
+        self._last_charset = constants.DEFAULT_CHAR_SET
+        self._log = self._message = None
 
         if message_or_file is None:
-            EmailMessage._message = Message()
+            self._message = Message()
 
         elif isinstance(message_or_file, Message):
-            EmailMessage._message = message_or_file
+            self._message = message_or_file
 
         elif isinstance(message_or_file, EmailMessage):
-            EmailMessage._message = message_or_file.get_message()
+            self._message = message_or_file.get_message()
 
         else:
-            self.parser = Parser()
-            
             try:
                 if isinstance(message_or_file, file) or isinstance(message_or_file, StringIO):
-                    EmailMessage.log_message('about to parse a message from a file')
-                    EmailMessage._message = self.parser.parse(message_or_file)
-                    EmailMessage.log_message('parsed message')
+                    self.log_message('about to parse a message from a file')
+                    self._message = self.parser.parse(message_or_file)
+                    self.log_message('parsed message')
                     if self.DEBUGGING:
-                        EmailMessage.log_message('{}'.format(self.to_string()))
+                        self.log_message('{}'.format(self.to_string()))
                 else:
-                    EmailMessage.log_message('about to parse a message from a string')
-                    EmailMessage._message = self.parser.parsestr(message_or_file)
-                    EmailMessage.log_message('parsed message')
+                    self.log_message('about to parse a message from a string')
+                    self._message = self.parser.parsestr(message_or_file)
+                    self.log_message('parsed message')
                     if self.DEBUGGING:
-                        EmailMessage.log_message('{}'.format(self.to_string()))
+                        self.log_message('{}'.format(self.to_string()))
                 
                 if not self.validate_message():
                     self._create_good_message_from_bad(message_or_file)
             except Exception:
                 try:
-                    EmailMessage.log_message(format_exc())
+                    self.log_message(format_exc())
                     
                     self._create_good_message_from_bad(message_or_file)
                     
                     # if we still don't have a good message, then blow up
                     if not self.validate_message():
-                        EmailMessage.log_message('unable to create a valid message')
+                        self.log_message('unable to create a valid message')
                         raise MessageException()
                 except Exception:
-                    EmailMessage.log_message(format_exc())
+                    self.log_message(format_exc())
                     
-        if EmailMessage.DEBUGGING:
+        if self.DEBUGGING:
             try:
-                EmailMessage.log_message(self.to_string())
+                self.log_message(self.to_string())
             except:
                 pass
 
@@ -108,7 +106,7 @@ class EmailMessage(object):
         ''' 
             Get a header from an existing message. 
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.get_header('X-OpenPGP-Accepts')
@@ -127,7 +125,7 @@ class EmailMessage(object):
         ''' 
             Add a header to an existing message. 
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> with open(get_plain_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.add_header('X-OpenPGP-Accepts', 'GPG')
@@ -135,14 +133,14 @@ class EmailMessage(object):
             'GPG'
         '''
 
-        EmailMessage._message.__setitem__(key, value)
+        self._message.__setitem__(key, value)
 
 
     def change_header(self, key, value):
         ''' 
             Change a header to an existing message. 
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('bouncy-castle.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.change_header('X-OpenPGP-Accepts', 'TestGPG')
@@ -150,7 +148,7 @@ class EmailMessage(object):
             'TestGPG'
         '''
 
-        if EmailMessage._message.__contains__(key):
+        if self._message.__contains__(key):
             self.delete_header(key)
 
         self.add_header(key, value)
@@ -160,7 +158,7 @@ class EmailMessage(object):
         ''' 
             Delete a header to an existing message.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('bouncy-castle.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.delete_header('X-OpenPGP-Accepts')
@@ -168,14 +166,14 @@ class EmailMessage(object):
             True
         '''
         
-        EmailMessage._message.__delitem__(key)
+        self._message.__delitem__(key)
 
 
     def get_message(self):
         ''' 
             Get the message.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
             >>> email_message = get_basic_email_message()
             >>> email_message.get_message() is not None
@@ -184,7 +182,7 @@ class EmailMessage(object):
             True
         '''
 
-        return EmailMessage._message
+        return self._message
 
 
     def set_message(self, new_message):
@@ -192,7 +190,7 @@ class EmailMessage(object):
             Set the new message.
             
             # Get a basic message first so we can avoid recursion
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
             >>> basic_email_message = get_basic_email_message().get_message()
             >>> email_message = EmailMessage()
@@ -203,13 +201,13 @@ class EmailMessage(object):
             True
         '''
 
-        old_message = EmailMessage._message
-        EmailMessage._message = new_message
+        old_message = self._message
+        self._message = new_message
         
         # restore the old message if the new one isn't valid.
         if not self.validate_message():
-            EmailMessage._message = old_message
-            EmailMessage.log_message('restored previous message')
+            self._message = old_message
+            self.log_message('restored previous message')
 
     def validate_message(self):
         '''
@@ -219,7 +217,7 @@ class EmailMessage(object):
             simply adding all header items after the bad header line(s) to the body text;
             this can leave a pretty unmanageable message so we apply our own validation
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
             >>> email_message = get_basic_email_message()
             >>> email_message.validate_message()
@@ -229,14 +227,14 @@ class EmailMessage(object):
             validator = Validator(self)
             if validator.is_message_valid():
                 valid = True
-                EmailMessage.log_message('message is valid')
+                self.log_message('message is valid')
             else:
                 valid = False
-                EmailMessage.log_message('message is invalid')
-                EmailMessage.log_message(validator.get_why())
+                self.log_message('message is invalid')
+                self.log_message(validator.get_why())
         except Exception, AttributeError:
             valid = False
-            EmailMessage.log_message(format_exc())
+            self.log_message(format_exc())
             
         return valid
 
@@ -247,7 +245,7 @@ class EmailMessage(object):
             This method works with both plain and MIME messages, except open pgp mime..
             If the message is MIMEMultipart, the text is from the first text/plain part.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
             >>> email_message.get_text()
             'Test message text'
@@ -256,12 +254,12 @@ class EmailMessage(object):
         text = None
         message = self.get_message()
 
-        if EmailMessage.is_open_pgp_mime(message):
-            EmailMessage.log_message("unable to get text from openpgp mime message")
+        if is_open_pgp_mime(message):
+            self.log_message("unable to get text from openpgp mime message")
 
         else:
             if message.is_multipart():
-                EmailMessage.log_message("message is a MIMEMultipart")
+                self.log_message("message is a MIMEMultipart")
 
                 #  get the first text/plain part
                 result_ok = False
@@ -272,27 +270,27 @@ class EmailMessage(object):
                     content_type = part.get_content_type()
                     if content_type == mime_constants.TEXT_PLAIN_TYPE:
                         text = part.get_payload(decode=True)
-                        EmailMessage._last_charset = EmailMessage.get_charset(part)
+                        _, self._last_charset = get_charset(part, self._last_charset)
                         result_ok = True
                     else:
-                        EmailMessage.log_message("body part type is " + content_type)
+                        self.log_message("body part type is " + content_type)
                     part_index += 1
             else:
                 text = message.get_payload(decode=True)
-                EmailMessage.log_message("content is a String")
-                EmailMessage._last_charset = EmailMessage.get_charset(message)
+                self.log_message("content is a String")
+                _, self._last_charset = get_charset(message, self._last_charset)
 
         return text
 
 
-    def set_text(self, text):
+    def set_text(self, text, charset=None):
         '''
             Sets text in the current Message.
             
             This method works with both plain and MIME messages, except open pgp mime.
             If the message is MIMEMultipart, the text is set in the first text/plain part.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
             >>> email_message.set_text('New test message text')
             True
@@ -301,43 +299,43 @@ class EmailMessage(object):
         '''
 
         if self.DEBUGGING:
-            EmailMessage.log_message("setting text:\n{}".format(text))
+            self.log_message("setting text:\n{}".format(text))
         
         text_set = False
         message = self.get_message()
-        if EmailMessage.is_open_pgp_mime(message):
-            EmailMessage.log_message("unable to set text from openpgp mime message")
+        if message.is_multipart():
+            #  set the first text/plain part
+            text_set = False
+            part_index = 0
+            parts = message.get_payload()
+            while part_index < len(parts) and not text_set:
+                part = message.get_payload(part_index)
+                content_type = part.get_content_type()
+                if content_type == mime_constants.TEXT_PLAIN_TYPE:
+                    part.set_payload(text)
+                    text_set = True
+                    self.log_message('set the first text/plain part found')
+                else:
+                    self.log_message("body part type is " + content_type)
+                part_index += 1
+
+            if not text_set:
+                charset, _ = get_charset(self._message, self._last_charset)
+                new_part = MIMEText(text, mime_constants.PLAIN_SUB_TYPE, charset)
+                message.attach(new_part)
+                text_set = True
+                self.log_message('added a new text/plain part with text')
+
+        elif is_open_pgp_mime(message):
+            self.log_message("unable to set text from openpgp mime message")
 
         else:
-            if message.is_multipart():
-                #  set the first text/plain part
-                EmailMessage.log_message('setting the first text/plain part')
-                text_set = False
-                part_index = 0
-                parts = self.get_message().get_payload()
-                while part_index < len(parts) and not text_set:
-                    part = message.get_payload(part_index)
-                    content_type = part.get_content_type()
-                    if content_type == mime_constants.TEXT_PLAIN_TYPE:
-                        part.set_payload(text)
-                        text_set = True
-                    else:
-                        EmailMessage.log_message("body part type is " + content_type)
-                    part_index += 1
+            self.set_content(text, mime_constants.TEXT_PLAIN_TYPE, charset=charset)
+            text_set = True
 
-                if not text_set:
-                    new_part = MIMEText(
-                      text, mime_constants.PLAIN_SUB_TYPE, EmailMessage.get_charset())
-                    message.attach(new_part)
-                    text_set = True
-
-            else:
-                self.set_content(text, mime_constants.TEXT_PLAIN_TYPE)
-                text_set = True
-            
         if self.DEBUGGING:
-            EmailMessage.log_message("message after setting text:\n" + self.to_string())
-            EmailMessage.log_message("set text:\n{}".format(text_set))
+            self.log_message("message after setting text:\n" + self.to_string())
+            self.log_message("set text:\n{}".format(text_set))
 
         return text_set
 
@@ -346,7 +344,7 @@ class EmailMessage(object):
         ''' 
             Get the message's content, decoding if bas64 or print-quoted encoded.
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
             >>> email_message.get_content()
             'Test message text'
@@ -369,22 +367,21 @@ class EmailMessage(object):
                 if (current_content_type is not None and 
                     current_content_type.lower().find(mime_constants.MULTIPART_PRIMARY_TYPE) < 0):
                     decode = True
-                    EmailMessage.log_message('decoding payload with {}'.format(encoding))
+                    self.log_message('decoding payload with {}'.format(encoding))
 
         try:
             payload = message.get_payload(decode=decode)
         except:
-            EmailMessage.log_message(format_exc())
+            self.log_message(format_exc())
             payload = message.get_payload()
     
         return payload
 
-
-    def set_content(self, payload, content_type):
+    def set_content(self, payload, content_type, charset=None):
         '''
             Set the content of the message.
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
+            >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
             >>> email_message.set_content('New test message text', mime_constants.TEXT_PLAIN_TYPE)
             >>> email_message.get_content()
@@ -392,42 +389,48 @@ class EmailMessage(object):
         '''
         
         # create a new message if one doesn't exist
-        if EmailMessage._message is None:
-            EmailMessage._message = Message()
+        if self._message is None:
+            self._message = Message()
 
         current_content_type = self.get_message().get_content_type()
         if current_content_type is None:
             current_content_type = content_type
-        EmailMessage.log_message('current content type: {}'.format(current_content_type))
-        EmailMessage.log_message('setting content type: {}'.format(content_type))
+        self.log_message('current content type: {}'.format(current_content_type))
+        self.log_message('setting content type: {}'.format(content_type))
         if self.DEBUGGING:
-            EmailMessage.log_message('content:\n{}'.format(payload))
+            self.log_message('content:\n{}'.format(payload))
         
-        current_encoding = EmailMessage._message.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+        current_encoding = self._message.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
         if current_encoding is None:
-            EmailMessage._message.__setitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD, mime_constants.BITS_8)
-            EmailMessage.log_message('setting content encoding: {}'.format(mime_constants.BITS_8))
+            self._message.__setitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD, mime_constants.BITS_8)
+            self.log_message('setting content encoding: {}'.format(mime_constants.BITS_8))
 
         # if this is a simple text or html message, then just update the payload
         if (content_type == current_content_type and
             (content_type == mime_constants.TEXT_PLAIN_TYPE or 
              content_type == mime_constants.TEXT_HTML_TYPE)):
 
-            EmailMessage.log_message('updating payload for {} using {} charset'.format(
-                content_type, EmailMessage.get_charset()))
+            if charset is None:
+                charset, self._last_charset = get_charset(payload, self._last_charset)
+            else:
+                if self._last_charset:
+                    self._last_charset = constants.DEFAULT_CHAR_SET
             try:
-                self.get_message().set_payload(payload, EmailMessage.get_charset())
+                self.get_message().set_payload(payload, charset)
+                self.log_message('set payload with {} charset'.format(charset))
             except UnicodeEncodeError:
                 try:
-                    self.get_message().set_payload(payload, 'UTF-8')
+                    self.get_message().set_payload(payload, self._last_charset)
+                    self.log_message('set payload with {} charset'.format(self._last_charset))
                 except UnicodeEncodeError:
                     self.get_message().set_payload(payload)
+                    self.log_message('setting payload without charset')
             self.get_message().set_type(content_type)
 
         else:
             from goodcrypto.mail.message.utils import is_content_type_mime
 
-            EmailMessage.log_message('attaching payload for {}'.format(content_type))
+            self.log_message('attaching payload for {}'.format(content_type))
             if content_type == mime_constants.OCTET_STREAM_TYPE:
                 part = MIMEBase(mime_constants.APPLICATION_TYPE, mime_constants.OCTET_STREAM_SUB_TYPE)
                 part.set_payload(open(payload,"rb").read())
@@ -437,15 +440,21 @@ class EmailMessage(object):
 
             elif is_content_type_mime(self.get_message()):
                 if not self.get_message().is_multipart():
-                    self.get_message().set_payload(payload, EmailMessage.get_charset())
+                    if charset is None:
+                        charset, self._last_charset = get_charset(payload, self._last_charset)
+                    else:
+                        if self._last_charset:
+                            self._last_charset = constants.DEFAULT_CHAR_SET
+                    self.get_message().set_payload(payload, charset)
+                    self.log_message('set payload with {} charset'.format(charset))
                     self.get_message().set_type(content_type)
 
                 elif content_type == mime_constants.TEXT_PLAIN_TYPE:
-                    if self.DEBUGGING: EmailMessage.log_message('mime text payload:\n{}'.format(payload))
+                    if self.DEBUGGING: self.log_message('mime text payload:\n{}'.format(payload))
                     part = MIMEText(payload)
-                    if self.DEBUGGING: EmailMessage.log_message('mime text part:\n{}'.format(part))
+                    if self.DEBUGGING: self.log_message('mime text part:\n{}'.format(part))
                     part.set_payload(payload)
-                    if self.DEBUGGING: EmailMessage.log_message('mime text part with payload:\n{}'.format(part))
+                    if self.DEBUGGING: self.log_message('mime text part with payload:\n{}'.format(part))
                     self.get_message().attach(part)
 
                 else:
@@ -454,58 +463,18 @@ class EmailMessage(object):
                     part.set_payload(payload)
                     self.get_message().attach(part)
 
-    @staticmethod
-    def is_open_pgp_mime(msg=None):
-        '''
-            Returns true if this is an OpenPGP MIME message.
-
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
-            >>> with open(get_encrypted_message_name('open-pgp-mime.txt')) as input_file:
-            ...     mime_message = EmailMessage(input_file)
-            ...     mime_message.is_open_pgp_mime()
-            True
-        '''
-
-        is_mime_and_pgp = False
-
-        if msg is None:
-            msg = EmailMessage._message
-
-        try:
-            # the content type is always lower case and always has a value
-            content_type = msg.get_content_type()
-            EmailMessage.log_message("main content type: {}".format(content_type))
-            
-            #  if the main type is multipart/encrypted
-            if content_type == mime_constants.MULTIPART_ENCRYPTED_TYPE:
-                protocol = msg.get_param(mime_constants.PROTOCOL_KEYWORD)
-                if protocol == None:
-                    EmailMessage.log_message("multipart encrypted, protocol missing")
-                else:
-                    EmailMessage.log_message("multipart encrypted protocol: {}".format(protocol))
-                    is_mime_and_pgp = str(protocol).lower() == mime_constants.PGP_TYPE.lower()
-
-        except MessageException as message_exception:
-            EmailMessage.log_exception(message_exception)
-            EmailMessage.log_message(format_exc())
-        except Exception:
-            EmailMessage.log_message(format_exc())
-
-        return is_mime_and_pgp
-
-
     def is_probably_pgp(self):
         '''
             Returns true if this is probably an OpenPGP message.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('open-pgp-mime.txt')) as input_file:
             ...     mime_message = EmailMessage(input_file)
             ...     mime_message.is_probably_pgp()
             True
         '''
 
-        is_pgp = self.is_open_pgp_mime()
+        is_pgp = is_open_pgp_mime(self.get_message())
         if not is_pgp:
             content = self.get_content()
             if isinstance(content, str):
@@ -517,7 +486,7 @@ class EmailMessage(object):
         '''
             Returns true if text contains PGP message delimiters.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('open-pgp-mime.txt')) as input_file:
             ...     text = input_file.read()
             ...     email_message = EmailMessage()
@@ -533,7 +502,7 @@ class EmailMessage(object):
         '''
             Returns true if text contains PGP signature delimiters.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> with open(get_plain_message_name('pgp-signature.txt')) as input_file:
             ...     text = input_file.read()
             ...     email_message = EmailMessage()
@@ -549,7 +518,7 @@ class EmailMessage(object):
         '''
             Returns the PGP signature blocks with text, if there are any.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> with open(get_plain_message_name('pgp-signature.txt')) as input_file:
             ...     mime_message = EmailMessage(input_file)
             ...     signature_blocks = mime_message.get_pgp_signature_blocks()
@@ -570,7 +539,7 @@ class EmailMessage(object):
                 
             return signature_block
 
-        def init_new_message(old_message):
+        def initialize_new_message(old_message):
             ''' Initialize a new message from the old message. '''
             
             new_message = MIMEMultipart(old_message.get_content_subtype(), old_message.get_boundary())
@@ -638,7 +607,7 @@ class EmailMessage(object):
 
         signature_blocks = []
         if self.get_message().is_multipart():
-            EmailMessage.log_message('check each of {} parts of message for a signature'.format(
+            self.log_message('check each of {} parts of message for a signature'.format(
                 len(self.get_message().get_payload())))
             part_index = 0
             part_indices = []
@@ -657,7 +626,7 @@ class EmailMessage(object):
                 part_index += 1
 
             if len(part_indices) > 0:
-                new_message = init_new_message(self.get_message())
+                new_message = initialize_new_message(self.get_message())
                 part_index = 0
                 payloads = self.get_message().get_payload()
                 for payload in payloads:
@@ -677,94 +646,18 @@ class EmailMessage(object):
                 if signature_block is not None:
                     signature_blocks.append(signature_block)
                     self.get_message().set_payload(remove_signature(content))
-                    EmailMessage.log_message('extracted signature block from content')
+                    self.log_message('extracted signature block from content')
 
-        EmailMessage.log_message('total signature blocks: {}'.format(len(signature_blocks)))
+        self.log_message('total signature blocks: {}'.format(len(signature_blocks)))
 
         return signature_blocks
-
-    @staticmethod
-    def get_charset(part=None):
-        '''
-            Gets the charset.
-
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_basic_email_message
-            >>> email_message = get_basic_email_message()
-            >>> email_message.get_charset().lower() == 'utf-8'
-            True
-        '''
-
-        def find_char_set(part):
-    
-            charset = None
-            try:
-                if part.find(mime_constants.CONTENT_TYPE_KEYWORD) >= 0:
-                    index = part.find(mime_constants.CONTENT_TYPE_KEYWORD)
-                    line = part[index + len(mime_constants.CONTENT_TYPE_KEYWORD):]
-                    
-                    index = line.lower().find('charset=')
-                    if index > 0:
-                        charset = line[index + len('charset='):]
-                    if charset.find('\r'):
-                        charset = charset[:charset.find('\r')]
-                    elif charset.find('\n'):
-                        charset = charset[:charset.find('\n')]
-            except Exception as char_exception:
-                EmailMessage.log_message(char_exception)
-                EmailMessage.log_message(format_exc())
-
-            if charset is None:
-                charset = EmailMessage.DEFAULT_CHAR_SET
-
-            return charset
-
-
-        try:
-            charset = None
-            if part is None:
-                if EmailMessage._message is not None:
-                    charset = EmailMessage._message.get_charset()
-                    if charset is None:
-                        charset = EmailMessage._message.get_param('charset')
-                        EmailMessage.log_message('using message param charset')
-            else:
-                if isinstance(part, str):
-                    charset = find_char_set(part)
-                    EmailMessage.log_message('finding charset')
-                else:
-                    charset = part.get_charset()
-                    if charset is None:
-                        charset = part.get_param('charset')
-
-            # if unknown than use the last charset
-            if charset is None:
-                charset = EmailMessage._last_charset
-                EmailMessage.log_message('using last charset')
-
-            # if still unknown than use the default
-            if charset is None:
-                charset = EmailMessage.DEFAULT_CHAR_SET
-                EmailMessage.log_message('using default charset')
-            
-            # the charset should be string
-            charset = str(charset)
-            
-            # remember the last char set used
-            EmailMessage._last_charset = charset
-
-        except MessageException as message_exception:
-            charset = EmailMessage.DEFAULT_CHAR_SET
-            EmailMessage.log_message(message_exception)
-        
-        return charset
-
 
     def write_to(self, output_file):
         '''
             Write message to the specified file.
             
             >>> from goodcrypto.mail.utils.dirs import get_test_directory
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> filename = get_encrypted_message_name('iso-8859-1-binary.txt')
             >>> with open(filename) as input_file:
             ...     output_dir = get_test_directory()
@@ -806,7 +699,7 @@ class EmailMessage(object):
 
             result_ok = True
         except Exception:
-            EmailMessage.log_message(format_exc())
+            self.log_message(format_exc())
             raise Exception
 
         return result_ok
@@ -816,7 +709,7 @@ class EmailMessage(object):
         '''
             Convert message to a string.
             
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> filename = get_plain_message_name('basic.txt')
             >>> with open(filename) as input_file:
             ...     file_content = input_file.read().replace('\\r\\n', '\\n')
@@ -830,9 +723,9 @@ class EmailMessage(object):
         string = None
         
         try:
-            msg = EmailMessage._message
+            msg = self._message
             if charset is None:
-                charset = EmailMessage.get_charset()
+                charset, _ = get_charset(msg, self._last_charset)
 
             #  convert the message
             try:
@@ -842,28 +735,28 @@ class EmailMessage(object):
                 string = file_pointer.getvalue()
             except Exception, AttributeError:
                 try:
-                    EmailMessage.log_message(format_exc())
+                    self.log_message(format_exc())
 
                     string = msg.as_string()
                 except Exception, AttributeError:
                     #  we explicitly want to catch everything here, even NPE
-                    EmailMessage.log_message(format_exc())
+                    self.log_message(format_exc())
     
                     string = '{}\n{}'.format(
                         '\n'.join(self.get_header_lines()),
                         '\n'.join(self.get_content_lines()))
 
             if debug_to_string:
-                EmailMessage.log_message("converting message to string using charset {}".format(charset))
-                EmailMessage.log_message("message:\n{}".format(string))
+                self.log_message("converting message to string using charset {}".format(charset))
+                self.log_message("message:\n{}".format(string))
 
         except IOError as io_error:
             self.last_error = io_error
-            EmailMessage.log_message(io_error)
+            self.log_message(io_error)
             
         except MessageException as msg_exception:
             self.last_error = msg_exception
-            EmailMessage.log_message(msg_exception)
+            self.log_message(msg_exception)
 
         return string
 
@@ -875,7 +768,7 @@ class EmailMessage(object):
             The lines follow RFC 2822, with a maximum of 998 characters per line.
             Longer headers are folded using a leading tab.
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> filename = get_plain_message_name('basic.txt')
             >>> with open(filename) as input_file:
             ...     email_message = EmailMessage(input_file)
@@ -886,7 +779,7 @@ class EmailMessage(object):
         max_line_length = 998
         
         lines = []
-        raw_headers = EmailMessage._message.keys()
+        raw_headers = self._message.keys()
         for header in raw_headers:
             value = self.get_header(header)
             if value is None:
@@ -919,7 +812,7 @@ class EmailMessage(object):
             This is the part of the message after the header and the separating blank
             line, with no decoding.
 
-            >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> filename = get_plain_message_name('basic.txt')
             >>> with open(filename) as input_file:
             ...     email_message = EmailMessage(input_file)
@@ -928,9 +821,9 @@ class EmailMessage(object):
         '''
 
         lines = []
-        payloads = EmailMessage._message.get_payload()
+        payloads = self._message.get_payload()
         if payloads is None:
-            EmailMessage.log_message('No content')
+            self.log_message('No content')
         else:
             if isinstance(payloads, str):
                 lines = payloads.split()
@@ -944,42 +837,67 @@ class EmailMessage(object):
         return lines
 
     def _parse_header_line(self, line, last_name):
+        '''
+            Parse a header line (internal user only).
+            
+            >>> email_message = EmailMessage()
+            >>> name, value, last_name = email_message._parse_header_line(
+            ...   'Mime-Version: 1.0', 'Subject')
+            >>> name
+            'Mime-Version'
+            >>> value
+            '1.0'
+        '''
 
-        name, _, value = line.partition(':')
-        if name is not None:
-            name = name.strip()
-        
-        if name is None or len(name) <= 0:
-            EmailMessage.log_message("no header name in line: " + line)
-            old_value = self.get_header(last_name)
-            self.add_header(name, '{} {}\n'.format(old_value.strip('\n'), value.strip()))
+        if line is None:
+            name = value = last_name = None
         else:
-            last_name = name
-            if value is None:
-                value = ''
+            name, _, value = line.partition(':')
+            if name is not None:
+                name = name.strip()
+            
+            if name is None or len(name) <= 0:
+                self.log_message("no header name in line: " + line)
+                if last_name is not None:
+                    old_value = self.get_header(last_name)
+                    self.add_header(name, '{} {}\n'.format(old_value.strip('\n'), value.strip()))
             else:
-                value = value.strip()
-
-        try:
-            # try adding the header line and see if python can parse it
-            test_message = Message()
-            test_message.__setitem__(name, value)
-            temp_header = self.parser.parsestr(test_message.as_string(unixfrom=False))
-            if temp_header.__len__() == 0:
-                EmailMessage.log_message('bad header: {}'.format(line))
+                last_name = name
+                if value is None:
+                    value = ''
+                else:
+                    value = value.strip()
+    
+            try:
+                # try adding the header line and see if python can parse it
+                test_message = Message()
+                test_message.__setitem__(name, value)
+                temp_header = self.parser.parsestr(test_message.as_string(unixfrom=False))
+                if temp_header.__len__() == 0:
+                    self.log_message('bad header: {}'.format(line))
+                    self.bad_header_lines.append(line)
+                else:
+                    # if the parser accept this header line, then keep it
+                    self.add_header(name, value)
+            except Exception:
+                self.log_message(format_exc())
                 self.bad_header_lines.append(line)
-            else:
-                # if the parser accept this header line, then keep it
-                self.add_header(name, value)
-        except Exception:
-            EmailMessage.log_message(format_exc())
-            self.bad_header_lines.append(line)
 
         return name, value, last_name
 
     def _set_content_encoding(self, name, value):
+        '''
+            Set encoding in content (internal use only).
+            
+            >>> email_message = EmailMessage()
+            >>> email_message._set_content_encoding(
+            ...   mime_constants.CONTENT_TYPE_KEYWORD, 'charset=utf-8')
+        '''
         
-        if name == mime_constants.CONTENT_TYPE_KEYWORD:
+        if name is None or value is None:
+            self.log_message('no name or value defined while trying to set content encoding')
+
+        elif name == mime_constants.CONTENT_TYPE_KEYWORD:
             try:
                 # try to set the charset
                 index = value.find('charset=')
@@ -987,53 +905,61 @@ class EmailMessage(object):
                     charset = value[index + len('charset='):]
                     if charset.startswith('"') and charset.endswith('"'):
                         charset = charset[1:len(charset)-1]
-                    EmailMessage._message.set_charset(charset)
+                    self._message.set_charset(charset)
             except Exception:
-                EmailMessage.log_message(format_exc())
-                EmailMessage._message.set_charset(EmailMessage.DEFAULT_CHAR_SET)
+                self.log_message(format_exc())
+                self._message.set_charset(constants.DEFAULT_CHAR_SET)
 
         elif name == mime_constants.CONTENT_XFER_ENCODING_KEYWORD:
-            encoding_value = EmailMessage._message.get(
+            encoding_value = self._message.get(
                mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
-            EmailMessage.log_message('message encoding: {}'.format(encoding_value))
+            self.log_message('message encoding: {}'.format(encoding_value))
             if encoding_value is None or encoding_value.lower() != value.lower():
-                EmailMessage._message.__delitem__(name)
-                EmailMessage._message.__setitem__(name, value)
-                EmailMessage.log_message('set message encoding: {}'.format(value))
+                self._message.__delitem__(name)
+                self._message.__setitem__(name, value)
+                self.log_message('set message encoding: {}'.format(value))
 
     def _create_new_header(self, message_string):
         '''
-            Create a new header from a corrupted message.
+            Create a new header from a corrupted message (internal use only).
             
-            @lines     all lines in message.
-            @return    lines in body text or None if no body text.
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
+            >>> with open(get_plain_message_name('basic.txt')) as input_file:
+            ...    message_string = ''.join(input_file.readlines())
+            ...    email_message = EmailMessage()
+            ...    body_text_lines = email_message._create_new_header(message_string)
+            ...    len(body_text_lines) > 0
+            True
         '''
 
         last_name = None
         body_text_lines = None
 
-        EmailMessage.log_message('starting to parse headers')
-        lines = message_string.split('\n')
-        header_count = 0
-        for line in lines:
-
-            if line is None or len(line.strip()) <= 0:
-                EmailMessage.log_message('finished parsing headers')
-                if header_count + 1 <= len(lines):
-                    body_text_lines = lines[header_count + 1:]
+        if message_string is None:
+            self.log_message('no message string defined to create new header')
+        else:
+            self.log_message('starting to parse headers')
+            lines = message_string.split('\n')
+            header_count = 0
+            for line in lines:
+    
+                if line is None or len(line.strip()) <= 0:
+                    self.log_message('finished parsing headers')
+                    if header_count + 1 <= len(lines):
+                        body_text_lines = lines[header_count + 1:]
+                    else:
+                        body_text_lines = []
+                    break
+    
                 else:
-                    body_text_lines = []
-                break
-
-            else:
-                header_count += 1
-                name, value, last_name = self._parse_header_line(line, last_name)
-
-                if (name is not None and 
-                    (name == mime_constants.CONTENT_TYPE_KEYWORD or 
-                     name == mime_constants.CONTENT_XFER_ENCODING_KEYWORD) ):
-
-                    self._set_content_encoding(name, value)
+                    header_count += 1
+                    name, value, last_name = self._parse_header_line(line, last_name)
+    
+                    if (name is not None and 
+                        (name == mime_constants.CONTENT_TYPE_KEYWORD or 
+                         name == mime_constants.CONTENT_XFER_ENCODING_KEYWORD) ):
+    
+                        self._set_content_encoding(name, value)
 
         return body_text_lines
 
@@ -1042,17 +968,20 @@ class EmailMessage(object):
         '''
             Create the body text from a corrupted message.
             
-            @source    input file with message.
-            @return    message
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
+            >>> with open(get_plain_message_name('basic.txt')) as input_file:
+            ...    email_message = EmailMessage(input_file.readlines())
+            ...    email_message._create_new_body_text('Test new body text')
         '''
 
         try:
             body_text = ''
+            charset, _ = get_charset(self._message, self._last_charset)
             for line in body:
-                body_text += line.encode(EmailMessage.get_charset())
+                body_text += line.encode(charset)
         except Exception as body_exception:
-            EmailMessage.log_message(body_exception)
-            EmailMessage.log_message(format_exc())
+            self.log_message(body_exception)
+            self.log_message(format_exc())
             body_text = ''.join(body)
 
         if len(self.bad_header_lines) > 0:
@@ -1060,19 +989,21 @@ class EmailMessage(object):
             for bad_header_line in self.bad_header_lines:
                 body_text += '  {}\n'.format(bad_header_line)
 
-        EmailMessage._message.set_payload(body_text)
+        self._message.set_payload(body_text)
 
     def _create_good_message_from_bad(self, source):
         '''
             Create a good message from a source that contains a corrupted message.
             
-            @source    lines of message.
-            @return    valid message
+            >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
+            >>> with open(get_plain_message_name('bad-basic.txt')) as input_file:
+            ...    email_message = EmailMessage()
+            ...    email_message._create_good_message_from_bad(input_file)
         '''
 
         try:
             # start with a fresh message
-            EmailMessage._message = Message()
+            self._message = Message()
             
             if isinstance(source, file):
                 source.seek(os.SEEK_SET)
@@ -1085,8 +1016,8 @@ class EmailMessage(object):
                 self._create_new_body_text(body_text)
 
         except Exception as message_exception:
-            EmailMessage.log_message(message_exception)
-            EmailMessage.log_message(format_exc())
+            self.log_message(message_exception)
+            self.log_message(format_exc())
             raise MessageException(message_exception)
 
     
@@ -1094,6 +1025,11 @@ class EmailMessage(object):
         ''' Initialize a basic new message. 
         
             Used primarily for testing.
+            
+            >>> from_user = 'test@goodcrypto.local'
+            >>> to_user = 'test@goodcrypto.remote'
+            >>> email_message = EmailMessage()
+            >>> email_message.init_new_message(from_user, to_user, "Test message", 'Test body text')
         '''
         
         self.add_header(mime_constants.FROM_KEYWORD, from_addr)
@@ -1104,72 +1040,71 @@ class EmailMessage(object):
             self.set_text(text)
 
 
-    @staticmethod
-    def log_message_exception(exception_error, message, log_msg):
+    def log_message_exception(self, exception_error, message, log_msg):
         ''' 
             Log an exception.
 
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
-            >>> EmailMessage.log_message_exception(Exception, 'message', 'log message')
+            >>> email_message = EmailMessage()
+            >>> email_message.log_message_exception(Exception, 'message', 'log message')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
             True
         '''
 
-        EmailMessage.log_exception(log_msg, message_exception=exception_error)
+        self.log_exception(log_msg, message_exception=exception_error)
         if message != None:
             try:
-                EmailMessage.log_message("message:\n" + message.to_string())
+                self.log_message("message:\n" + message.to_string())
             except Exception as exception_error2:
-                EmailMessage.log_message("unable to log message: {}".format(exception_error2))
+                self.log_message("unable to log message: {}".format(exception_error2))
 
 
-    @staticmethod
-    def log_exception(log_msg, message_exception=None):
+    def log_exception(self, log_msg, message_exception=None):
         ''' 
             Log an exception.
 
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
-            >>> EmailMessage.log_exception('test')
+            >>> email_message = EmailMessage()
+            >>> email_message.log_exception('test')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
             True
-            >>> EmailMessage.log_exception('test', message_exception='message exception')
+            >>> email_message.log_exception('test', message_exception='message exception')
         '''
             
-        EmailMessage.log_message(format_exc())
+        self.log_message(format_exc())
         ExceptionLog.log_message(format_exc())
         
-        EmailMessage.log_message(log_msg)
+        self.log_message(log_msg)
         ExceptionLog.log_message(log_msg)
         
         if message_exception is not None:
             if type(message_exception) == Exception:
-                EmailMessage.log_message(message_exception.value)
+                self.log_message(message_exception.value)
                 ExceptionLog.log_message(message_exception.value)
             elif type(message_exception) == str:
-                EmailMessage.log_message(message_exception)
+                self.log_message(message_exception)
                 ExceptionLog.log_message(message_exception)
 
-
-    @staticmethod
-    def log_message(message):
+    def log_message(self, message):
         ''' 
             Log a message.
 
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
-            >>> EmailMessage.log_message('test')
+            >>> email_message = EmailMessage()
+            >>> email_message.log_message('test')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
         '''
         
-        if EmailMessage._log is None:
-            EmailMessage._log = LogFile()
+        if self._log is None:
+            self._log = LogFile()
 
-        EmailMessage._log.write(message)
+        self._log.write_and_flush(message)
 

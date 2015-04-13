@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -194,7 +194,7 @@ class ContactsCrypto(models.Model):
 
     class Meta:
         verbose_name = translate("contact's encryption software")
-        verbose_name_plural = translate("contacts' encryption software")
+        verbose_name_plural = verbose_name
 
         unique_together = ('contact', 'encryption_software')
 post_save.connect(post_save_contacts_crypto, sender=ContactsCrypto)
@@ -300,9 +300,10 @@ class Options(models.Model):
        default=DEFAULT_MTA_LISTEN_PORT,
        help_text=translate("The port where the MTA listens for messages FROM the the goodcrypto mail server."))
     
-    auto_exchange = models.BooleanField(translate('Auto exchange keys'), default=True,
-       help_text=translate("Automatically exchange keys and always include the sender's key in the header."))
+    auto_exchange = models.BooleanField(translate('Exchange public keys P2P'), default=True,
+       help_text=translate("Automatically exchange public keys P2P. Always include the sender's public key in the header."))
     
+    # validation needs to be a link to gc server, with an individual message's code in the url
     validation_code = models.CharField(translate('Validation code'),
        max_length=100, blank=True, null=True,
        help_text=translate('A secret code added to all decrypted messages so you have increased confidence the message was decrypted by GoodCrypto.'))
@@ -310,8 +311,8 @@ class Options(models.Model):
     accept_self_signed_certs = models.BooleanField(translate('Accept self signed certs'), default=True,
        help_text=translate('Recognize self signed certificates.'))
     
-    create_private_keys = models.BooleanField(translate('Create private keys'), default=True,
-       help_text=translate("Generate private keys for users who don't have any keys automatically."))
+    create_private_keys = models.BooleanField(translate('Create keys'), default=True,
+       help_text=translate("Generate keys for users who don't have one."))
     
     days_between_key_alerts = models.PositiveSmallIntegerField(translate('Days between key alerts'),  default=1,
        help_text=translate("GoodCrypto sends alerts about errors with keys. How many days between notices would you like to users to receive those notices?."))
@@ -330,7 +331,7 @@ class Options(models.Model):
        help_text=translate("If you opt to encrypt the entire messages, then whatever you enter in this field will be the subject for your encrypted message."))
 
     max_message_length = models.PositiveSmallIntegerField(translate('Max kilobytes of a message'), default=5120,
-       help_text=translate('The maximum size, in K, of messages, including attachments, accepted. This helps prevent your mail system from being DOSed.'))
+       help_text=translate('The maximum size, in K, of encrypted/decrypted messages, including attachments. This helps prevent your mail system from being DOSed.'))
 
     use_us_standards = models.BooleanField(translate('Use US standards'), default=False,
        help_text=translate("Use the standards supported by US government. We strongly recommend you set this to False."))

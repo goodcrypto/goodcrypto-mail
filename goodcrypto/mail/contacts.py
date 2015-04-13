@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-10-23
+    Last modified: 2014-12-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -36,10 +36,10 @@ from django.db.models.query import QuerySet
 
 from goodcrypto.mail import crypto_software, international_strings
 from goodcrypto.mail.models import Contact, ContactsCrypto
-from goodcrypto.utils.log_file import LogFile
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
-from goodcrypto.oce.utils import parse_address
+from goodcrypto.oce.utils import parse_address, strip_fingerprint
+from goodcrypto.utils.log_file import LogFile
 
 
 _log = None
@@ -456,10 +456,14 @@ def is_key_ok(email, encryption_name):
                 raise CryptoException(error_message)
             else:
                 # finally verify the fingerprints agree
-                if database_fingerprint.lower() == crypto_fingerprint.lower():
+                if (strip_fingerprint(database_fingerprint).lower() == 
+                    strip_fingerprint(crypto_fingerprint).lower()):
                     key_ok = True
                 else:
                     message = international_strings.MISMATCHED_FINGERPRINTS.format(encryption_name, email)
+                    log_message('email address: {}'.format(email))
+                    log_message('  database fingerprint: {}'.format(database_fingerprint.lower()))
+                    log_message('  crypto fingerprint: {}'.format(crypto_fingerprint.lower()))
                     log_message(message)
                     raise CryptoException(message)
 
@@ -513,29 +517,32 @@ def import_public_key(email, encryption_software, public_key):
         False
     '''
 
-    def import_key(email, encryption_name, public_key, user_id, plugin):
+    def import_key(email, encryption_name, public_key, id_fingerprint_pairs, plugin):
         ''' Import the key and return the fingerprint. '''
 
         status = fingerprint = None
         result_ok = False
 
-        user_name, email_address = parse_address(email)
-        _, key_address = parse_address(user_id)
-        if email_address.lower() == key_address.lower():
-            fingerprints = plugin.import_public(public_key)
-            if len(fingerprints) > 0:
-                fingerprint = fingerprints[0]
-
-                status = international_strings.KEY_IMPORT_GOOD.format(fingerprint)
+        # make sure the email address is in the key
+        for (user_id, fingerprint) in id_fingerprint_pairs:
+            user_name, email_address = parse_address(email)
+            _, key_address = parse_address(user_id)
+            if email_address.lower() == key_address.lower():
                 result_ok = True
-            else:
-                result_ok = False
-                status = 'Unable to import key'
+                break
+
+        if result_ok:
+            status = ''
+            for (user_id, fingerprint) in id_fingerprint_pairs:
+                result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
+                if result_ok:
+                    status += '{}\n'.format(international_strings.KEY_IMPORT_GOOD.format(fingerprint))
+                else:
+                    status += '{}\n'.format(international_strings.KEY_IMPORT_BAD)
         else:
-            result_ok = False
-            status = international_strings.WRONG_CONTACT_KEY.format(key_address, email_address)
-            
-        return result_ok, status, fingerprint
+            status = international_strings.WRONG_CONTACT_KEY.format(email)
+
+        return result_ok, status
 
     if email is None or encryption_software is None or public_key is None:
         result_ok = False
@@ -550,17 +557,20 @@ def import_public_key(email, encryption_software, public_key):
             log_message('no plugin for {} with classname: {}'.format(
                 encryption_software.name, encryption_software.classname))
         else:
-            user_ids = plugin.get_user_ids_from_key(public_key)
-            log_message('user ids: {}'.format(user_ids))
-            if user_ids is None:
+            id_fingerprint_pairs = plugin.get_id_fingerprint_pairs(public_key)
+            log_message('user ids and fingerprints: {}'.format(id_fingerprint_pairs))
+            if id_fingerprint_pairs is None:
                 result_ok = False
                 status = international_strings.PUBLIC_KEY_INVALID
-            elif len(user_ids) > 0:
-                result_ok, status, fingerprint = import_key(
-                  email, encryption_software.name, public_key, user_ids[0], plugin)
-                for user_id in user_ids:
+            elif len(id_fingerprint_pairs) > 0:
+                result_ok, status = import_key(
+                  email, encryption_software.name, public_key, id_fingerprint_pairs, plugin)
+                for (user_id, fingerprint) in id_fingerprint_pairs:
                     contact = add(user_id, encryption_software.name, fingerprint=fingerprint)
                     log_message('added contact for: {}'.format(contact))
+            else:
+                result_ok = False
+                status = international_strings.PUBLIC_KEY_INVALID
 
         log_message("Imported public {} key for {} ok: {}".format(encryption_software, email, result_ok))
 
@@ -690,5 +700,5 @@ def log_message(message):
     if _log is None:
         _log = LogFile()
 
-    _log.write(message)
+    _log.write_and_flush(message)
 

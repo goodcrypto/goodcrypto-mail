@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-12-04
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -20,6 +20,7 @@ from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.utils import get_charset
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -74,22 +75,22 @@ class EncryptFilter(CryptoFilter):
         '''
 
         def log_error(crypto_message, error_message):
-            self.log.write(format_exc())
+            self.log_message(format_exc())
             self.log_crypto_exception(MessageException(format_exc()))
             try:
                 crypto_message.add_tag_once('{} {}'.format(
                     international_strings.SERIOUS_ERROR_PREFIX, error_message))
             except Exception:
-                self.log.write(format_exc())
+                self.log_message(format_exc())
             
         try:
             filtered = False
             encrypted = False
             
-            self.log.write("trying to encrypt message from {} to {}".format(from_user, to_user))
+            self.log_message("trying to encrypt message from {} to {}".format(from_user, to_user))
             encryption_names = utils.get_encryption_software(to_user)
             if encryption_names is None or len(encryption_names) <= 0:
-                self.log.write("no encryption software defined for {}".format(to_user))
+                self.log_message("no encryption software defined for {}".format(to_user))
                 if options.auto_exchange_keys():
                     # add the public key so the receiver can use crypto in the future
                     crypto_message.add_public_key_to_header(from_user)
@@ -109,22 +110,22 @@ class EncryptFilter(CryptoFilter):
             if encrypted:
                 self._limit_recipients(crypto_message, to_user)
                 if EncryptFilter.DEBUGGING:
-                    self.log.write('Full encrypted message:\n{}'.format(
+                    self.log_message('Full encrypted message:\n{}'.format(
                        crypto_message.get_email_message().to_string()))
             else:
                 crypto_message.add_tag_once('{}{}'.format(
                   international_strings.WARNING_PREFIX, international_strings.ENCRYPTION_WORKS))
 
             tags_added = crypto_message.add_tag_to_message()
-            self.log.write('Tags added to message: {}'.format(tags_added))
+            self.log_message('Tags added to message: {}'.format(tags_added))
 
         except MessageException as message_exception:
             raise MessageException(message_exception.value)
 
         except Exception, IOError:
-            self.log.write(format_exc())
+            self.log_message(format_exc())
 
-        self.log.write('  final status: filtered: {} encrypted: {}'.format(filtered, encrypted))
+        self.log_message('  final status: filtered: {} encrypted: {}'.format(filtered, encrypted))
 
         return filtered, encrypted
 
@@ -137,7 +138,7 @@ class EncryptFilter(CryptoFilter):
         fatal_error = False
         error_message = ''
         encrypted_with = []
-        self.log.write("using {} encryption software".format(encryption_names))
+        self.log_message("using {} encryption software".format(encryption_names))
         for encryption_name in encryption_names:
             encryption_classname = get_key_classname(encryption_name)
             if encryption_classname not in encrypted_with:
@@ -147,10 +148,10 @@ class EncryptFilter(CryptoFilter):
                 except MessageException as message_exception:
                     fatal_error = True
                     error_message += message_exception.value
-                    self._log_exception(error_message)
+                    self.log_exception(error_message)
 
         if fatal_error and len(encrypted_with) <= 0 and options.clear_sign_email():
-            self.log.write('raising message exception in _encrypt_message_with_all')
+            self.log_message('raising message exception in _encrypt_message_with_all')
             raise MessageException(error_message)
 
 
@@ -175,10 +176,10 @@ class EncryptFilter(CryptoFilter):
                 if options.create_private_keys():
                     crypto_message.create_private_key(encryption_name, from_user)
                 else:
-                    self.log.write("not creating a new {} key for {} because auto-create disabled".format(
+                    self.log_message("not creating a new {} key for {} because auto-create disabled".format(
                         encryption_name, from_user_id))
             else:
-                self.log.write('found matching user id: {}'.format(from_user_id))
+                self.log_message('found matching user id: {}'.format(from_user_id))
 
             return ids, result_ok
 
@@ -211,18 +212,18 @@ class EncryptFilter(CryptoFilter):
 
         result_ok = False
         try:
-            self.log.write("encrypting message with {}".format(encryption_name))
+            self.log_message("encrypting message with {}".format(encryption_name))
             crypto = CryptoFactory.get_crypto(encryption_name, get_classname(encryption_name))
             if crypto is None:
-                self.log.write("{} is not ready to use".format(encryption_name))
+                self.log_message("{} is not ready to use".format(encryption_name))
             elif crypto_message is None or from_user is None or to_user is None:
-                self.log.write("missing key data to encrypt message")
+                self.log_message("missing key data to encrypt message")
             else:
                 # get all the user ids that have encryption keys
                 user_ids = crypto.get_user_ids()
-                self.log.write('user ids: {}'.format(user_ids))
+                self.log_message('user ids: {}'.format(user_ids))
                 private_user_ids = crypto.get_private_user_ids()
-                self.log.write('private user ids: {}'.format(private_user_ids))
+                self.log_message('private user ids: {}'.format(private_user_ids))
 
                 result_ok = private_user_ids is not None and len(private_user_ids) > 0
                 if result_ok or options.create_private_keys():
@@ -237,20 +238,19 @@ class EncryptFilter(CryptoFilter):
                     if options.auto_exchange_keys() and users_dict[self.FROM_KEYWORD] is not None:
                         crypto_message.add_public_key_to_header(users_dict[self.FROM_KEYWORD])
                 else:
-                    self.log.write("user_ids is not None and len(user_ids) > 0: {}".format(
+                    self.log_message("user_ids is not None and len(user_ids) > 0: {}".format(
                         user_ids is not None and len(user_ids) > 0))
 
                 if result_ok:
-                    self.log.write("from user ID: {}".format(users_dict[self.FROM_KEYWORD]))
-                    self.log.write("to user ID: {}".format(users_dict[self.TO_KEYWORD]))
-                    self.log.write("subject: {}".format(
+                    self.log_message("from user ID: {}".format(users_dict[self.FROM_KEYWORD]))
+                    self.log_message("to user ID: {}".format(users_dict[self.TO_KEYWORD]))
+                    self.log_message("subject: {}".format(
                       crypto_message.get_email_message().get_header(mime_constants.SUBJECT_KEYWORD)))
                     
                     result_ok = self._encrypt_message_with_keys(crypto_message, crypto, users_dict)
-                    self.log.write('encrypted message: {}'.format(result_ok))
+                    self.log_message('encrypted message: {}'.format(result_ok))
                     if not result_ok:
                         error_message = get_error_message(users_dict, encryption_name)
-                        self.log.write(error_message)
                         raise MessageException(error_message)
 
                 else:
@@ -263,7 +263,7 @@ class EncryptFilter(CryptoFilter):
 
         except Exception:
             result_ok = False
-            self.log.write(format_exc())
+            self.log_message(format_exc())
             
         return result_ok
 
@@ -287,7 +287,7 @@ class EncryptFilter(CryptoFilter):
         if crypto_message is None or crypto_message.get_email_message() is None:
             charset = 'UTF-8'
         else:
-            charset = crypto_message.get_email_message().get_charset()
+            charset, _ = get_charset(crypto_message.get_email_message().get_message())
 
         users_dict = {self.FROM_KEYWORD: from_user_id, 
                       self.TO_KEYWORD: to_user_id, 
@@ -304,17 +304,17 @@ class EncryptFilter(CryptoFilter):
 
         error_message = None
 
-        self.log.write('user ids: {}'.format(user_ids))
+        self.log_message('user ids: {}'.format(user_ids))
         from_user_id = utils.get_user_id_matching_email(from_user, user_ids)
         if from_user_id is None:
             passcode = None
             error_message = "No {} key for {}".format(encryption_name, from_user)
-            self._log_exception(error_message)
+            self.log_exception(error_message)
         else:
             passcode = contacts_passcodes.get_passcode(from_user, encryption_name)
             if passcode is None:
                 error_message = "No private {} key for {}".format(encryption_name, from_user)
-                self._log_exception(error_message)
+                self.log_exception(error_message)
                     
         return from_user_id, passcode, error_message
 
@@ -327,7 +327,7 @@ class EncryptFilter(CryptoFilter):
         to_user_id = utils.get_user_id_matching_email(to_user, user_ids)
         if to_user_id is None:
             ready_to_encrypt = False
-            self._log_exception("No user id for " + encryption_name + " matching To: " + to_user)
+            self.log_exception("No user id for " + encryption_name + " matching To: " + to_user)
         else:
             try:
                 contacts.is_key_ok(to_user_id, encryption_name)
@@ -335,8 +335,8 @@ class EncryptFilter(CryptoFilter):
             except CryptoException as exception:
                 to_user_id = None
                 ready_to_encrypt = False
-                self._log_exception(exception.value)
-                self.log.write('raising message exception in _get_to_crypto_details')
+                self.log_exception(exception.value)
+                self.log_message('raising message exception in _get_to_crypto_details')
                 raise MessageException(exception.value)
 
         return to_user_id, ready_to_encrypt
@@ -361,7 +361,7 @@ class EncryptFilter(CryptoFilter):
         '''
 
         def encrypt_text_part(content, crypto_message, crypto, users_dict):
-            if self.DEBUGGING: self.log.write("type of content: {}".format(type(content)))
+            if self.DEBUGGING: self.log_message("type of content: {}".format(type(content)))
     
             ciphertext = self._encrypt_byte_array(bytearray(content), crypto, users_dict)
     
@@ -374,7 +374,7 @@ class EncryptFilter(CryptoFilter):
                 
             return result_ok
 
-        self.log.write("encrypting a text message")
+        self.log_message("encrypting a text message")
         
         email_message = crypto_message.get_email_message()
         # if multiple users in To or CC, add the info to the top of the message
@@ -409,7 +409,7 @@ class EncryptFilter(CryptoFilter):
                     break
         else:
             final_content = '{}{}'.format(address_content, email_message.get_content())
-            if self.DEBUGGING: self.log.write("  content:\n{!s}".format(final_content))
+            if self.DEBUGGING: self.log_message("  content:\n{!s}".format(final_content))
             
             result_ok = encrypt_text_part(final_content, crypto_message, crypto, users_dict)
     
@@ -431,14 +431,14 @@ class EncryptFilter(CryptoFilter):
             if value is not None:
                 msg.__setitem__(keyword, value)
             
-        self.log.write("encrypting a mime message")
+        self.log_message("encrypting a mime message")
         message = crypto_message.get_email_message().get_message()
-        self.log.write("content type: {}".format(message.get_content_type()))
+        self.log_message("content type: {}".format(message.get_content_type()))
 
         #  Encrypt the whole message and add it to the body text
         #  This removes important meta data. The recieving end must
         #  decrypt the message, and then create a new message with the original structure.
-        self.log.write("about to encrypt mime message")
+        self.log_message("about to encrypt mime message")
         ciphertext = self._encrypt_byte_array(
             bytearray(crypto_message.get_email_message().to_string()), crypto, users_dict)
         
@@ -452,10 +452,11 @@ class EncryptFilter(CryptoFilter):
                MIMEApplication(ciphertext, mime_constants.OCTET_STREAM_SUB_TYPE, encode_7or8bit))
     
             boundary = 'Part{}{}--'.format(random(), random())
+            charset, _ = get_charset(crypto_message.get_email_message().get_message())
             params = {mime_constants.PROTOCOL_KEYWORD:mime_constants.PGP_TYPE,
-                      mime_constants.CHARSET_KEYWORD:crypto_message.get_email_message().get_charset(),}
+                      mime_constants.CHARSET_KEYWORD:charset,}
             msg = MIMEMultipart(mime_constants.ENCRYPTED_SUB_TYPE, boundary, parts, **params)
-            self.log.write("part's content type: {}".format(msg.get_content_type()))
+            self.log_message("part's content type: {}".format(msg.get_content_type()))
             
             # configure the header
             msg.__setitem__(mime_constants.FROM_KEYWORD, users_dict[self.FROM_KEYWORD])
@@ -484,13 +485,13 @@ class EncryptFilter(CryptoFilter):
         if from_user is None or passcode is None:
             if clear_sign:
                 encrypted_data = None
-                self.log.write('cannot send message because no from key and clear signing required')
+                self.log_message('cannot send message because no from key and clear signing required')
             else:
-                self.log.write('encrypting, but not signing message')
+                self.log_message('encrypting, but not signing message')
                 encrypted_data = crypto.encrypt_and_armor(data, to_user, charset=charset)
         else:
-            self.log.write('encrypting and signing')
-            self.log.write('clear signing message: {}'.format(clear_sign))
+            self.log_message('encrypting and signing')
+            self.log_message('clear signing message: {}'.format(clear_sign))
             encrypted_data = crypto.sign_encrypt_and_armor(data,
                 from_user, to_user, passcode, clear_sign=clear_sign, charset=charset)
 
@@ -501,17 +502,21 @@ class EncryptFilter(CryptoFilter):
         else:
             #  ASCII armored plaintext looks just like armored ciphertext,
             #  so check that we actually successfully encrypted
-            analyzer = OpenPGPAnalyzer()
-            if (data == encrypted_data or 
-                not analyzer.is_encrypted(encrypted_data, passphrase=passcode, crypto=crypto)):
-
+            if data == encrypted_data:
                 ciphertext = None
-                self.log_crypto_exception('data was not encrypted properly')
+                self.log_crypto_exception('data was not encrypted')
+            
+            elif not OpenPGPAnalyzer().is_encrypted(encrypted_data, passphrase=passcode, crypto=crypto):
+                self.log_crypto_exception('unable to verify data was encrypted')
+                # !!!! we're going to use it any ways for now as not too confident about the analyzer
+                ciphertext = str(encrypted_data)
+                if self.DEBUGGING:
+                    self.log_message("ciphertext:\n{}".format(ciphertext))
             
             else:
                 ciphertext = str(encrypted_data)
                 if self.DEBUGGING:
-                    self.log.write("ciphertext:\n{}".format(ciphertext))
+                    self.log_message("ciphertext:\n{}".format(ciphertext))
 
         return ciphertext
 
@@ -534,7 +539,7 @@ class EncryptFilter(CryptoFilter):
         '''
 
         if to_user is None or crypto_message is None:
-            self.log.write('missing key data to limit the recipients')
+            self.log_message('missing key data to limit the recipients')
         else:
             email_message = crypto_message.get_email_message()
             to_value = email_message.get_header(mime_constants.TO_KEYWORD)
@@ -542,18 +547,28 @@ class EncryptFilter(CryptoFilter):
             if (to_value is not None and to_value.find(',') > 0) or cc_value is not None:
                 name, address = utils.parse_address(to_user)
                 crypto_message.get_email_message().change_header(mime_constants.TO_KEYWORD, address)
-                self.log.write('original to: {}'.format(to_value))
-                self.log.write('final to: {} <{}>'.format(name, address))
+                self.log_message('original to: {}'.format(to_value))
+                self.log_message('final to: {} <{}>'.format(name, address))
                 
                 if cc_value is not None:
                     crypto_message.get_email_message().get_message().__delitem__(mime_constants.CC_KEYWORD)
-                    self.log.write('original cc: {}'.format(cc_value))
+                    self.log_message('original cc: {}'.format(cc_value))
 
-    def _log_exception(self, msg):
+    def log_exception(self, msg):
         '''
             Log the message to the local and Exception logs.
         '''
 
-        self.log.write(msg)
+        self.log_message(msg)
         ExceptionLog.log_message(msg)
+
+    def log_message(self, message):
+        '''
+            Log the message to the local log.
+        '''
+
+        if self.log is None:
+            self.log = LogFile()
+
+        self.log.write_and_flush(message)
 

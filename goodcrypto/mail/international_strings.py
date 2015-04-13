@@ -3,7 +3,7 @@
     Internationalized messages used in GoodCrypto.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-23
+    Last modified: 2014-11-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -34,12 +34,13 @@ CONTACTS_CRYPTO_INLINE_NAME = translate('encryption software used by this contac
 
 # mail/contacts.py
 KEY_IMPORT_GOOD = translate('Imported key successfully. Fingerprint: {}')
+KEY_IMPORT_BAD = translate('Unable to import key')
 NO_FINGERPRINT_IN_DB = translate('There is no {} fingerprint in the database for {}.')
 NO_KEY_EXISTS = translate('There is no {} key for {}.')
 KEY_EXPIRED_ON = translate('The {} key for {} expired on {}.')
 MULTIPLE_KEYS = translate("Public key doesn't contain just 1 user's key: {} keys")
 ONLY_1_KEY_ALLOWED = translate('Public key must contain 1 key. It contains {} keys.')
-WRONG_CONTACT_KEY = translate("Cannot import {} key because it isn't for {}")
+WRONG_CONTACT_KEY = translate("Cannot import the key because it isn't for {}")
 IMPORT_MISSING_DATA = translate('Unable to import public key with missing data')
 CRYPTO_NOT_SUPPORTED = translate('GoodCrypto does not currently support {}')
 PUBLIC_KEY_INVALID = translate('Public key invalid -- no user ids found')
@@ -52,12 +53,12 @@ MISSING_CRYPTO = translate('You must include at least one encryption program for
 VERIFY_FINGERPRINT_HELP = translate('Enter the email address whose fingerprint you want to verify.')
 SELECT_CRYPTO_HELP = translate('Select the encryption software for the key.')
 EXPORT_KEY_HELP = translate('Enter the email address whose public key you want exported.')
-SELECT_KEY_CRYPTO_HELP = translate('Select the encryption software for the key.')
-SELECT_KEY_IMPORT_HELP = translate("Select the user whose public key you want to import. If the key doesn't match this email address it will *not* be imported.")
-SELECT_CRYPTO_FOR_KEY_HELP = translate('Select the encryption software for the key.')
-UPLOAD_PUBLIC_KEY_HELP = translate('Enter the filename, including the path, for the file containing the public key.')
+SELECT_KEY_CRYPTO_HELP = translate('Select the type of encryption software associated with the key.')
+UPLOAD_PUBLIC_KEY_HELP = translate('Select the file that contains the public key.')
 ONLY_ONE_OPTION = translate('You may only have one Options record. Either change the current record or delete it before adding.')
 NO_ANSWER_FROM_MTA = translate('Unable to connect to the mail transport agent (MTA) via port {}.')
+IMPORT_USER_NAME_HELP = translate('Printable name of the contact in case the key does not contain it. Optional.')
+IMPORT_FINGERPRINT_HELP = translate("The fingerprint for the contact's public key, if known. Optional.")
 
 # mail/messages/decrypt_filter.py
 # We don't mention goodcrypto.com's site because it will increase the probability the message is flagged as spam
@@ -67,7 +68,7 @@ NO_KEY_TO_DECRYPT = translate('{} does not have a matching key to decrypt the me
 NO_CRYPTO_TO_DECRYPT = translate('{} does not use any known encryption')
 NO_PRIVATE_KEY = translate('{} does not have a private {} key.')
 UNABLE_TO_DECRYPT = translate('Unable to decrypt message with {}')
-UNKNOWN_SIG = translate("Can't check signature. Ask the sender to use GoodCrypto, or get and verify their public key.")
+UNKNOWN_SIG = translate("Can't check signature. Ask the sender to use GoodCrypto, or get and import their public key.")
 
 # mail/messages/decrypt_utils.py
 SECURE_MESSAGE_TAG = translate('received this message securely')
@@ -91,7 +92,8 @@ UNABLE_TO_ENCRYPT = translate("Error while trying to encrypt message from {} to 
 POSSIBLE_ENCRYPT_SOLUTION = translate("Report this error to your sysadmin.")
 
 # mail/messages/header_keys.py
-NEW_KEY_TAGLINE = translate('You received a new public key. Please verify it.')
+NEW_KEY_TAGLINE = translate('You received a new public key with this message.')
+NEW_KEY_MESSAGE_TAGLINE = translate('You received a new public key.')
 VERIFY_NEW_KEY_TAGLINE = translate('Check with the sender to verify the key. Otherwise, someone could spoof secure mail from this user.')
 """
 = translate('An unexpected error ocurred while processing this message')
@@ -100,7 +102,7 @@ VERIFY_NEW_KEY_TAGLINE = translate('Check with the sender to verify the key. Oth
 = translate("Contact the sender and verify if they've changed their {} key.")
 = translate('If they *do* have a new key, then use your GoodCrypto server to delete the contact and ask them to resend the message.')
 = translate('If the sender has *not* replaced their key, then reconfirm the fingerprint in your GoodCrypto server.')
-= translate('Remember, never use email for the verification of fingerprints and header_keys.')
+= translate('Remember, never use email for the verification of fingerprints and header keys.')
 = translate('Missing the key for {}')
 = translate('The message arrived with a key that matches the fingerprint in your GoodCrypto server, but that key is missing.')
 = translate('The message arrived with a key that does not match the fingerprint in your GoodCrypto server and the key is missing.')
@@ -128,7 +130,7 @@ VERIFY_NEW_KEY_TAGLINE = translate('Check with the sender to verify the key. Oth
 """
 
 # mail/models.py
-ENABLE_DEBUGGING_FIELD = translate('Enable diagnostic logs?')
+ENABLE_DEBUGGING_FIELD = translate('Enable diagnostic logs')
 ENABLE_DEBUGGING_HELP = translate('Activate logs to help debug unexpected behavior.')
 """
 = translate('Name')

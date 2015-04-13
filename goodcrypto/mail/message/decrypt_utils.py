@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-11-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -13,9 +13,10 @@ from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.options import get_validation_code, set_validation_code
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
+from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from syr.timestamp import Timestamp
 
-DEBUGGING = False
+DEBUGGING = True
 USE_UTC = True
 DEFAULT_CRYPTO = CryptoFactory.DEFAULT_ENCRYPTION_NAME
 
@@ -29,7 +30,7 @@ def add_tag_to_message(crypto_message):
         Test adding tags to text/plain
         >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
         >>> from goodcrypto.mail.message.email_message import EmailMessage
-        >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+        >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    crypto_message.set_crypted(True)
@@ -60,7 +61,7 @@ def get_tags(crypto_message):
         
         >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
         >>> from goodcrypto.mail.message.email_message import EmailMessage
-        >>> from goodcrypto_tests.mail.mail_test_utils import get_encrypted_message_name
+        >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    crypto_message.set_crypted(True)
@@ -85,9 +86,12 @@ def get_tags(crypto_message):
     try:
         if crypto_message.is_crypted():
             log_message("crypted: {}".format(crypto_message.is_crypted()))
-            if crypto_message.get_email_message().is_probably_pgp():
+            analyzer = OpenPGPAnalyzer()
+            content = crypto_message.get_email_message().get_content()
+            if analyzer.is_encrypted(content):
                 crypto_message.add_prefix_to_tag('{}, {}'.format(
                     DECRYPTED_MESSAGE_TAG, international_strings.STILL_ENCRYPTED_MESSAGE_TAG))
+                if not DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
             else:
                 crypto_message.add_prefix_to_tag('{}.'.format(DECRYPTED_MESSAGE_TAG))
 
@@ -123,7 +127,7 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
         >>> # In honor of Mike Perry, Tor Browser and Tor Performance developer.
         >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
         >>> from goodcrypto.mail.message.email_message import EmailMessage
-        >>> from goodcrypto_tests.mail.mail_test_utils import get_plain_message_name
+        >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
         >>> with open(get_plain_message_name('pgp-sig-unknown.txt')) as input_file:
         ...    email = 'mike@goodcrypto.remote'
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
@@ -233,5 +237,5 @@ def log_message(message):
     if _log is None:
         _log = LogFile()
 
-    _log.write(message)
+    _log.write_and_flush(message)
 

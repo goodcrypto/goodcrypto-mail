@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-06
+    Last modified: 2014-12-14
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,7 +17,7 @@ from goodcrypto.api_constants import SYSTEM_API_URL
 from goodcrypto.mail import contacts, crypto_software, international_strings
 from goodcrypto.mail.api import MailAPI
 from goodcrypto.mail.forms import FingerprintForm, ExportKeyForm, ImportKeyForm
-from goodcrypto.mail.options import get_domain
+from goodcrypto.mail.options import get_domain, get_mail_server_address
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
@@ -30,31 +30,40 @@ log = LogFile()
 def home(request):
     '''Show the home page.'''
 
-    form_template = 'mail/home.html'
-    if request.method == 'POST':
-        
-        try:
-            if 'action' in request.POST:
-                action = request.POST.__getitem__('action')
-                log.write('action: {}'.format(action))
-                if action is None:
-                    response = HttpResponseRedirect('/admin/mail/')
-                elif action.strip() == 'View fingerprint':
-                    response = view_fingerprint(request)
-                elif action.strip() == 'View pubic key':
-                    response = view_key(request)
-                if action.strip() == 'Import key':
-                    response = import_key(request)
-                else:
-                    response = HttpResponseRedirect('/admin/mail/')
-            else:
-                log.write('post: {}'.format(request.POST))
-                response = render(request, form_template)
-        except Exception:
-            log.write(format_exc())
-            response = render(request, form_template)
+    domain = get_domain()
+    mta = get_mail_server_address()
+    if (domain is None or len(domain.strip()) <= 0 or
+        mta is None or len(mta.strip()) <= 0):
+        log('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
+        response = HttpResponseRedirect('/system/configure/')
     else:
-        response = render(request, form_template)
+        form_template = 'mail/home.html'
+        if request.method == 'POST':
+            
+            try:
+                if 'action' in request.POST:
+                    action = request.POST.__getitem__('action')
+                    log.write('action: {}'.format(action))
+                    if action is None:
+                        response = HttpResponseRedirect('/admin/mail/')
+                    elif action.strip() == 'View fingerprint':
+                        response = view_fingerprint(request)
+                    elif action.strip() == 'View pubic key':
+                        response = view_key(request)
+                    if action.strip() == 'Import key':
+                        response = import_key(request)
+                    else:
+                        response = HttpResponseRedirect('/admin/mail/')
+                else:
+                    log.write('post: {}'.format(request.POST))
+                    response = render(request, form_template)
+            except Exception:
+                log.write(format_exc())
+                response = render(request, form_template)
+        else:
+            response = render_to_response(
+                form_template, {'domain': domain, 'mta': mta}, 
+                                context_instance=RequestContext(request))
 
     return response
 
@@ -117,6 +126,7 @@ def api(request):
     '''
 
     try:
+        log.write('called api')
         response = MailAPI().interface(request)
     except:
         log.write(format_exc())
@@ -180,52 +190,18 @@ def export_key(request):
 
 @staff_required
 def import_key(request):
-    ''' Import a public key and create corresponding contact.'''
+    ''' Import a public key.'''
 
     response = None
     form = ImportKeyForm()
     form_template = 'mail/import_key.html'
     if request.method == 'POST':
-        response = None
-        encryption_name = None
-        
-        form = ImportKeyForm(request.POST, request.FILES)
-        if form.is_valid():
+        action = request.POST.__getitem__('action')
+        if action == 'import':
             try:
-                public_key_file = request.FILES['public_key_file']
-                encryption_software = form.cleaned_data['encryption_software']
-                user_name = form.cleaned_data['user_name']
-                fingerprint = form.cleaned_data['fingerprint']
-                
-                if public_key_file.size > 100000:
-                    log.write('public key file too large: {}'.format(public_key_file.size))
-                    form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
-                                 'error_result': international_strings.PUBLIC_KEY_FILE_TOO_LONG, 'status': ''}
-                    response = render_to_response(
-                        form_template, form_data, context_instance=RequestContext(request))
-                else:
-                    public_key = public_key_file.read()
-                    result_ok, status, fingerprint_ok = import_public_key(
-                        encryption_software, public_key, user_name, fingerprint)
-                    if result_ok:
-                        results_label, email = status.split(':')
-                        if not fingerprint_ok:
-                            fingerprint_label = international_strings.FINGERPRINT_WARNING
-                            fingerprint_result = international_strings.MISMATCHED_FINGERPRINT
-                        else:
-                            fingerprint_label = fingerprint_result = ''
-                        form.cleaned_data['user_name'] = ''
-                        form.cleaned_data['fingerprint'] = ''
-                        form_data = {'form': form, 'results_label': '{}:'.format(results_label), 
-                                     'status': email, 'error_result': '',
-                                     'fingerprint_label': fingerprint_label,
-                                     'fingerprint_result': fingerprint_result}
-                    else:
-                        form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
-                                     'error_result': status, 'status': '', 'fingerprint': None}
-                        log.write('error importing public {} key:\n{}'.format(encryption_software, public_key))
-                    response = render_to_response(
-                        form_template, form_data, context_instance=RequestContext(request))
+                form = ImportKeyForm(request.POST, request.FILES)
+                if form.is_valid(): 
+                    response = import_public_key(request, form, form_template)
             except Exception:
                 log.write(format_exc())
 
@@ -239,7 +215,49 @@ def import_key(request):
     return response
 
 
-def import_public_key(encryption_name, public_key, user_name, possible_fingerprint):
+def import_public_key(request, form, form_template):
+    ''' Import a public key and create corresponding contact.'''
+
+    response = None
+    public_key_file = request.FILES['public_key_file']
+    encryption_software = form.cleaned_data['encryption_software']
+    user_name = form.cleaned_data['user_name']
+    fingerprint = form.cleaned_data['fingerprint']
+    
+    if public_key_file.size > 100000:
+        log.write('public key file too large: {}'.format(public_key_file.size))
+        form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
+                     'error_result': international_strings.PUBLIC_KEY_FILE_TOO_LONG, 'status': ''}
+        response = render_to_response(
+            form_template, form_data, context_instance=RequestContext(request))
+    else:
+        public_key = public_key_file.read()
+        result_ok, status, fingerprint_ok = import_key_now(
+            encryption_software, public_key, user_name, fingerprint)
+        if result_ok:
+            results_label, email = status.split(':')
+            if not fingerprint_ok:
+                fingerprint_label = international_strings.FINGERPRINT_WARNING
+                fingerprint_result = international_strings.MISMATCHED_FINGERPRINT
+            else:
+                fingerprint_label = fingerprint_result = ''
+            form_data = {'form': form, 
+                         'results_label': '{}:'.format(results_label), 
+                         'status': email, 'error_result': '',
+                         'fingerprint_label': fingerprint_label,
+                         'fingerprint_result': fingerprint_result}
+        else:
+            form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
+                         'error_result': status, 'status': '', 'fingerprint': None}
+            log.write('error importing public {} key:\n{}'.format(encryption_software, public_key))
+
+        response = render_to_response(
+            form_template, form_data, context_instance=RequestContext(request))
+
+    return response
+
+
+def import_key_now(encryption_name, public_key, user_name, possible_fingerprint):
     '''
         Import if public key is ok and doesn't exist.
     '''
@@ -260,13 +278,13 @@ def import_public_key(encryption_name, public_key, user_name, possible_fingerpri
             log.write('no plugin for {} with classname: {}'.format(
                 encryption_software.name, encryption_software.classname))
         else:
-            user_ids = plugin.get_user_ids_from_key(public_key)
-            if user_ids is None:
+            id_fingerprint_pairs = plugin.get_id_fingerprint_pairs(public_key)
+            if id_fingerprint_pairs is None:
                 result_ok = False
                 status = international_strings.PUBLIC_KEY_INVALID
             else:
                 result_ok = True
-                for user_id in user_ids:
+                for (user_id, fingerprint) in id_fingerprint_pairs:
                     if email_in_domain(user_id):
                         result_ok = False
                         status = international_strings.IMPORT_NOT_PERMITTED.format(user_id)
@@ -289,18 +307,18 @@ def import_public_key(encryption_name, public_key, user_name, possible_fingerpri
 
                 # import the key if this is a new contact
                 if result_ok:
-                    log.write('importing keys for {}'.format(user_ids))
+                    log.write('importing keys for {}'.format(id_fingerprint_pairs))
                     result_ok, status, fingerprint_ok = _import_key_add_contact(
-                        public_key, user_name, possible_fingerprint, user_ids, plugin)
+                        public_key, user_name, possible_fingerprint, id_fingerprint_pairs, plugin)
                 else:
-                    log.write('unable to import keys for {}'.format(user_ids))
+                    log.write('unable to import keys for {}'.format(id_fingerprint_pairs))
 
     log.write("Imported public {} key ok: {}".format(encryption_name, result_ok))
     log.write("    Status: {}".format(status))
 
     return result_ok, status, fingerprint_ok
     
-def _import_key_add_contact(public_key, user_name, possible_fingerprint, user_ids, plugin):
+def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fingerprint_pairs, plugin):
     '''
         Import public keys and create associated contact records.
         
@@ -316,8 +334,8 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, user_id
             else:
                 log.write('user name: {}'.format(user_name))
                 log.write('contact user name: {}'.format(contact.user_name))
-            if possible_fingerprint is not None:
-                if strip_fingerprint(possible_fingerprint) == strip_fingerprint(fingerprint):
+            if possible_fingerprint is not None and len(possible_fingerprint.strip()) > 0:
+                if strip_fingerprint(possible_fingerprint).lower() == strip_fingerprint(fingerprint).lower():
                     contacts_crypto = contacts.get_contacts_crypto(user_id, plugin.get_name())
                     contacts_crypto.verified = True
                     contacts_crypto.save()
@@ -334,22 +352,22 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, user_id
     fingerprint_ok = True
     status = international_strings.IMPORTED_KEYS
     
-    fingerprints = plugin.import_public(public_key)
-    log.write('fingerprints for imported keys: {}'.format(fingerprints))
-    if fingerprints is None or len(fingerprints) <= 0:
-        result_ok = False
-        status = international_strings.PUBLIC_KEY_INVALID
-    else:
+    result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
+    log.write('imported key: {}'.format(result_ok))
+    if result_ok:
         i = 0
-        for user_id in user_ids:
+        for (user_id, fingerprint) in id_fingerprint_pairs:
             contact = contacts.add(user_id, plugin.get_name())
             if contact is None:
                 log.write('unable to add contact for {}'.format(user_id))
             else:
-                if not update_contact(contact, plugin.get_name(), fingerprints[i]):
+                if not update_contact(contact, plugin.get_name(), fingerprint):
                     fingerprint_ok = False
                 status += ' {}'.format(user_id)
             i += 1
+    else:
+        result_ok = False
+        status = international_strings.PUBLIC_KEY_INVALID
         
     log.write(status)
 
