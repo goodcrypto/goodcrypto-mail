@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-04
+    Last modified: 2015-01-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,9 +11,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from random import random
 from traceback import format_exc
+from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail import contacts, contacts_passcodes, international_strings, options
+from goodcrypto.mail import contacts, contacts_passcodes, options
+from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
 from goodcrypto.mail.crypto_software import get_classname, get_key_classname
 from goodcrypto.mail.message import mime_constants, utils
 from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
@@ -53,7 +55,9 @@ class EncryptFilter(CryptoFilter):
     PASSCODE_KEYWORD = 'passcode'
     CHARSET_KEYWORD = 'charset'
     
-    
+    UNABLE_TO_ENCRYPT = _("Error while trying to encrypt message from {from_email} to {to_email} using {encryption}")
+    POSSIBLE_ENCRYPT_SOLUTION = _("Report this error to your sysadmin.")
+
     def __init__(self):
         '''
             >>> encrypt_filter = EncryptFilter()
@@ -79,7 +83,7 @@ class EncryptFilter(CryptoFilter):
             self.log_crypto_exception(MessageException(format_exc()))
             try:
                 crypto_message.add_tag_once('{} {}'.format(
-                    international_strings.SERIOUS_ERROR_PREFIX, error_message))
+                    SERIOUS_ERROR_PREFIX, error_message))
             except Exception:
                 self.log_message(format_exc())
             
@@ -99,9 +103,9 @@ class EncryptFilter(CryptoFilter):
                 try:
                     self._encrypt_message_with_all(encryption_names, crypto_message, from_user, to_user)
                 except MessageException as message_exception:
-                    raise MessageException(message_exception.value)
+                    raise MessageException(value=message_exception.value)
                 except Exception as exception:
-                    log_error(crypto_message, exception.value)
+                    log_error(crypto_message, str(exception))
                 except IOError as io_error:
                     log_error(crypto_message, io_error.value)
 
@@ -114,13 +118,13 @@ class EncryptFilter(CryptoFilter):
                        crypto_message.get_email_message().to_string()))
             else:
                 crypto_message.add_tag_once('{}{}'.format(
-                  international_strings.WARNING_PREFIX, international_strings.ENCRYPTION_WORKS))
+                  WARNING_PREFIX, _('Anyone could have read this message. Use encryption, it works.')))
 
             tags_added = crypto_message.add_tag_to_message()
             self.log_message('Tags added to message: {}'.format(tags_added))
 
         except MessageException as message_exception:
-            raise MessageException(message_exception.value)
+            raise MessageException(value=message_exception.value)
 
         except Exception, IOError:
             self.log_message(format_exc())
@@ -143,16 +147,39 @@ class EncryptFilter(CryptoFilter):
             encryption_classname = get_key_classname(encryption_name)
             if encryption_classname not in encrypted_with:
                 try:
-                    if self._encrypt_message(encryption_name, crypto_message, from_user, to_user):
-                        encrypted_with.append(encryption_classname)
+                    if options.require_key_verified():
+                        __, key_ok = contacts.get_fingerprint(to_user, encryption_name)
+                        self.log_message("{} {} key verified: {}".format(to_user, encryption_name, key_ok))
+                    else:
+                        key_ok = True
+                        
+                    if key_ok:
+                        if self._encrypt_message(encryption_name, crypto_message, from_user, to_user):
+                            encrypted_with.append(encryption_classname)
+                    else:
+                        error_message += _('You will need to verify the {encryption} key for {email} before you can use it.').format(
+                            encryption=encryption_name, email=to_user)
+                        self.log_message(error_message)
                 except MessageException as message_exception:
                     fatal_error = True
                     error_message += message_exception.value
                     self.log_exception(error_message)
+                    break
 
-        if fatal_error and len(encrypted_with) <= 0 and options.clear_sign_email():
+        # if the user has encryption software defined, then the message 
+        # must be encrypted or bounced to the sender
+        if len(encrypted_with) < 1:
+            fatal_error = True
+            if error_message is None or len(error_message) <= 0:
+                error_message = '{}\n{}'.format(
+                    _("Message not sent to {email} because there was a problem encrypting. It's possible the recipient's key is missing.").format(
+                        email=to_user),
+                    self.POSSIBLE_ENCRYPT_SOLUTION)
+
+        if fatal_error:
             self.log_message('raising message exception in _encrypt_message_with_all')
-            raise MessageException(error_message)
+            self.log_message(error_message)
+            raise MessageException(value=error_message)
 
 
     def _encrypt_message(self, encryption_name, crypto_message, from_user, to_user):
@@ -190,22 +217,23 @@ class EncryptFilter(CryptoFilter):
 
             if options.clear_sign_email():
                 if from_user is None or passcode is None:
-                    error_message = '{}  '.format(international_strings.UNABLE_TO_SEND.format(
-                            to_user, encryption_name))
+                    error_message = '{}  '.format(
+                        _("Message not sent to {email} because currently there isn't a private {encryption} key for you and your sysadmin requires all encrypted messages also be clear signed.").format(
+                            email=to_user, encryption=encryption_name))
                     if options.create_private_keys():
-                        error_message += international_strings.POSSIBLE_SEND_SOLUTION1
+                        error_message += _("GoodCrypto is creating a private key now. You will receive email when your keys are ready so you can resend your message.")
                     else:
-                        error_message += international_strings.POSSIBLE_SEND_SOLUTION2
+                        error_message += _("Ask your sysadmin to create a private key for you and then try resending the message.")
                 else:
                     error_message = '{}\n{}'.format(
-                        international_strings.UNABLE_TO_ENCRYPT.format(
-                            from_user, to_user, encryption_name),
-                        international_strings.POSSIBLE_ENCRYPT_SOLUTION)
+                        self.UNABLE_TO_ENCRYPT.format(
+                            from_email=from_user, to_email=to_user, encryption=encryption_name),
+                        self.POSSIBLE_ENCRYPT_SOLUTION)
             else:
                 error_message = '{}\n{}'.format(
-                    international_strings.UNABLE_TO_ENCRYPT.format(
-                        from_user, to_user, encryption_name),
-                    international_strings.POSSIBLE_ENCRYPT_SOLUTION)
+                    self.UNABLE_TO_ENCRYPT.format(
+                        from_email=from_user, to_email=to_user, encryption=encryption_name),
+                    self.POSSIBLE_ENCRYPT_SOLUTION)
                 
             return error_message
 
@@ -251,7 +279,7 @@ class EncryptFilter(CryptoFilter):
                     self.log_message('encrypted message: {}'.format(result_ok))
                     if not result_ok:
                         error_message = get_error_message(users_dict, encryption_name)
-                        raise MessageException(error_message)
+                        raise MessageException(value=error_message)
 
                 else:
                     # the message hasn't been encrypted, but we have 
@@ -259,7 +287,7 @@ class EncryptFilter(CryptoFilter):
                     crypto_message.set_filtered(True)
                     
         except MessageException as message_exception:
-            raise MessageException(message_exception.value)
+            raise MessageException(value=message_exception.value)
 
         except Exception:
             result_ok = False
@@ -287,7 +315,7 @@ class EncryptFilter(CryptoFilter):
         if crypto_message is None or crypto_message.get_email_message() is None:
             charset = 'UTF-8'
         else:
-            charset, _ = get_charset(crypto_message.get_email_message().get_message())
+            charset, __ = get_charset(crypto_message.get_email_message().get_message())
 
         users_dict = {self.FROM_KEYWORD: from_user_id, 
                       self.TO_KEYWORD: to_user_id, 
@@ -337,7 +365,7 @@ class EncryptFilter(CryptoFilter):
                 ready_to_encrypt = False
                 self.log_exception(exception.value)
                 self.log_message('raising message exception in _get_to_crypto_details')
-                raise MessageException(exception.value)
+                raise MessageException(value=exception.value)
 
         return to_user_id, ready_to_encrypt
 
@@ -452,7 +480,7 @@ class EncryptFilter(CryptoFilter):
                MIMEApplication(ciphertext, mime_constants.OCTET_STREAM_SUB_TYPE, encode_7or8bit))
     
             boundary = 'Part{}{}--'.format(random(), random())
-            charset, _ = get_charset(crypto_message.get_email_message().get_message())
+            charset, __ = get_charset(crypto_message.get_email_message().get_message())
             params = {mime_constants.PROTOCOL_KEYWORD:mime_constants.PGP_TYPE,
                       mime_constants.CHARSET_KEYWORD:charset,}
             msg = MIMEMultipart(mime_constants.ENCRYPTED_SUB_TYPE, boundary, parts, **params)

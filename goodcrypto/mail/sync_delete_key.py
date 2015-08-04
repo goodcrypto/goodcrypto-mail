@@ -2,7 +2,7 @@
     Delete keys from the keyring when a database record deleted.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -23,7 +23,7 @@ def delete(email_address, crypto_name):
     delete_log = LogFile(filename='goodcrypto.mail.sync_delete_crypto_key.log')
     result_ok = False
     try:
-        _, email = parse_address(b64decode(email_address))
+        __, email = parse_address(b64decode(email_address))
         try:
             delete_log.write_and_flush('starting to delete_crypto_key for {}'.format(email))
             delete_key_class = DeleteKey(email, b64decode(crypto_name))

@@ -3,15 +3,16 @@
     the encryption databases (i.e., keyrings).
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-17
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from base64 import b64decode, b64encode
 from traceback import format_exc
+from django.utils.translation import ugettext as _
 
-from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, international_strings
+from goodcrypto.mail import contacts, contacts_passcodes, crypto_software
 from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.options import get_domain
 from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
@@ -50,7 +51,7 @@ def manage(email_address, crypto_name):
     add_log = LogFile(filename='goodcrypto.mail.sync_private_crypto_key.log')
     result_ok = False
     try:
-        _, email = parse_address(b64decode(email_address))
+        __, email = parse_address(b64decode(email_address))
         try:
             add_log.write_and_flush('starting to add_db_key for {}'.format(email))
             sync_db_key_class = SyncDbKey(email, b64decode(crypto_name))
@@ -95,7 +96,7 @@ class SyncDbKey(object):
         try:
             self.log = LogFile()
             self.result_ok = True
-            _, self.email = parse_address(email_address)
+            __, self.email = parse_address(email_address)
             self.crypto_name = crypto
             self.key_plugin = None
             self.new_key = False
@@ -163,7 +164,7 @@ class SyncDbKey(object):
             if self.result_ok:
                 self._config_database()
             if self.result_ok:
-                self._config_crypto()
+                self._config_keys()
             if self.result_ok:
                 self._save_fingerprint()
         except Exception as exception:
@@ -237,9 +238,9 @@ class SyncDbKey(object):
                 self.contacts_passcode.save()
                 self.log.write_and_flush('updated passcode in database for {}'.format(self.email))
 
-    def _config_crypto(self):
+    def _config_keys(self):
         ''' 
-            Configure the encryption software.
+            Configure the key pair for the user.
         '''
 
         if ok_to_modify_key(self.crypto_name, self.key_plugin) and self.contacts_passcode is not None:
@@ -256,9 +257,10 @@ class SyncDbKey(object):
                 if self.key_plugin.sign('Test data', self.email, passcode) is None:
                     self.result_ok = False
                     self.log.write_and_flush("{}'s passphrase does not match {}'s key.".format(self.email, self.crypto_name))
-                    notify_user(self.email, 
-                        international_strings.MISMATCHED_PASSPHRASES.format(self.email, self.crypto_name),
-                        international_strings.MISMATCHED_PASSPHRASES.format(self.email, self.crypto_name))
+
+                    MISMATCHED_PASSPHRASES = _("{email}'s passphrase does not match {encryption}'s key.").format(
+                      email=self.email, encryption=self.crypto_name)
+                    notify_user(self.email, MISMATCHED_PASSPHRASES, MISMATCHED_PASSPHRASES)
                 else:
                     self.log.write_and_flush("{} {} passphrase is good.".format(self.email, self.crypto_name))
             else:
@@ -276,7 +278,8 @@ class SyncDbKey(object):
                 else:
                     full_address = self.email
     
-                self.log.write_and_flush('preparing to create {} key for {}'.format(self.crypto_name, self.email))
+                self.log.write_and_flush('preparing to create {} key for {}'.format(
+                    self.crypto_name, self.email))
                 expiration = {EXPIRES_IN: self.expires_in, EXPIRATION_UNIT: self.expiration_unit,}
                 self.result_ok, timed_out = self.key_plugin.create(
                     full_address, passcode, expiration, wait_for_results=True)
@@ -284,15 +287,23 @@ class SyncDbKey(object):
                 if self.result_ok:
                     self.new_key = True
                     self.log.write_and_flush('created {} key for {}'.format(self.crypto_name, self.email))
+                    notify_user(self.email, 
+                       _('Your {encryption} key is ready').format(encryption=self.crypto_name),
+                       _('Your public and private {encryption} key pair is ready. Any messages sent to others with keys in the database will be protected during transit.').format(
+                          encryption=self.crypto_name))
+                    self.log.write_and_flush('notified {}'.format(self.email))
                 elif timed_out:
                     self.log.write_and_flush('timed out creating a private {} key for {}.'.format(
                         self.crypto_name, self.email))
+                    notify_user(self.email, 
+                       _("Creating {encryption} keys timedout.").format(encryption=self.crypto_name),
+                       _("You might wait and then ask your sysadmin to see if the key was created. If it wasn't then, s/he can try to create it for you."))
                 else:
                     self.log.write_and_flush('unable to create a private {} key for {}.'.format(
                         self.crypto_name, self.email))
-                    notify_user(self.email, 
-                       international_strings.UNABLE_TO_CREATE_KEY.format(self.crypto_name),
-                       international_strings.UNABLE_TO_CREATE_KEY.format(self.crypto_name))
+                    
+                    UNABLE_TO_CREATE_KEY = _('Unable to create {encryption} keys.').format(encryption=self.crypto_name)
+                    notify_user(self.email, UNABLE_TO_CREATE_KEY, UNABLE_TO_CREATE_KEY)
         else:
             self.log.write_and_flush('not ok to create private {} key'.format(self.crypto_name))
             self.result_ok = True
@@ -317,7 +328,7 @@ class SyncDbKey(object):
         if self.key_plugin is None:
             self.log.write_and_flush('no {} plugin defined for {}'.format(self.crypto_name, self.email))
         else:
-            fingerprint, _ = self.key_plugin.get_fingerprint(self.email)
+            fingerprint, __ = self.key_plugin.get_fingerprint(self.email)
             if fingerprint is None:
                 self.result_ok = False
                 self.log.write_and_flush('unable to get {} fingerprint for {}'.format(self.crypto_name, self.email))

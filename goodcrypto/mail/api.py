@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-19
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -149,7 +149,7 @@ class MailAPI(object):
                 result_ok, status, fingerprint_ok = import_key_now(
                     self.encryption_name, self.public_key, self.user_name, self.fingerprint)
                 if result_ok:
-                    _, email = status.split(':')
+                    __, email = status.split(':')
                     result = self.format_message_result(api_constants.IMPORT_KEY, True, email)
                 else:
                     result = self.format_bad_result(status)

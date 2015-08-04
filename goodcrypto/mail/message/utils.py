@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-04
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -248,7 +248,7 @@ def alt_to_text_message(original_message):
     try:
         if original_message:
             content_type = original_message.get_content_type()
-            charset, _ = get_charset(original_message)
+            charset, __ = get_charset(original_message)
             log_message("message content type is {}".format(content_type))
     
             if content_type == mime_constants.MULTIPART_ALT_TYPE:
@@ -259,7 +259,7 @@ def alt_to_text_message(original_message):
                             plain_text += '\n\n'
                         plain_text += part.get_payload()
                         content_type = part.get_content_type()
-                        charset, _ = get_charset(part)
+                        charset, __ = get_charset(part)
                         log_message("part content type is {}".format(content_type))
                         log_message("part charset is {}".format(charset))
     
@@ -539,7 +539,7 @@ def get_email(address):
         'nadav@goodcrypto.remote'
     '''
     try:
-        _, email = parse_address(address)
+        __, email = parse_address(address)
     except Exception:
         email = address
 
@@ -605,7 +605,7 @@ def get_encryption_software(email):
     encryption_software_list = []
     
     #  start with the encryption software for this email
-    _, address = parse_address(email)
+    __, address = parse_address(email)
 
     from goodcrypto.mail.contacts import get_encryption_names
     encryption_names = get_encryption_names(address)

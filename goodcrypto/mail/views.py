@@ -2,22 +2,23 @@
     Mail views
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-14
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os.path, re
 from traceback import format_exc
 
-from django.shortcuts import render, render_to_response
+from django.shortcuts import redirect, render, render_to_response
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template import RequestContext
+from django.utils.translation import ugettext as _
 
 from goodcrypto.api_constants import SYSTEM_API_URL
-from goodcrypto.mail import contacts, crypto_software, international_strings
+from goodcrypto.mail import contacts, crypto_software, options
 from goodcrypto.mail.api import MailAPI
+from goodcrypto.mail.i18n_constants import ERROR_PREFIX, PUBLIC_KEY_INVALID
 from goodcrypto.mail.forms import FingerprintForm, ExportKeyForm, ImportKeyForm
-from goodcrypto.mail.options import get_domain, get_mail_server_address
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
@@ -30,11 +31,11 @@ log = LogFile()
 def home(request):
     '''Show the home page.'''
 
-    domain = get_domain()
-    mta = get_mail_server_address()
+    domain = options.get_domain()
+    mta = options.get_mail_server_address()
     if (domain is None or len(domain.strip()) <= 0 or
         mta is None or len(mta.strip()) <= 0):
-        log('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
+        log.write('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
         response = HttpResponseRedirect('/system/configure/')
     else:
         form_template = 'mail/home.html'
@@ -67,48 +68,50 @@ def home(request):
 
     return response
 
-
 def view_fingerprint(request):
     '''View the fingerprint for a user.'''
 
-    response = None
-    form = FingerprintForm()
-    form_template = 'mail/fingerprint.html'
-    if request.method == 'POST':
-        
-        email = None
-        encryption_software = None
-        
-        form = FingerprintForm(request.POST)
-        if form.is_valid():
-            try:
-                email = form.cleaned_data['email']
-                encryption_software = form.cleaned_data['encryption_software']
-
-                fingerprint, verified = contacts.get_fingerprint(email, encryption_software.name)
-                if fingerprint is None:
-                    fingerprint = international_strings.NO_FINGERPRINT
-                    verified_msg = ''
-                else:
-                    if verified:
-                        verified_msg = international_strings.VERIFIED
+    if options.login_to_view_fingerprints() and not request.user.is_authenticated():
+        response = redirect('/login/?next={}'.format(request.path))
+    else:
+        response = None
+        form = FingerprintForm()
+        form_template = 'mail/fingerprint.html'
+        if request.method == 'POST':
+            
+            email = None
+            encryption_software = None
+            
+            form = FingerprintForm(request.POST)
+            if form.is_valid():
+                try:
+                    email = form.cleaned_data['email']
+                    encryption_software = form.cleaned_data['encryption_software']
+    
+                    fingerprint, verified = contacts.get_fingerprint(email, encryption_software.name)
+                    if fingerprint is None:
+                        fingerprint = _('No fingerprint defined')
+                        verified_msg = ''
                     else:
-                        verified_msg = international_strings.NOT_VERIFIED
-                form_data = {'form': form, 
-                             'fingerprint_label': 'Fingerprint:', 
-                             'fingerprint': format_fingerprint(fingerprint), 
-                             'verified': verified_msg}
-                response = render_to_response(
-                    form_template, form_data, context_instance=RequestContext(request))
-            except Exception:
-                log.write(format_exc())
-
+                        if verified:
+                            verified_msg = _('Verified')
+                        else:
+                            verified_msg = _('Not verified')
+                    form_data = {'form': form, 
+                                 'fingerprint_label': 'Fingerprint:', 
+                                 'fingerprint': format_fingerprint(fingerprint), 
+                                 'verified': verified_msg}
+                    response = render_to_response(
+                        form_template, form_data, context_instance=RequestContext(request))
+                except Exception:
+                    log.write(format_exc())
+    
+            if response is None:
+                log.write('post: {}'.format(request.POST))
+    
         if response is None:
-            log.write('post: {}'.format(request.POST))
-
-    if response is None:
-        response = render_to_response(
-            form_template, {'form': form}, context_instance=RequestContext(request))
+            response = render_to_response(
+                form_template, {'form': form}, context_instance=RequestContext(request))
 
     return response
 
@@ -117,7 +120,7 @@ def configure(request):
     
     template = 'mail/configure.html'
     return render_to_response(
-        template, {'domain': get_domain()}, context_instance=RequestContext(request))
+        template, {'domain': options.get_domain()}, context_instance=RequestContext(request))
     
 def api(request):
     '''Interface with the client through the API.
@@ -152,38 +155,41 @@ def export_key(request):
             
         return name
 
-    response = None
-    form = ExportKeyForm()
-    form_template = 'mail/export_key.html'
-    if request.method == 'POST':
+    if options.login_to_export_keys() and not request.user.is_authenticated():
+        response = redirect('/login/?next={}'.format(request.path))
+    else:
         response = None
-        form = ExportKeyForm(request.POST)
-        if form.is_valid():
-            try:
-                email = form.cleaned_data['email']
-                encryption_software = form.cleaned_data['encryption_software']
-                name = get_safe_name(email)
-                log.write('export {} public {} key to {}'.format(email, encryption_software, name))
-
-                public_key = contacts.get_public_key(email, encryption_software)
-                if public_key is None or len(public_key) <= 0:
-                    form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
-                                 'result': international_strings.NO_PUBLIC_KEY}
-                    response = render_to_response(
-                        form_template, form_data, context_instance=RequestContext(request))
-                else:
+        form = ExportKeyForm()
+        form_template = 'mail/export_key.html'
+        if request.method == 'POST':
+            response = None
+            form = ExportKeyForm(request.POST)
+            if form.is_valid():
+                try:
+                    email = form.cleaned_data['email']
+                    encryption_software = form.cleaned_data['encryption_software']
                     name = get_safe_name(email)
-                    response = HttpResponse(public_key, content_type='application/text')
-                    response['Content-Disposition'] = 'attachment; filename="{}.asc"'.format(name)
-            except Exception:
-                log.write(format_exc())
-
+                    log.write('export {} public {} key to {}'.format(email, encryption_software, name))
+    
+                    public_key = contacts.get_public_key(email, encryption_software)
+                    if public_key is None or len(public_key) <= 0:
+                        form_data = {'form': form, 'results_label': ERROR_PREFIX, 
+                                     'result': _('No public key defined')}
+                        response = render_to_response(
+                            form_template, form_data, context_instance=RequestContext(request))
+                    else:
+                        name = get_safe_name(email)
+                        response = HttpResponse(public_key, content_type='application/text')
+                        response['Content-Disposition'] = 'attachment; filename="{}.asc"'.format(name)
+                except Exception:
+                    log.write(format_exc())
+    
+            if response is None:
+                log.write('post: {}'.format(request.POST))
+    
         if response is None:
-            log.write('post: {}'.format(request.POST))
-
-    if response is None:
-        response = render_to_response(
-            form_template, {'form': form}, context_instance=RequestContext(request))
+            response = render_to_response(
+                form_template, {'form': form}, context_instance=RequestContext(request))
 
     return response
 
@@ -226,8 +232,8 @@ def import_public_key(request, form, form_template):
     
     if public_key_file.size > 100000:
         log.write('public key file too large: {}'.format(public_key_file.size))
-        form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
-                     'error_result': international_strings.PUBLIC_KEY_FILE_TOO_LONG, 'status': ''}
+        form_data = {'form': form, 'results_label': ERROR_PREFIX, 
+                     'error_result': _('The public key file is too long.'), 'status': ''}
         response = render_to_response(
             form_template, form_data, context_instance=RequestContext(request))
     else:
@@ -237,8 +243,8 @@ def import_public_key(request, form, form_template):
         if result_ok:
             results_label, email = status.split(':')
             if not fingerprint_ok:
-                fingerprint_label = international_strings.FINGERPRINT_WARNING
-                fingerprint_result = international_strings.MISMATCHED_FINGERPRINT
+                fingerprint_label = _('Warning:')
+                fingerprint_result = _('Fingerprints did not match')
             else:
                 fingerprint_label = fingerprint_result = ''
             form_data = {'form': form, 
@@ -247,7 +253,7 @@ def import_public_key(request, form, form_template):
                          'fingerprint_label': fingerprint_label,
                          'fingerprint_result': fingerprint_result}
         else:
-            form_data = {'form': form, 'results_label': international_strings.ERROR_PREFIX, 
+            form_data = {'form': form, 'results_label': ERROR_PREFIX, 
                          'error_result': status, 'status': '', 'fingerprint': None}
             log.write('error importing public {} key:\n{}'.format(encryption_software, public_key))
 
@@ -266,7 +272,7 @@ def import_key_now(encryption_name, public_key, user_name, possible_fingerprint)
 
     if encryption_name is None or public_key is None:
         result_ok = False
-        status = international_strings.IMPORT_MISSING_DATA
+        status = _('Unable to import public key with missing data')
         log.write('crypto: {} / public key: {}'.format(
            encryption_name, public_key))
     else:
@@ -274,20 +280,21 @@ def import_key_now(encryption_name, public_key, user_name, possible_fingerprint)
         plugin = KeyFactory.get_crypto(encryption_software.name, encryption_software.classname)
         if plugin is None:
             result_ok = False
-            status = international_strings.CRYPTO_NOT_SUPPORTED.format(encryption_software.name)
+            status = ('GoodCrypto does not currently support {encryption}').format(
+                encryption=encryption_software.name)
             log.write('no plugin for {} with classname: {}'.format(
                 encryption_software.name, encryption_software.classname))
         else:
             id_fingerprint_pairs = plugin.get_id_fingerprint_pairs(public_key)
             if id_fingerprint_pairs is None:
                 result_ok = False
-                status = international_strings.PUBLIC_KEY_INVALID
+                status = PUBLIC_KEY_INVALID
             else:
                 result_ok = True
                 for (user_id, fingerprint) in id_fingerprint_pairs:
                     if email_in_domain(user_id):
                         result_ok = False
-                        status = international_strings.IMPORT_NOT_PERMITTED.format(user_id)
+                        status = ('You may not import a public key for {email}').format(email=user_id)
                         break
                     else:
                         # make sure we don't already have crypto defined for this user
@@ -302,7 +309,8 @@ def import_key_now(encryption_name, public_key, user_name, possible_fingerprint)
                             result_ok = False
 
                         if not result_ok:
-                            status = international_strings.PUBLIC_KEY_EXISTS.format(user_id)
+                            status = ('A key already exists for {email}. Delete the key and then try importing.').format(
+                                email=user_id)
                             break
 
                 # import the key if this is a new contact
@@ -350,7 +358,7 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
         
     result_ok = True
     fingerprint_ok = True
-    status = international_strings.IMPORTED_KEYS
+    status = _('Imported public key:')
     
     result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
     log.write('imported key: {}'.format(result_ok))
@@ -367,7 +375,7 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
             i += 1
     else:
         result_ok = False
-        status = international_strings.PUBLIC_KEY_INVALID
+        status = PUBLIC_KEY_INVALID
         
     log.write(status)
 

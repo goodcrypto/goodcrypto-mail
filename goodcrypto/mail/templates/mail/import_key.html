@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2014 GoodCrypto
+    Last modified: 2014-11-11
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="import, public key">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Import a public key for a user.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}Import Public Key{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h2>Import Public Key</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <form enctype="multipart/form-data" method="POST" action="/mail/import_key/" class="form-horizontal" role="form">{% csrf_token %}
+
+        {{ form.as_p }}
+
+      <div class="form-group">
+        <div class="col-sm-3">
+          <button type="submit"  name="action" value="clear" class="btn btn-primary btn-large">Clear</button>
+        </div>
+        <div class="col-sm-3">
+          <button type="submit"  name="action" value="import" class="btn btn-primary btn-large">Import</button>
+        </div>
+      </div>
+      
+      {% comment %}
+      <div class="form-group">
+        <label class="col-sm-3">Public key filename:</label>
+        <div class="col-sm-9">
+            {{ form.public_key_file }}<br/>
+            {% if form.public_key_file.errors %}
+                &nbsp;&nbsp;{{ form.public_key_file.errors }}
+            {% endif %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="col-sm-3">Encryption software:</label>
+        <div class="col-sm-9">
+            {{ form.encryption_software }}<br/>
+            {% if form.encryption_software.errors %}
+                &nbsp;&nbsp;{{ form.encryption_software.errors }}
+            {% endif %}
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-3">User name:</div>
+        <div class="col-sm-9">
+            {{ form.user_name }}<br/>
+            {% if form.user_name.errors %}
+                &nbsp;&nbsp;{{ form.user_name.errors }}
+            {% endif %}
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-3">Fingerprint:</div>
+        <div class="col-sm-9">
+            {{ form.fingerprint }}<br/>
+            {% if form.fingerprint.errors %}
+                &nbsp;&nbsp;{{ form.fingerprint.errors }}
+            {% endif %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="col-sm-3">{{ results_label }}</label>
+        <div class="col-sm-9">
+            <font color="red">{{ error_result }}</font>
+            {{ status }}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="col-sm-3"><font color="red">{{ fingerprint_label }}</font></label>
+        <div class="col-sm-9">
+            {{ fingerprint_result }}
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-3">
+          <button type="submit"  name="action" value="clear" class="btn btn-primary btn-large">Clear</button>
+        </div>
+        <div class="col-sm-3">
+          <button type="submit"  name="action" value="import" class="btn btn-primary btn-large">Import</button>
+        </div>
+      </div>
+      {% endcomment %}
+    </form>
+{% endblock contentpane %}
+

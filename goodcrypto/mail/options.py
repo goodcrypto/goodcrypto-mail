@@ -1,11 +1,13 @@
 '''
     Manage GoodCrypto Mail's options.
     
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-10-13
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-01-10
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+from traceback import format_exc
+
 
 def get_mail_server_address():
     '''
@@ -35,7 +37,7 @@ def set_mail_server_address(new_mail_server_address):
 
     record = get_options()
     record.mail_server_address = new_mail_server_address
-    record.save()
+    save_options(record)
 
 
 def get_goodcrypto_listen_port():
@@ -65,7 +67,7 @@ def set_goodcrypto_listen_port(new_goodcrypto_listen_port):
 
     record = get_options()
     record.goodcrypto_listen_port = new_goodcrypto_listen_port
-    record.save()
+    save_options(record)
 
 
 def get_mta_listen_port():
@@ -95,37 +97,7 @@ def set_mta_listen_port(new_mta_listen_port):
 
     record = get_options()
     record.mta_listen_port = new_mta_listen_port
-    record.save()
-
-
-def get_validation_code():
-    ''' 
-        Get the validation code or None if there isn't one.
-        
-        >>> current_code = get_validation_code()
-        >>> set_validation_code('test code')
-        >>> get_validation_code()
-        u'test code'
-        >>> set_validation_code(current_code)
-    '''
-
-    return get_options().validation_code
-
-
-def set_validation_code(new_code):
-    ''' 
-        Set a new validation code.
-        
-        >>> current_code = get_validation_code()
-        >>> set_validation_code('test code')
-        >>> get_validation_code()
-        u'test code'
-        >>> set_validation_code(current_code)
-    '''
-
-    record = get_options()
-    record.validation_code = new_code
-    record.save()
+    save_options(record)
 
 
 def auto_exchange_keys():
@@ -158,7 +130,7 @@ def set_auto_exchange_keys(auto):
 
     record = get_options()
     record.auto_exchange = auto
-    record.save()
+    save_options(record)
 
 def create_private_keys():
     '''
@@ -190,43 +162,7 @@ def set_create_private_keys(auto):
 
     record = get_options()
     record.create_private_keys = auto
-    record.save()
-
-def self_signed_certs_ok():
-    '''
-       Get whether to accept self signed certs.
-  
-       >>> current_setting = self_signed_certs_ok()
-       >>> set_self_signed_certs_ok(True)
-       >>> self_signed_certs_ok()
-       True
-       >>> set_self_signed_certs_ok(False)
-       >>> self_signed_certs_ok()
-       False
-       >>> set_self_signed_certs_ok(current_setting)
-    '''
-
-    return get_options().accept_self_signed_certs
-
-
-def set_self_signed_certs_ok(ok):
-    '''
-       Set the user's preference to accept self signed certs.
-    
-       >>> current_setting = self_signed_certs_ok()
-       >>> set_self_signed_certs_ok(True)
-       >>> self_signed_certs_ok()
-       True
-       >>> set_self_signed_certs_ok(False)
-       >>> self_signed_certs_ok()
-       False
-       >>> set_self_signed_certs_ok(current_setting)
-    '''
-
-    record = get_options()
-    record.accept_self_signed_certs = ok
-    record.save()
-
+    save_options(record)
 
 def get_domain():
     '''
@@ -256,37 +192,8 @@ def set_domain(new_domain):
 
     record = get_options()
     record.domain = new_domain
-    record.save()
+    save_options(record)
 
-
-def days_between_key_alerts():
-    '''
-       Get how frequently to send alerts about keys.
-  
-       >>> current_setting = days_between_key_alerts()
-       >>> set_days_between_key_alerts(10)
-       >>> days_between_key_alerts()
-       10
-       >>> set_days_between_key_alerts(current_setting)
-    '''
-
-    return get_options().days_between_key_alerts
-
-
-def set_days_between_key_alerts(days):
-    '''
-       Set the user's preference as to how frequently alerts are sent.
-    
-       >>> current_setting = days_between_key_alerts()
-       >>> set_days_between_key_alerts(5)
-       >>> days_between_key_alerts()
-       5
-       >>> set_days_between_key_alerts(current_setting)
-    '''
-
-    record = get_options()
-    record.days_between_key_alerts = days
-    record.save()
 
 def clear_sign_email():
     '''
@@ -318,7 +225,7 @@ def set_clear_sign_email(sign):
 
     record = get_options()
     record.clear_sign = sign
-    record.save()
+    save_options(record)
 
 def filter_html():
     '''
@@ -334,7 +241,7 @@ def filter_html():
     return get_options().filter_html
 
 
-def set_filter_html(filter):
+def set_filter_html(preference):
     '''
        Set the user's preference to filter html in inbound email messages.
     
@@ -349,8 +256,8 @@ def set_filter_html(filter):
     '''
 
     record = get_options()
-    record.filter_html = filter
-    record.save()
+    record.filter_html = preference
+    save_options(record)
 
 def max_message_length():
     '''
@@ -379,97 +286,7 @@ def set_max_message_length(max_length):
 
     record = get_options()
     record.max_message_length = max_length
-    record.save()
-
-def use_encrypted_content_type():
-    '''
-       Get whether to encrypt the entire message instead of just the body.
-  
-       >>> current_setting = use_encrypted_content_type()
-       >>> set_use_encrypted_content_type(True)
-       >>> use_encrypted_content_type()
-       True
-       >>> set_use_encrypted_content_type(current_setting)
-    '''
-
-    return get_options().use_encrypted_content_type
-
-
-def set_use_encrypted_content_type(use):
-    '''
-       Set the user's preference to encrypt the entire message instead of just the body.
-    
-       >>> current_setting = use_encrypted_content_type()
-       >>> set_use_encrypted_content_type(True)
-       >>> use_encrypted_content_type()
-       True
-       >>> set_use_encrypted_content_type(False)
-       >>> use_encrypted_content_type()
-       False
-       >>> set_use_encrypted_content_type(current_setting)
-    '''
-
-    record = get_options()
-    record.use_encrypted_content_type = use
-    record.save()
-
-def get_encrypted_subject():
-    '''
-       Get the encrypted subject when the entire message is encrypted.
-  
-       >>> current_setting = get_encrypted_subject()
-       >>> set_encrypted_subject('Test subject')
-       >>> get_encrypted_subject()
-       u'Test subject'
-       >>> set_encrypted_subject(current_setting)
-    '''
-
-    return get_options().encrypted_subject
-
-
-def set_encrypted_subject(subject):
-    '''
-       Set the user's preference for the subject of entire encrypted messages.
-    
-       >>> current_setting = get_encrypted_subject()
-       >>> set_encrypted_subject('Test subject')
-       >>> get_encrypted_subject()
-       u'Test subject'
-       >>> set_encrypted_subject(current_setting)
-    '''
-
-    record = get_options()
-    record.encrypted_subject = subject
-    record.save()
-
-def use_us_standards():
-    '''
-       Get whether to use US standards.
-  
-       >>> current_setting = use_us_standards()
-       >>> set_use_us_standards(True)
-       >>> use_us_standards()
-       True
-       >>> set_use_us_standards(current_setting)
-    '''
-
-    return get_options().use_us_standards
-
-
-def set_use_us_standards(use):
-    '''
-       Set the user's preference to use US standards.
-    
-       >>> current_setting = use_us_standards()
-       >>> set_use_us_standards(True)
-       >>> use_us_standards()
-       True
-       >>> set_use_us_standards(current_setting)
-    '''
-
-    record = get_options()
-    record.use_us_standards = use
-    record.save()
+    save_options(record)
 
 def debug_logs_enabled():
     '''
@@ -497,7 +314,197 @@ def set_debug_logs_enabled(enable):
 
     record = get_options()
     record.debugging_enabled = enable
-    record.save()
+    save_options(record)
+
+def login_to_view_fingerprints():
+    '''
+       Get whether to require logging in before viewing fingerprints.
+  
+       >>> current_setting = login_to_view_fingerprints()
+       >>> set_login_to_view_fingerprints(False)
+       >>> login_to_view_fingerprints()
+       False
+       >>> set_login_to_view_fingerprints(current_setting)
+    '''
+
+    try:
+        return get_options().login_to_view_fingerprints
+    except:
+        return False
+
+
+def set_login_to_view_fingerprints(require):
+    '''
+       Set the user's preference to require logging in before viewing fingerprints.
+    
+       >>> current_setting = login_to_view_fingerprints()
+       >>> set_login_to_view_fingerprints(True)
+       >>> login_to_view_fingerprints()
+       True
+       >>> set_login_to_view_fingerprints(False)
+       >>> login_to_view_fingerprints()
+       False
+       >>> set_login_to_view_fingerprints(current_setting)
+    '''
+
+    record = get_options()
+    try:
+        record.login_to_view_fingerprints = require
+        save_options(record)
+    except:
+        pass
+
+def login_to_export_keys():
+    '''
+       Get whether to require logging in before exporting keys.
+  
+       >>> current_setting = login_to_export_keys()
+       >>> set_login_to_export_keys(False)
+       >>> login_to_export_keys()
+       False
+       >>> set_login_to_export_keys(current_setting)
+    '''
+
+    try:
+        return get_options().login_to_export_keys
+    except:
+        return False
+
+
+def set_login_to_export_keys(require):
+    '''
+       Set the user's preference to require logging in before exporting keys.
+    
+       >>> current_setting = login_to_export_keys()
+       >>> set_login_to_export_keys(True)
+       >>> login_to_export_keys()
+       True
+       >>> set_login_to_export_keys(False)
+       >>> login_to_export_keys()
+       False
+       >>> set_login_to_export_keys(current_setting)
+    '''
+
+    record = get_options()
+    try:
+        record.login_to_export_keys = require
+        save_options(record)
+    except:
+        pass
+
+def require_key_verified():
+    '''
+       Get whether to require key verified before using a new key.
+  
+       >>> current_setting = require_key_verified()
+       >>> set_require_key_verified(False)
+       >>> require_key_verified()
+       False
+       >>> set_require_key_verified(current_setting)
+    '''
+
+    try:
+        return get_options().require_key_verified
+    except:
+        return False
+
+
+def set_require_key_verified(require):
+    '''
+       Set the user's preference to require key verified before using a new key.
+    
+       >>> current_setting = require_key_verified()
+       >>> set_require_key_verified(True)
+       >>> require_key_verified()
+       True
+       >>> set_require_key_verified(False)
+       >>> require_key_verified()
+       False
+       >>> set_require_key_verified(current_setting)
+    '''
+
+    record = get_options()
+    try:
+        record.require_key_verified = require
+        save_options(record)
+    except:
+        pass
+
+def add_keys_to_keyservers():
+    '''
+       Get whether to add generated keys to keyservers.
+  
+       >>> current_setting = add_keys_to_keyservers()
+       >>> set_add_keys_to_keyservers(False)
+       >>> add_keys_to_keyservers()
+       False
+       >>> set_add_keys_to_keyservers(current_setting)
+    '''
+
+    try:
+        return get_options().add_keys_to_keyservers
+    except:
+        return False
+
+
+def set_add_keys_to_keyservers(add):
+    '''
+       Set the user's preference to add generated keys to keyservers.
+    
+       >>> current_setting = add_keys_to_keyservers()
+       >>> set_add_keys_to_keyservers(True)
+       >>> add_keys_to_keyservers()
+       True
+       >>> set_add_keys_to_keyservers(False)
+       >>> add_keys_to_keyservers()
+       False
+       >>> set_add_keys_to_keyservers(current_setting)
+    '''
+
+    record = get_options()
+    try:
+        record.add_keys_to_keyservers = add
+        save_options(record)
+    except:
+        pass
+
+def verify_new_keys_with_keyservers():
+    '''
+       Get whether to verify new keys with keyservers.
+  
+       >>> current_setting = verify_new_keys_with_keyservers()
+       >>> set_verify_new_keys_with_keyservers(False)
+       >>> verify_new_keys_with_keyservers()
+       False
+       >>> set_verify_new_keys_with_keyservers(current_setting)
+    '''
+
+    try:
+        return get_options().verify_new_keys_with_keyservers
+    except:
+        return False
+
+
+def set_verify_new_keys_with_keyservers(verify):
+    '''
+       Set the user's preference to verify new keys with keyservers.
+    
+       >>> current_setting = verify_new_keys_with_keyservers()
+       >>> set_verify_new_keys_with_keyservers(True)
+       >>> verify_new_keys_with_keyservers()
+       True
+       >>> set_verify_new_keys_with_keyservers(False)
+       >>> verify_new_keys_with_keyservers()
+       False
+       >>> set_verify_new_keys_with_keyservers(current_setting)
+    '''
+
+    record = get_options()
+    try:
+        record.verify_new_keys_with_keyservers = verify
+        save_options(record)
+    except:
+        pass
 
 def get_options():
     '''
@@ -525,5 +532,20 @@ def get_options():
 
     return record
     
+
+def save_options(record):
+    '''
+        Save the mail options.
+        
+        >>> save_options(get_options())
+    '''
+    try:
+        record.save()
+    except:
+        from syr.log import get_log
+        
+        log = get_log()
+        log(format_exc())
+        
 
 

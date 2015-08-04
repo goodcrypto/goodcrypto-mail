@@ -1,0 +1,11 @@
+[
+  {
+    "model": "mail.EncryptionSoftware",
+    "pk": 1,
+    "fields": {
+      "name": "GPG",
+      "active": 1,
+      "classname": "goodcrypto.oce.gpg_plugin.GPGPlugin"
+    }
+  }
+]

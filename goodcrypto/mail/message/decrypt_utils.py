@@ -1,16 +1,17 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-19
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from traceback import format_exc
+from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail import crypto_software, international_strings
+from goodcrypto.mail import crypto_software
 from goodcrypto.mail.contacts import is_key_ok
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.options import get_validation_code, set_validation_code
+from goodcrypto.mail.options import require_key_verified
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
@@ -19,6 +20,8 @@ from syr.timestamp import Timestamp
 DEBUGGING = True
 USE_UTC = True
 DEFAULT_CRYPTO = CryptoFactory.DEFAULT_ENCRYPTION_NAME
+DECRYPTED_MESSAGE_TAG = '{}{}'.format(_('GoodCrypto: '), _('received this message securely'))
+
 
 _log = None
 
@@ -36,7 +39,7 @@ def add_tag_to_message(crypto_message):
         ...    crypto_message.set_crypted(True)
         ...    add_tag_to_message(crypto_message)
         ...    final_message_string = crypto_message.get_email_message().to_string()
-        ...    final_message_string.strip().find('received this message securely, but') >= 0
+        ...    final_message_string.strip().find('received this message securely\\n\\nThere still appears to be an extra protective layer.') >= 0
         ...    final_message_string.strip().find('<div><hr>') >= 0
         True
         True
@@ -52,6 +55,7 @@ def add_tag_to_message(crypto_message):
         log_message('Tags added to message: {}'.format(tags_added))
         if tags_added:
             log_message(tags)
+            if DEBUGGING: log_message(crypto_message.get_email_message().to_string())
 
     return filtered
 
@@ -65,20 +69,12 @@ def get_tags(crypto_message):
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    crypto_message.set_crypted(True)
-        ...    original_validation_code = get_validation_code()
-        ...    set_validation_code(None)
         ...    tags, filtered = get_tags(crypto_message)
         ...    tags.find('received this message securely') >= 0
-        ...    tags.find('Validation: magic code') >= 0
         ...    filtered
-        ...    set_validation_code(original_validation_code)
         True
-        False
         True
     '''
-
-    DECRYPTED_MESSAGE_TAG = '{}{}'.format(
-       international_strings.GOODCRYPTO_PREFIX, international_strings.SECURE_MESSAGE_TAG)
 
     tags = None
     filtered = False
@@ -88,12 +84,10 @@ def get_tags(crypto_message):
             log_message("crypted: {}".format(crypto_message.is_crypted()))
             analyzer = OpenPGPAnalyzer()
             content = crypto_message.get_email_message().get_content()
+            crypto_message.add_prefix_to_tag_once(DECRYPTED_MESSAGE_TAG)
             if analyzer.is_encrypted(content):
-                crypto_message.add_prefix_to_tag('{}, {}'.format(
-                    DECRYPTED_MESSAGE_TAG, international_strings.STILL_ENCRYPTED_MESSAGE_TAG))
+                crypto_message.add_tag_once(_('There still appears to be an extra protective layer.'))
                 if not DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
-            else:
-                crypto_message.add_prefix_to_tag('{}.'.format(DECRYPTED_MESSAGE_TAG))
 
         #  if we have something to say, it's still been filtered
         if crypto_message.get_tag() != None and not crypto_message.is_filtered():
@@ -102,16 +96,6 @@ def get_tags(crypto_message):
         if DEBUGGING:
             log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
         
-        #  if it's filtered, add the validation tag if appropriate
-        if crypto_message.is_filtered():
-            try:
-                validation_tag = get_validation_tag()
-                if validation_tag is not None and len(validation_tag) > 0:
-                    crypto_message.add_tag_once('{}{}'.format(
-                        international_strings.GOODCRYPTO_PREFIX, validation_tag))
-            except Exception:
-                log_message(format_exc())
-
         tags = crypto_message.get_tag()
         filtered = crypto_message.is_filtered()
                 
@@ -133,12 +117,14 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO)
         ...    crypto_message.get_tag()
-        'This message was signed by an unknown user.'
+        u'This message was clear signed by an unknown user.'
     '''
     
     def verify_signature(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
         ''' Verify the signature if message is signed. '''
     
+        key_verified = False
+        
         # if the message is signed, then verify the signature
         if len(signature_blocks) > 0:
             crypto = CryptoFactory.get_crypto(encryption_name, crypto_software.get_classname(encryption_name))
@@ -146,80 +132,44 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
             for signature_block in signature_blocks:
                 if crypto.verify(signature_block, email):
                     # make sure that the key for the sender is ok; if it's not, a CryptoException is thrown
-                    is_key_ok(email, encryption_name)
+                    __, key_verified = is_key_ok(email, encryption_name)
                     log_message('{} signed message'.format(email))
                     log_message('{} {} key pinned'.format(email, encryption_name))
+                    log_message('{} {} key verified: {}'.format(email, encryption_name, key_verified))
                 else:
                     log_message('signature block\n{}'.format(signature_block))
                     signer = crypto.get_signer(signature_block)
                     if signer is None:
-                        error_message = international_strings.UNKNOWN_SIGNER
+                        error_message = _('This message was clear signed by an unknown user.')
                         log_message(error_message)
                         raise MessageException(error_message)
                     else:
-                        error_message = international_strings.WRONG_SIGNER.format(email, signer)
+                        error_message = _('This message was not clear signed by the sender {email}, but by {signer}.').format(
+                            email=email, signer=signer)
                         log_message(error_message)
                         raise CryptoException(error_message)
         else:
             log_message('message not signed')
+            
+        return key_verified
 
 
     # if the message is signed, then verify the signature
     signature_blocks = crypto_message.get_email_message().get_pgp_signature_blocks()
     if len(signature_blocks) > 0:
         try:
-            verify_signature(email, signature_blocks, encryption_name=encryption_name)
-            crypto_message.add_tag_once(international_strings.SIGNED_BY_TAG.format(email))
+            key_verified = verify_signature(email, signature_blocks, encryption_name=encryption_name)
+            if key_verified or not require_key_verified():
+                # Translator: Do not alter {email} simply move it wherever would be appropriate in the sentence.
+                crypto_message.add_tag_once(_('This message was clear signed by {email}.').format(email=email))
+            else:
+                crypto_message.add_tag_once(_('This message appears to be clear signed by {email}, but the key has not been verified.').format(email=email))
         except MessageException as message_exception:
             crypto_message.add_tag_once(message_exception.value)
     else:
         log_message('no signature block found in this part of message')
         if DEBUGGING:
             log_message('crypto message:\n{}'.format(crypto_message.get_email_message().to_string()))
-
-def get_validation_tag():
-    ''' 
-        If there is a validation code, create a tag with it and a timestamp.
-
-        The validation code should be known only to the local server.
-        If the code is exposed, the user should change it.
-
-        The timestamp helps detect tag spoofing. If the timestamp's
-        not reasonable, the tag may have been spoofed.
-
-        We plan to append both a message id hash and message timestamp, which
-        should uniquely identify a processed message.
-        Then an app can let users check for spoofed tags with a lookup.
-        Since the timestamp has millisecond resolution, a collision
-        will only happen if 2 messages with the same message id are
-        processed in the same millisecond. Unless messages are processed
-        in parallel, machines will have to speed up a lot for decryption to
-        happen that fast. This may not be true with dedicated crypto hardware.
-        
-        >>> original_validation_code = get_validation_code()
-        >>> set_validation_code('test validation')
-        >>> get_validation_tag().startswith('Validation: test validation')
-        True
-        >>> set_validation_code(original_validation_code)
-    '''
-
-    validated_tag = []
-    
-    validation_code = get_validation_code()
-    if validation_code != None and len(validation_code.strip()) > 0:
-        if validation_code.endswith("\n"):
-            validation_code = validation_code.strip()
-        validated_tag.append(international_strings.VALIDATION_TAG.format(validation_code))
-        validated_tag.append("            at ")
-        if USE_UTC:
-            validated_tag.append(Timestamp.get_timestamp())
-            validated_tag.append(' ')
-            validated_tag.append(international_strings.UTC)
-        else:
-            validated_tag.append(Timestamp.to_local_timestamp())
-
-    return ''.join(validated_tag)
-
 
 def log_message(message):
     '''

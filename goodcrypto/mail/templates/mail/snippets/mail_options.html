@@ -1,0 +1,26 @@
+{% comment %}
+
+    Copyright 2014 GoodCrypto
+    Last modified: 2014-12-06
+
+{% endcomment %}
+{% load i18n custom %}
+
+    <form method="POST" action="/mail/"  name="mail_form">{% csrf_token %}
+    {% csrf_token %}
+       <div class="btn-group-vertical">
+            <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint of a contact.' %}">
+                <button type="button" class="btn btn-primary">{% trans 'View fingerprint' %}</button>
+            </a>
+            <a href="/mail/export_key/" title="{% trans 'View the public key for a user.' %}">
+                <button type="button" class="btn btn-primary">{% trans 'Export key' %}</button>
+            </a>
+            <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact.' %}">
+                <button type="button" class="btn btn-primary">{% trans 'Import key' %}</button>
+            </a>
+            <a href="/admin/mail/" title="{% trans 'Manage keys and options for encrypting/decrypting mail.' %}">
+                <button type="button" class="btn btn-primary">{% trans 'Manage keys & options' %}</button>
+            </a>
+        </div>
+    </form>
+

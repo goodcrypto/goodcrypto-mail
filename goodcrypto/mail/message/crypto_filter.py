@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-19
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -65,7 +65,7 @@ class CryptoFilter(object):
             if to_user == None:
                 self.log_crypto_exception(None, "No recipient addresses: {}".format(crypto_message.to_string()))
             else:
-                _, address = parse_address(to_user)
+                __, address = parse_address(to_user)
                 self.log_message("calling crypt_from_to with to_user={}".format(address))
                 is_filtered, is_crypted = self.crypt_from_to(crypto_message, from_user, address)
                     

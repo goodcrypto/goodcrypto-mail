@@ -9,8 +9,8 @@ import sh, sys
 from traceback import format_exc
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator 
+from django.utils.translation import ugettext as _
 
-from goodcrypto.mail import international_strings
 from goodcrypto.mail.message.pipe import Pipe
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.queue import queue_message
@@ -124,7 +124,7 @@ class Main(object):
                 email_validator(email)
             except ValidationError as validator_error:
                 self.log_message(str(validator_error))
-                raise ValidationError(international_strings.BAD_EMAIL_ADDRESS)
+                raise ValidationError(_('Bad email address'))
                 
             return email
 
@@ -261,7 +261,7 @@ def get_address(argv):
         a = argv.strip('{').strip('}')
         # make sure there aren't any system directives
         if a.find('@') > 0 and a.find('<') != 0 and a.find('!') != 0:
-            _, address = parse_address(a)
+            __, address = parse_address(a)
     except Exception:
         main = Main()
         main.log_message(format_exc())

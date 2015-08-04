@@ -1,15 +1,19 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-03
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-01-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
+from datetime import datetime
+from email.encoders import encode_base64, encode_quopri
 from email.message import Message
 from traceback import format_exc
+from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, international_strings, options
+from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, options
+from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
 from goodcrypto.mail.message import decrypt_utils, mime_constants, utils
 from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
@@ -17,7 +21,7 @@ from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.header_keys import HeaderKeys
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.notices import notify_user
-from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.mail.utils import email_in_domain, parse_address
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -101,11 +105,14 @@ class DecryptFilter(CryptoFilter):
                             self.crypto_message.get_email_message().to_string()))
                     else:
                         filtered, decrypted = self._decrypt_from(from_user, to_user)
+                        if self.DEBUGGING:
+                            self.log_message('final decrypted message:\n{}'.format(
+                                self.crypto_message.get_email_message().to_string()))
                 else:
                     decrypt_utils.check_signature(from_user, self.crypto_message)
 
                     tag = '{}{}'.format(
-                      international_strings.WARNING_PREFIX, international_strings.INSECURE_MESSAGE_TAG)
+                      WARNING_PREFIX, _('Anyone could have read this message.'))
                     if self.crypto_message.get_email_message().to_string().find(tag) < 0:
                         self.crypto_message.add_prefix_to_tag(tag)
                         filtered = decrypt_utils.add_tag_to_message(self.crypto_message)
@@ -137,13 +144,16 @@ class DecryptFilter(CryptoFilter):
                     self.log_message("encryption software: {}".format(encryption_software))
                     decrypted = self._decrypt_message(encryption_software, from_user, to_user)
                 elif email_in_domain(to_user) and options.create_private_keys():
-                    self.crypto_message.add_tag_once(international_strings.NO_KEY_TO_DECRYPT.format(to_user))
+                    self.crypto_message.add_tag_once(
+                      _('{email} does not have a matching key to decrypt the message').format(email=to_user))
                     self.crypto_message.create_private_key(encryption_software, to_user)
                     self.log_message("started to create a new {} key for {}".format(encryption_software, to_user))
                 else:
                     self.log_message("no encryption software for {}".format(to_user))
-                    self.crypto_message.add_tag_once(NO_CRYPTO_TO_DECRYPT.format(to_user))
-                    if contacts_passcodes.ok_to_send_notice(to_user, encryption_name, datetime.today()):
+                    self.crypto_message.add_tag_once(
+                        _('{email} does not use any known encryption').format(email=to_user))
+                    if contacts_passcodes.ok_to_send_notice(to_user, encryption_software, datetime.today()):
+                        subject = _('{} Unable to decrypt message'.format(SERIOUS_ERROR_PREFIX))
                         notify_user(to_user, subject, message)
 
                 if options.filter_html():
@@ -156,12 +166,12 @@ class DecryptFilter(CryptoFilter):
                 self.log_crypto_exception(MessageException(format_exc()))
                 self.log_message(format_exc())
                 try:
-                    self.crypto_message.add_tag(
-                        international_strings.SERIOUS_ERROR_PREFIX)
+                    self.crypto_message.add_tag(SERIOUS_ERROR_PREFIX)
                 except Exception:
                     self.log_message(format_exc())
                 
             filtered = decrypt_utils.add_tag_to_message(self.crypto_message)
+            self.log_message("finished adding tags to message")
 
         return filtered, decrypted
 
@@ -191,7 +201,7 @@ class DecryptFilter(CryptoFilter):
                     self.log_message(self.crypto_message.get_email_message().to_string())
                     ExceptionLog.log_message(log_msg)
                     
-                    tag = international_strings.UNABLE_TO_DECRYPT.format(software)
+                    tag = _('Unable to decrypt message with {encryption}').format(encryption=software)
                     self.crypto_message.add_tag_once(tag)
             except CryptoException as crypto_exception:
                 raise CryptoException(crypto_exception.value)
@@ -227,8 +237,8 @@ class DecryptFilter(CryptoFilter):
                     except CryptoException as crypto_exception:
                         raise CryptoException(crypto_exception.value)
                     except Exception:
-                        msg = 'Could not decrypt with {}.'.format(encryption_name) 
-                        if self.DEBUGGING: self.log_message(msg)
+                        msg = 'could not decrypt with {}.'.format(encryption_name) 
+                        self.log_message(msg)
                         self.log_message(format_exc())
                 else:
                     self.log_message("message already decrypted, so did not try {}".format(encryption_name))
@@ -250,28 +260,30 @@ class DecryptFilter(CryptoFilter):
         
         passcode = contacts_passcodes.get_passcode(to_user, encryption_name)
         if passcode == None or len(passcode) <= 0:
-            tag = international_strings.NO_PRIVATE_KEY.format(to_user, encryption_name)
+            tag = '{email} does not have a private {encryption} key.'.format(
+               email=to_user, encryption=encryption_name)
             self.log_message(tag)
             self.crypto_message.add_tag_once(tag)
         else:
             # make sure that the key for the recipient is ok; if it's not, a CryptoException is thrown
-            contacts.is_key_ok(to_user, encryption_name)
+            __, verified = contacts.is_key_ok(to_user, encryption_name)
             self.log_message('{} {} key pinned'.format(to_user, encryption_name))
+            self.log_message('{} {} key verified: {}'.format(to_user, encryption_name, verified))
 
             crypto = CryptoFactory.get_crypto(encryption_name, crypto_software.get_classname(encryption_name))
 
-            # try to verify signature in case it was signed after it was encrypted
+            # try to verify signature in case it was clear signed after it was encrypted
             decrypt_utils.check_signature(
                from_user, self.crypto_message, encryption_name=crypto.get_name(), crypto=crypto)
 
             self.log_message('trying to decrypt using {} private {} key.'.format(to_user, encryption_name))
             if utils.is_open_pgp_mime(self.crypto_message.get_email_message().get_message()):
-                decrypted = self._decrypt_open_pgp_mime(crypto, passcode)
+                decrypted = self._decrypt_open_pgp_mime(from_user, crypto, passcode)
             else:
-                decrypted = self._decrypt_original_pgp(crypto, passcode)
+                decrypted = self._decrypt_inline_pgp(from_user, crypto, passcode)
             self.log_message('decrypted using {} private {} key: {}'.format(to_user, encryption_name, decrypted))
                 
-            # try to verify signature in case it was signed before it was encrypted
+            # try to verify signature in case it was clear signed before it was encrypted
             if decrypted:
                 decrypt_utils.check_signature(
                    from_user, self.crypto_message, encryption_name=crypto.get_name(), crypto=crypto)
@@ -283,7 +295,7 @@ class DecryptFilter(CryptoFilter):
         return decrypted
 
 
-    def _decrypt_open_pgp_mime(self, crypto, passcode):
+    def _decrypt_open_pgp_mime(self, from_user, crypto, passcode):
         ''' 
             Decrypt an open PGP MIME message (internal use only).
         '''
@@ -303,7 +315,7 @@ class DecryptFilter(CryptoFilter):
                 encrypted_part = encrypted_part.get_payload()
             if DecryptFilter.DEBUGGING:
                 self.log_message("encrypted_part\n{}".format(encrypted_part))
-            plaintext = self._decrypt(encrypted_part, crypto, passcode)
+            plaintext = self._decrypt(from_user, encrypted_part, crypto, passcode)
         except CryptoException as crypto_exception:
             raise CryptoException(crypto_exception.value)
         except Exception:
@@ -321,14 +333,33 @@ class DecryptFilter(CryptoFilter):
         return decrypted
 
 
-    def _decrypt_original_pgp(self, crypto, passcode):
+    def _decrypt_inline_pgp(self, from_user, crypto, passcode):
         ''' 
-            Decrypt an original open PGP message (internal use only).
+            Decrypt an inline PGP message (internal use only).
         '''
+
+        def adjust_attachment_name(part):
+            '''Adjust the filename for the attachment.'''
+
+            try:
+                filename = part.get_filename()
+                if filename and filename.endswith('.pgp'):
+                    self.log_message('original attachment filename: {}'.format(filename))
+                    end = len(filename) - len('.pgp')
+                    part.replace_header(
+                      mime_constants.CONTENT_DISPOSITION_KEYWORD, 
+                      'attachment; filename="{}"'.format(filename[:end]))
+                    filename = part.__getitem__(mime_constants.CONTENT_DISPOSITION_KEYWORD)
+                    self.log_message('new attachment filename: {}'.format(filename))
+                else:
+                    self.log_message('attachment filename: {}'.format(filename))
+            except:
+                self.log_message(format_exc())
+
 
         decrypted = False
         
-        self.log_message("message is in original PGP format")
+        self.log_message("message is inline PGP format")
         message = self.crypto_message.get_email_message().get_message()
         self.log_message("message content type is {}".format(message.get_content_type()))
         
@@ -336,57 +367,115 @@ class DecryptFilter(CryptoFilter):
             for part in message.get_payload():
                 content_type = part.get_content_type()
                 ciphertext = part.get_payload(decode=True)
-                
-                #  ASCII armored plaintext looks just like armored ciphertext,
-                #  so check that we actually have encrypted data
-                open_pgp_analyzer = OpenPGPAnalyzer()
-                if (not self.USE_ANALYZER or 
-                   open_pgp_analyzer.is_encrypted(ciphertext, passphrase=passcode, crypto=crypto)):
-
-                    plaintext = self._decrypt(ciphertext, crypto, passcode)
-                    if plaintext is not None and plaintext != ciphertext:
-                        decrypted = True
-                        part.set_payload(plaintext)
+                plaintext = self._decrypt(from_user, ciphertext, crypto, passcode)
+                if plaintext is not None and plaintext != ciphertext:
+                    decrypted = True
+                    
+                    charset = part.get_charset()
+                    self.log_message("message part charset is {}".format(charset))
+                    part.set_payload(plaintext, charset=charset)
+                    if part.has_key(mime_constants.CONTENT_DISPOSITION_KEYWORD):
+                        adjust_attachment_name(part)
+                    
+                    encoding = part.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+                    if encoding == mime_constants.QUOTED_PRINTABLE_ENCODING:
+                        encode_quopri(part)
+                        self.log_message("{} encoded message part".format(encoding))
+                    elif encoding == mime_constants.BASE64_ENCODING:
+                        encode_base64(part)
+                        self.log_message("{} encoded message part".format(encoding))
         else:
             ciphertext = self.crypto_message.get_email_message().get_content()
-            plaintext = self._decrypt(ciphertext, crypto, passcode)
+            plaintext = self._decrypt(from_user, ciphertext, crypto, passcode)
 
             if plaintext is None or ciphertext is None or plaintext == ciphertext:
                 decrypted = False
                 self.log_message("unable to decrypt {} message".format(message.get_content_type()))
             else:
-                charset, _ = utils.get_charset(message)
+                encoding = self.crypto_message.get_email_message().get_message().__getitem__(
+                    mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+                if encoding == mime_constants.QUOTED_PRINTABLE_ENCODING:
+                    plaintext = encode_quopri(plaintext)
+                elif encoding == mime_constants.BASE64_ENCODING:
+                    plaintext = encode_base64(plaintext)
+                charset, __ = utils.get_charset(message)
                 self.crypto_message.get_email_message().set_text(plaintext, charset=charset)
                 decrypted = True
         
         return decrypted
 
 
-    def _decrypt(self, data, crypto, passcode):
+    def _decrypt(self, from_user, data, crypto, passcode):
         ''' 
             Decrypt the data from a message (internal use only).
         '''
 
-        decrypted_data = None
+        def verify_signature(signed_by):
+            ''' Verify the message was signed by the sender. '''
 
-        if crypto is None:
+            tag = None
+            
+            if signed_by is None:
+                tag = '{}{}'.format(
+                    decrypt_utils.DECRYPTED_MESSAGE_TAG, _(', but it was not signed by anyone.'))
+            else:
+                __, from_user_addr = parse_address(from_user)
+                __, signed_by_addr = parse_address(signed_by)
+                self.log_message("message encrypted and signed by {}".format(signed_by_addr))
+
+                if from_user_addr == signed_by_addr:
+                    # assume the key is ok unless it's required to be verified before we use it
+                    key_ok = not options.require_key_verified()
+                    if not key_ok:
+                        __, key_ok = contacts.get_fingerprint(signed_by_addr, crypto.get_name())
+
+                    if key_ok:
+                        tag = '{}{}'.format(
+                          decrypt_utils.DECRYPTED_MESSAGE_TAG, 
+                          _(' and it was signed by the sender, {email}.').format(email=signed_by_addr))
+                    else:
+                        tag = '{}{}'.format(
+                          decrypt_utils.DECRYPTED_MESSAGE_TAG, 
+                          _(' and it appears to be signed by the sender, {email}, but the key has not been verified.').format(
+                              email=signed_by_addr))
+                else:
+                    tag = '{}{}'.format(
+                      decrypt_utils.DECRYPTED_MESSAGE_TAG, 
+                      _(', but it was signed by {signer}, not by the sender, {sender}.').format(
+                          signer=signed_by_addr, sender=from_user_addr))
+
+            if tag is not None:
+                self.crypto_message.add_prefix_to_tag_once(tag)
+                self.log_message('tag added: {}'.format(tag))
+
+
+        decrypted_data = signed_by = None
+
+        if crypto is None or data is None:
             decrypted_data = None
             self.log_message("no crypto defined")
         else:
+            data_bytearray = bytearray(data)
+
             #  ASCII armored plaintext looks just like armored ciphertext,
             #  so check that we actually have encrypted data
-            open_pgp_analyzer = OpenPGPAnalyzer()
             if (not self.USE_ANALYZER or 
-                open_pgp_analyzer.is_encrypted(data, passphrase=passcode, crypto=crypto)):
-                decrypted_data, result_code = crypto.decrypt(data, passcode)
-                if decrypted_data == None or len(decrypted_data) <= 0:
+                OpenPGPAnalyzer().is_encrypted(data_bytearray, passphrase=passcode, crypto=crypto)):
+
+                decrypted_data, signed_by, result_code = crypto.decrypt(data_bytearray, passcode)
+                if (decrypted_data == None or 
+                    (isinstance(decrypted_data, str) and len(decrypted_data) <= 0)):
                     decrypted_data = None
                     self.log_message("unable to decrypt data")
-                    if self.DEBUGGING: self.log_message('data:\n{}'.format(data))
+                    if self.DEBUGGING: self.log_message('data bytearray:\n{}'.format(data_bytearray))
                 else:
-                    if result_code == 2:
-                        self.crypto_message.add_tag_once(international_strings.UNKNOWN_SIG)
-                    self.log_message('plaintext length: {}'.format(len(decrypted_data)))
+                    if result_code == 0:
+                        verify_signature(signed_by)
+                    elif result_code == 2:
+                        self.crypto_message.add_tag_once(
+                          _("Can't verify signature. Ask the sender to use GoodCrypto with auto-key exchange, or manually import their public key."))
+                    if isinstance(decrypted_data, str):
+                        self.log_message('plaintext length: {}'.format(len(decrypted_data)))
                     if self.DEBUGGING: self.log_message('plaintext:\n{}'.format(decrypted_data))
             else:
                 decrypted_data = None

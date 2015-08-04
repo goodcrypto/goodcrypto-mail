@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-03
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -145,7 +145,8 @@ class CryptoMessage(object):
             else:
                 pub_key = None
                 try:
-                    if contacts.is_key_ok(from_user, encryption_software):
+                    key_ok, __ = contacts.is_key_ok(from_user, encryption_software)
+                    if key_ok:
                         key_crypto = KeyFactory.get_crypto(encryption_software)
                         pub_key = key_crypto.export_public(from_user)
                     else:
@@ -457,6 +458,7 @@ class CryptoMessage(object):
             
             text_content = content
             text_content = '{}\n\n{}'.format(text_content, tags)
+            self.log_message('added tags to text content')
             
             return text_content
 
@@ -471,7 +473,8 @@ class CryptoMessage(object):
                 html_content = '{}<div><hr>\n{}</div>'.format(html_content, tags)
             else:
                 html_content = '{}<div><hr>\n{}</div>\n{}'.format(html_content[0:index], tags, html_content[:index])
-            
+            self.log_message('added tags to html content')
+
             return html_content
 
         tags_added = False
@@ -496,7 +499,7 @@ class CryptoMessage(object):
                     self.get_email_message().set_content(content, content_type, charset=charset)
                     tags_added = True
                 
-            elif content_type == mime_constants.MULTIPART_ALT_TYPE:
+            elif content_type.startswith(mime_constants.MULTIPART_PRIMARY_TYPE):
                 added_tags_to_text = False
                 added_tags_to_html = False
                 message = self.get_email_message().get_message()
@@ -515,31 +518,17 @@ class CryptoMessage(object):
                     # no need to keep getting payloads if we've added the tags
                     if added_tags_to_text and added_tags_to_html:
                         break;
-                tags_added = added_tags_to_text or added_tags_to_html
 
-            elif content_type.startswith(mime_constants.MULTIPART_PRIMARY_TYPE):
-                payloads = self.get_email_message().get_message().get_payload()
-                if isinstance(payloads, list):
+                tags_added = added_tags_to_text or added_tags_to_html
+                if not tags_added:
                     msg = MIMENonMultipart(mime_constants.TEXT_PRIMARY_TYPE, mime_constants.PLAIN_SUB_TYPE)
                     msg.set_payload(tags)
                     self.get_email_message().get_message().attach(msg)
-                    self.log_message('new attachment\n{}'.format(msg))
+                    self.log_message('attached new payload\n{}'.format(msg))
                     tags_added = True
 
-                elif isinstance(payloads, str):
-                    boundary = self.get_email_message().get_message().get_boundary()
-                    if boundary is None:
-                        payloads += '\n'
-                        payloads += tags
-                    else:
-                        payloads += '\n'
-                        payloads += tags
-                        payloads += '\n'
-                        payloads += boundary
-                    self.get_email_message().get_message().set_payload(payloads)
-                    self.log_message('added tags to poorly formatted multipart message')
-                    tags_added = True
-                
+                self.log_message('added tags to multipart message: {}'.format(tags_added))
+
             else:
                 self.log_message('unable to add tags to message with {} content type'.format(content_type))
 

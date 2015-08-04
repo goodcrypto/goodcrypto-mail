@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2014 GoodCrypto
+    Last modified: 2014-12-06
+    
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="privacy, encryption, email">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="GoodCrypto protect everyone in your group.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}Mail{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h3>Mail
+        {% if domain %}
+        for {{ domain }}
+        {% endif %}
+        </h3> 
+    </div>
+    
+    <div class="col-md-12">
+        <div class="row">&nbsp;</div>
+        {% include 'mail/snippets/mail_options.html' %}
+        
+        {% if mta %}
+            {% if mta == '127.0.0.1' or mta == 'localhost' %}
+                <div class="row">&nbsp;</div>
+                <div class="row">
+                    Warning: Your MTA configured for the local machine ({{ mta }}). If this isn't correct,
+                    then <a href="/admin/mail/">change the Options</a>.
+                </div>
+            {% endif %}
+        {% endif %}
+
+    </div>
+{% endblock contentpane %}
+

@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-13
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,9 +17,9 @@ from email.mime.text import MIMEText
 from email.parser import Parser
 from StringIO import StringIO
 from traceback import format_exc
+from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.international_strings import REMOVED_BAD_HEADER_LINES
 from goodcrypto.mail.message import constants, mime_constants
 from goodcrypto.mail.message.validator import Validator
 from goodcrypto.mail.message.message_exception import MessageException
@@ -71,14 +71,10 @@ class EmailMessage(object):
                     self.log_message('about to parse a message from a file')
                     self._message = self.parser.parse(message_or_file)
                     self.log_message('parsed message')
-                    if self.DEBUGGING:
-                        self.log_message('{}'.format(self.to_string()))
                 else:
                     self.log_message('about to parse a message from a string')
                     self._message = self.parser.parsestr(message_or_file)
                     self.log_message('parsed message')
-                    if self.DEBUGGING:
-                        self.log_message('{}'.format(self.to_string()))
                 
                 if not self.validate_message():
                     self._create_good_message_from_bad(message_or_file)
@@ -270,7 +266,7 @@ class EmailMessage(object):
                     content_type = part.get_content_type()
                     if content_type == mime_constants.TEXT_PLAIN_TYPE:
                         text = part.get_payload(decode=True)
-                        _, self._last_charset = get_charset(part, self._last_charset)
+                        __, self._last_charset = get_charset(part, self._last_charset)
                         result_ok = True
                     else:
                         self.log_message("body part type is " + content_type)
@@ -278,7 +274,7 @@ class EmailMessage(object):
             else:
                 text = message.get_payload(decode=True)
                 self.log_message("content is a String")
-                _, self._last_charset = get_charset(message, self._last_charset)
+                __, self._last_charset = get_charset(message, self._last_charset)
 
         return text
 
@@ -320,7 +316,7 @@ class EmailMessage(object):
                 part_index += 1
 
             if not text_set:
-                charset, _ = get_charset(self._message, self._last_charset)
+                charset, __ = get_charset(self._message, self._last_charset)
                 new_part = MIMEText(text, mime_constants.PLAIN_SUB_TYPE, charset)
                 message.attach(new_part)
                 text_set = True
@@ -362,7 +358,8 @@ class EmailMessage(object):
                 current_content_type = ''
 
             # only use the encoding if it's not a multipart message
-            if encoding == 'quoted-printable' or encoding == 'base64':
+            if (encoding == mime_constants.QUOTED_PRINTABLE_ENCODING or 
+                encoding == mime_constants.BASE64_ENCODING):
                 current_content_type = self.get_message().get_content_type()
                 if (current_content_type is not None and 
                     current_content_type.lower().find(mime_constants.MULTIPART_PRIMARY_TYPE) < 0):
@@ -458,7 +455,7 @@ class EmailMessage(object):
                     self.get_message().attach(part)
 
                 else:
-                    primary, _, secondary = content_type.partition(mime_constants.PRIMARY_TYPE_DELIMITER)
+                    primary, __, secondary = content_type.partition(mime_constants.PRIMARY_TYPE_DELIMITER)
                     part = MIMEBase(primary, secondary)
                     part.set_payload(payload)
                     self.get_message().attach(part)
@@ -475,10 +472,29 @@ class EmailMessage(object):
         '''
 
         is_pgp = is_open_pgp_mime(self.get_message())
-        if not is_pgp:
+        if is_pgp:
+            self.log_message('message uses open pgp mime')
+        else:
             content = self.get_content()
             if isinstance(content, str):
-                is_pgp = (self.contains_pgp_message_delimters(content))
+                is_pgp = self.contains_pgp_message_delimters(content)
+                self.log_message('message uses in line pgp: {}'.format(is_pgp))
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, Message):
+                        part_content = part.get_payload()
+                    else:
+                        part_content = part
+                        
+                    if isinstance(part_content, str):
+                        is_pgp = self.contains_pgp_message_delimters(part_content)
+                        if is_pgp:
+                            self.log_message('part of message uses in line pgp: {}'.format(is_pgp))
+                            break
+                    else:
+                        self.log_message('part of content type is: {}'.format(repr(part_content)))
+            else:
+                self.log_message('content type is: {}'.format(type(content)))
 
         return is_pgp
 
@@ -725,7 +741,7 @@ class EmailMessage(object):
         try:
             msg = self._message
             if charset is None:
-                charset, _ = get_charset(msg, self._last_charset)
+                charset, __ = get_charset(msg, self._last_charset)
 
             #  convert the message
             try:
@@ -852,7 +868,7 @@ class EmailMessage(object):
         if line is None:
             name = value = last_name = None
         else:
-            name, _, value = line.partition(':')
+            name, __, value = line.partition(':')
             if name is not None:
                 name = name.strip()
             
@@ -976,7 +992,7 @@ class EmailMessage(object):
 
         try:
             body_text = ''
-            charset, _ = get_charset(self._message, self._last_charset)
+            charset, __ = get_charset(self._message, self._last_charset)
             for line in body:
                 body_text += line.encode(charset)
         except Exception as body_exception:
@@ -985,7 +1001,7 @@ class EmailMessage(object):
             body_text = ''.join(body)
 
         if len(self.bad_header_lines) > 0:
-            body_text += '\n\n{}\n'.format(REMOVED_BAD_HEADER_LINES)
+            body_text += '\n\n{}\n'.format(_('Removed bad header lines'))
             for bad_header_line in self.bad_header_lines:
                 body_text += '  {}\n'.format(bad_header_line)
 

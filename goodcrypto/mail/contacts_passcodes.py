@@ -30,7 +30,7 @@
     </pre>
 
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-11-29
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -40,7 +40,6 @@ from traceback import format_exc
 from goodcrypto.mail import contacts
 from goodcrypto.mail.crypto_software import get_key_classname
 from goodcrypto.mail.models import Contact, ContactsCrypto, EncryptionSoftware, ContactsPasscode
-from goodcrypto.mail.options import days_between_key_alerts
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.utils import parse_address
 from goodcrypto.utils.log_file import LogFile
@@ -97,7 +96,7 @@ def exists(email):
         False
     '''
 
-    _, address = parse_address(email)
+    __, address = parse_address(email)
     query_set = get_all_passcodes(address)
     found = query_set is not None and len(query_set) > 0
     log_message("{} private key exist: {}".format(address, found))
@@ -125,7 +124,7 @@ def get(email, encryption_name):
     contacts_passcode = None
 
     try:
-        _, address = parse_address(email)
+        __, address = parse_address(email)
         contacts_encryption = contacts.get_contacts_crypto(address, encryption_name)
         if contacts_encryption is None:
             log_message("{} does not have a {} encryption record".format(email, encryption_name))
@@ -155,7 +154,7 @@ def get_passcode(email, encryption_name):
     passcode = None
 
     try:
-        _, address = parse_address(email)
+        __, address = parse_address(email)
         contacts_passcode = get(address, encryption_name)
         if contacts_passcode:
             passcode = contacts_passcode.passcode
@@ -325,7 +324,7 @@ def get_all_passcodes(email):
         if email is None:
             log_message('missing key data to get passcodes')
         else:
-            _, address = parse_address(email)
+            __, address = parse_address(email)
             query_set = ContactsPasscode.objects.filter(contacts_encryption__contact__email=address)
             if query_set is None:
                 log_message("{} does not have any encryption program with passcode defined".format(email))
@@ -370,7 +369,7 @@ def ok_to_send_notice(email, encryption_name, new_last_notified=None):
             else:
                 ln = contacts_passcode.last_notified
                 last_notified = datetime(ln.year, ln.month, ln.day, ln.hour, ln.minute, ln.second)
-                if last_notified < now() - timedelta(days=days_between_key_alerts()):
+                if last_notified < now() - timedelta(days=1):
                     send_notice = True
                 else:
                     send_notice = False
@@ -403,7 +402,7 @@ def get_encryption_names(email):
     '''
 
     encryption_programs = []
-    _, address = parse_address(email)
+    __, address = parse_address(email)
     if address is not None and len(address) > 0:
         query_set = get_all_passcodes(address)
         if query_set is None:

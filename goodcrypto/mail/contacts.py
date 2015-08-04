@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-12-07
+    Last modified: 2015-01-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -33,13 +33,17 @@
 '''
 from traceback import format_exc
 from django.db.models.query import QuerySet
+from django.utils.translation import ugettext as _
 
-from goodcrypto.mail import crypto_software, international_strings
+from goodcrypto.mail import crypto_software
+from goodcrypto.mail.i18n_constants import PUBLIC_KEY_INVALID
 from goodcrypto.mail.models import Contact, ContactsCrypto
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import parse_address, strip_fingerprint
 from goodcrypto.utils.log_file import LogFile
+
+NO_FINGERPRINT_IN_DB = _('There is no {encryption} fingerprint in the database for {email}.')
 
 
 _log = None
@@ -115,7 +119,7 @@ def get(email):
 
     try:
         if email is not None:
-            _, address = parse_address(email)
+            __, address = parse_address(email)
             contact = Contact.objects.get(email=address)
     except Contact.DoesNotExist:
         contact = None
@@ -255,7 +259,7 @@ def get_contacts_crypto(email, encryption_name=None):
 
     query_results = None
     try:
-        _, address = parse_address(email)
+        __, address = parse_address(email)
         if email and len(address) > 0:
             if encryption_name is None:
                 query_results = ContactsCrypto.objects.filter(contact__email=address)
@@ -341,7 +345,7 @@ def get_fingerprint(email, encryption_name):
                 verified = contacts_crypto.verified
             log_message("{} {} unformatted fingerprint: {}".format(email, encryption_name, fingerprint))
             
-    log_message("{} {} fingerprint: {}".format(email, encryption_name, fingerprint))
+    log_message("{} {} fingerprint: {} verified: {}".format(email, encryption_name, fingerprint, verified))
 
     return fingerprint, verified
 
@@ -400,7 +404,8 @@ def is_key_ok(email, encryption_name):
         the key has expired, or the key's fingerprint does not match the fingerprint in the database.
 
         >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER_ADDR
-        >>> is_key_ok(EDWARD_LOCAL_USER_ADDR, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> ok, __ = is_key_ok(EDWARD_LOCAL_USER_ADDR, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> ok
         True
         
         # In honor of Georg Koppen, works on Tor Browser, Torbutton, and our build automation.
@@ -408,35 +413,37 @@ def is_key_ok(email, encryption_name):
         >>> is_key_ok(email, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         Traceback (most recent call last):
             ...
-        CryptoException: 'There is no GPG key for Georg <georg@goodcrypto.remote>.'
+        CryptoException: u'There is no GPG key for Georg <georg@goodcrypto.remote>.'
     '''
 
     # we use NO_FINGERPRINT_IN_DB a few times because we don't want to get too technical
 
-    key_ok = False
+    key_ok = verified = False
     encryption_software = crypto_software.get(encryption_name)
     if encryption_software is None:
         # this should never happen, but better be prepared
         log_message('no database entry for {}'.format(email))
-        raise CryptoException(international_strings.NO_FINGERPRINT_IN_DB.format(encryption_name, email))
+        raise CryptoException(NO_FINGERPRINT_IN_DB.format(encryption=encryption_name, email=email))
     else:
         key_crypto = KeyFactory.get_crypto(encryption_name, encryption_software.classname)
         if key_crypto is None:
             # this should never happen, but better to be prepared
             log_message('no plugin for {} with classname: {}'.format(
                 encryption_name, encryption_software.classname))
-            raise CryptoException(international_strings.NO_FINGERPRINT_IN_DB.format(encryption_name, email))
+            raise CryptoException(NO_FINGERPRINT_IN_DB.format(encryption=encryption_name, email=email))
         else:
             # see if the crypto key exists
             crypto_fingerprint, expiration = key_crypto.get_fingerprint(email)
             if crypto_fingerprint is None:
-                message = international_strings.NO_KEY_EXISTS.format(encryption_name, email)
+                message = _('There is no {encryption} key for {email}.').format(
+                    encryption=encryption_name, email=email)
                 log_message(message)
                 raise CryptoException(message)
 
             # if the key has expired, then raise an error
             if expiration is not None and key_crypto.fingerprint_expired(expiration):
-                message = international_strings.KEY_EXPIRED_ON.format(encryption_name, email, expiration)
+                message = _('The {encryption} key for {email} expired on {date}.').format(
+                    encryption=encryption_name, email=email, date=expiration)
                 log_message(message)
                 raise CryptoException(message)
                 
@@ -451,7 +458,7 @@ def is_key_ok(email, encryption_name):
                     log_message('updated {} fingerprint for {}'.format(encryption_name, email))
 
             if database_fingerprint is None or len(database_fingerprint.strip()) <= 0:
-                error_message = international_strings.NO_FINGERPRINT_IN_DB.format(encryption_name, email)
+                error_message = NO_FINGERPRINT_IN_DB.format(encryption=encryption_name, email=email)
                 log_message(error_message)
                 raise CryptoException(error_message)
             else:
@@ -460,7 +467,8 @@ def is_key_ok(email, encryption_name):
                     strip_fingerprint(crypto_fingerprint).lower()):
                     key_ok = True
                 else:
-                    message = international_strings.MISMATCHED_FINGERPRINTS.format(encryption_name, email)
+                    message = _('The {encryption} fingerprint for {email} does not match the saved fingerprint.').format(
+                        encryption=encryption_name, email=email)
                     log_message('email address: {}'.format(email))
                     log_message('  database fingerprint: {}'.format(database_fingerprint.lower()))
                     log_message('  crypto fingerprint: {}'.format(crypto_fingerprint.lower()))
@@ -469,8 +477,8 @@ def is_key_ok(email, encryption_name):
 
             log_message('{} fingerprints agree and key has not expired for {}'.format(
               encryption_name, email))
-            
-    return key_ok
+
+    return key_ok, verified
 
 def get_public_key(email, encryption_software):
     ''' 
@@ -526,7 +534,7 @@ def import_public_key(email, encryption_software, public_key):
         # make sure the email address is in the key
         for (user_id, fingerprint) in id_fingerprint_pairs:
             user_name, email_address = parse_address(email)
-            _, key_address = parse_address(user_id)
+            __, key_address = parse_address(user_id)
             if email_address.lower() == key_address.lower():
                 result_ok = True
                 break
@@ -536,24 +544,26 @@ def import_public_key(email, encryption_software, public_key):
             for (user_id, fingerprint) in id_fingerprint_pairs:
                 result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
                 if result_ok:
-                    status += '{}\n'.format(international_strings.KEY_IMPORT_GOOD.format(fingerprint))
+                    status += '{}\n'.format(_('Imported key successfully. Fingerprint: {fingerprint}').format(
+                        fingerprint=fingerprint))
                 else:
-                    status += '{}\n'.format(international_strings.KEY_IMPORT_BAD)
+                    status += '{}\n'.format(_('Unable to import key'))
         else:
-            status = international_strings.WRONG_CONTACT_KEY.format(email)
+            status = _("Cannot import the key because it isn't for {email}").format(email=email)
 
         return result_ok, status
 
     if email is None or encryption_software is None or public_key is None:
         result_ok = False
-        status = international_strings.IMPORT_MISSING_DATA
+        status = _('Unable to import public key with missing data')
         log_message('email: {} / crypto: {} / public key: {}'.format(
            email, encryption_software, public_key))
     else:
         plugin = KeyFactory.get_crypto(encryption_software.name, encryption_software.classname)
         if plugin is None:
             result_ok = False
-            status = international_strings.CRYPTO_NOT_SUPPORTED.format(encryption_software.name)
+            status = _('GoodCrypto does not currently support {encryption}').format(
+                encryption=encryption_software.name)
             log_message('no plugin for {} with classname: {}'.format(
                 encryption_software.name, encryption_software.classname))
         else:
@@ -561,7 +571,7 @@ def import_public_key(email, encryption_software, public_key):
             log_message('user ids and fingerprints: {}'.format(id_fingerprint_pairs))
             if id_fingerprint_pairs is None:
                 result_ok = False
-                status = international_strings.PUBLIC_KEY_INVALID
+                status = PUBLIC_KEY_INVALID
             elif len(id_fingerprint_pairs) > 0:
                 result_ok, status = import_key(
                   email, encryption_software.name, public_key, id_fingerprint_pairs, plugin)
@@ -570,7 +580,7 @@ def import_public_key(email, encryption_software, public_key):
                     log_message('added contact for: {}'.format(contact))
             else:
                 result_ok = False
-                status = international_strings.PUBLIC_KEY_INVALID
+                status = PUBLIC_KEY_INVALID
 
         log_message("Imported public {} key for {} ok: {}".format(encryption_software, email, result_ok))
 
@@ -625,7 +635,7 @@ def get_encryption_names(email):
 
     encryption_names = []
 
-    _, address = parse_address(email)
+    __, address = parse_address(email)
     if address and len(address) > 0:
         query_results = get_contacts_crypto(address)
         if query_results:

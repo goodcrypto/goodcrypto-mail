@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2014 GoodCrypto
+    Last modified: 2014-08-26
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="fingerprint">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="View the fingerprint for a user.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}View Fingerprint{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h2>View Fingerprint</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <form method="POST" action="/mail/view_fingerprint/" class="form-horizontal" role="form">{% csrf_token %}
+      <div class="form-group">
+        <label class="col-sm-3">Email:</label>
+        <div class="col-sm-10">
+            {% if form.email.errors %}
+                {{ form.email.errors }}<br/>
+            {% endif %}
+            {{ form.email }}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="col-sm-3">Encryption software:</label>
+        <div class="col-sm-10">
+            {% if form.encryption_software.errors %}
+                {{ form.eencryption_software.errors }}<br/>
+            {% endif %}
+            {{ form.encryption_software }}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="col-sm-3">{{ fingerprint_label }}</label>
+        <div class="col-sm-10">
+            {{ fingerprint }} &nbsp;&nbsp;&nbsp; {{ verified }}
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-3">
+          <button type="submit"  name="action" class="btn btn-primary btn-large">View</button>
+        </div>
+      </div>
+    </form>
+{% endblock contentpane %}
+

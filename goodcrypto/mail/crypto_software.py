@@ -17,7 +17,7 @@
     </pre>
     
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-11-17
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -296,8 +296,8 @@ def get_key_classname(name):
     
     key_classname = get_classname(name)
     if key_classname is not None:
-        module_name, _, classname = key_classname.rpartition('.')
-        prefix, _, suffix = module_name.rpartition('.')
+        module_name, __, classname = key_classname.rpartition('.')
+        prefix, __, suffix = module_name.rpartition('.')
         key_classname = '{}.key.{}.{}'.format(prefix, suffix, classname)
             
     return key_classname

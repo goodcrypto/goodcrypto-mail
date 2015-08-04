@@ -3,13 +3,14 @@
     MIME constants.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-05-28
+    Last modified: 2014-12-24
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 
 CONTENT_TYPE_KEYWORD = "Content-Type"
 CONTENT_XFER_ENCODING_KEYWORD = "Content-Transfer-Encoding"
+CONTENT_DISPOSITION_KEYWORD = "Content-Disposition"
 
 RETURN_PATH_KEYWORD = 'Return-Path'
 DELIVERED_TO_KEYWORD = 'Delivered-To'
@@ -56,3 +57,7 @@ MIME_7BIT = '7BITMIME'
 MIME_8BIT = '8BITMIME'
 BITS_7 = '7bit'
 BITS_8 = '8bit'
+
+QUOTED_PRINTABLE_ENCODING = 'quoted-printable'
+BASE64_ENCODING = 'base64'
+

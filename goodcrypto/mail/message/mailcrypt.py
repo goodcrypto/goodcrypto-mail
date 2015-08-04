@@ -2,7 +2,7 @@
     Mail crypto.
     
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-17
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -35,8 +35,8 @@ def otp_filename(mailfrom, mailto):
         If there is no otp for email_addr, starts process to create one. '''
     
     # just use the email address part, the string with '@'
-    _, mailfrom = email.utils.parseaddr(mailfrom)
-    _, mailto = email.utils.parseaddr(mailto)
+    __, mailfrom = email.utils.parseaddr(mailfrom)
+    __, mailto = email.utils.parseaddr(mailto)
     
     users_dir = 'something unknown'
     user_dir = os.path.join(users_dir, mailfrom)

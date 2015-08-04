@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-19
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,8 +9,8 @@ import sh
 from smtplib import SMTP
 from traceback import format_exc
 from django.contrib.auth.models import User
+from django.utils.translation import ugettext as _
 
-from goodcrypto.mail import international_strings
 from goodcrypto.mail.message.crypto_message import CryptoMessage
 from goodcrypto.mail.message.decrypt_filter import DecryptFilter
 from goodcrypto.mail.message.email_message import EmailMessage
@@ -58,7 +58,8 @@ class Pipe(object):
                 else:
                     message = '{}\n\n===================\n{}'.format(
                       error_message, self.in_message)
-                    notify_user(self.sender, international_strings.BOUNCED_ENCRYPTED_SUBJECT, message)
+                    notify_user(self.sender, _('Undelivered Mail: Unable to encrypt message'), message)
+                    self.log_message('sent note to {} about error.'.format(self.sender))
             except:
                 self.log_message(format_exc())
 
@@ -73,7 +74,7 @@ class Pipe(object):
                 else:
                     message = '{}\n\n===================\n{}'.format(
                       error_message, self.in_message)
-                    notify_user(self.recipient, international_strings.BOUNCED_DECRYPTED_SUBJECT, message)
+                    notify_user(self.recipient, _('Error: Unable to decrypt message'), message)
             except:
                 self.log_message(format_exc())
 
@@ -247,6 +248,7 @@ class Pipe(object):
         ''' 
             Reject a message that had an unexpected error. 
             
+            >>> # This message will fail if testing on dev system
             >>> pipe = Pipe('root', 'root', 'bad message')
             >>> pipe.reject_message('Unknown message')
             u'support@goodcrypto.local'
@@ -277,13 +279,13 @@ class Pipe(object):
             
             if email_in_domain(self.sender):
                 to_address = self.sender
-                subject = international_strings.UNABLE_TO_SEND_MESSAGE
+                subject = _('Undelivered Mail: Unable to send message')
             elif email_in_domain(self.recipient):
                 to_address = self.recipient
-                subject = international_strings.UNABLE_TO_RECEIVE_MESSAGE
+                subject = _('Error: Unable to receive message')
             else:
                 to_address = get_sysadmin_email()
-                subject = international_strings.MESSAGE_REJECTED
+                subject = _('Message rejected.')
             
             notice = '{}'.format(error_message)
             if message is not None:

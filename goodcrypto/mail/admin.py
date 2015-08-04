@@ -2,20 +2,20 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-11-26
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from django.contrib import admin
 from django.utils.safestring import mark_safe
+from django.utils.translation import ugettext as _
 
 from goodcrypto.mail import forms, models
-from goodcrypto.mail.international_strings import CONTACTS_CRYPTO_INLINE_NAME, DETAILS_LABEL, ADVANCED_LABEL
 from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline, RequireOneFormSet
 
 # indent the 'Details' and 'Advanced' labels
-details_label = mark_safe(DETAILS_LABEL)
-advanced_label = mark_safe(ADVANCED_LABEL)
+details_label = mark_safe('<label>&nbsp;</label>{}'.format(_('Details')))
+advanced_label = mark_safe('<label>&nbsp;</label>{}'.format(_('Advanced')))
 
 
 
@@ -37,8 +37,8 @@ class ContactsCryptoInline(CustomStackedInline):
     model = models.ContactsCrypto
     formset = forms.ContactsCryptoInlineFormSet
     
-    verbose_name = CONTACTS_CRYPTO_INLINE_NAME
-    verbose_name_plural = CONTACTS_CRYPTO_INLINE_NAME
+    verbose_name = _('encryption software used by this contact')
+    verbose_name_plural = verbose_name
 
 class Contact(CustomModelAdmin):
     form = forms.ContactAdminForm
@@ -86,14 +86,13 @@ class Options(CustomModelAdmin):
                        'auto_exchange',
                        'create_private_keys',
                        'clear_sign',
+                       'require_key_verified',
                        'filter_html',
+                       'login_to_view_fingerprints',
+                       'login_to_export_keys',
+                       #'add_keys_to_keyservers',
+                       #'verify_new_keys_with_keyservers',
                        'max_message_length',
-                       #'validation_code',
-                       #'accept_self_signed_certs',
-                       #'days_between_key_alerts',
-                       #'use_encrypted_content_type',
-                       #'encrypted_subject',
-                       #'use_us_standards',
                        'debugging_enabled',
                       )
         }),

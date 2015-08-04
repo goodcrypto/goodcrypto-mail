@@ -3,7 +3,7 @@
     the encryption databases (i.e., keyrings).
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-22
+    Last modified: 2014-12-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -28,7 +28,7 @@ def set_fingerprint(email_address, crypto_name):
     set_log = LogFile(filename='goodcrypto.mail.sync_crypto_fingerprint.log')
     result_ok = False
     try:
-        _, email = parse_address(b64decode(email_address))
+        __, email = parse_address(b64decode(email_address))
         try:
             set_log.write_and_flush('starting to set_fingerprint for {}'.format(email))
             set_fingerprint_class = SetFingerprint(email, b64decode(crypto_name))
