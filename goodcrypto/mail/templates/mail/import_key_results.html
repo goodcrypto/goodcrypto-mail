@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-10
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="import, public key">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Results of import a public key for a user.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}{{ page_title }}{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h2>{{ page_title }}</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <div class="row">
+        {{ status }}
+    </div>
+
+    {% if warnings %}
+        <div class="row">&nbsp;</div>
+    
+        <div class="row">
+            <font color="red">{% trans 'Warning:' %}</font> {{ warnings }}
+        </div>
+    {% endif %}
+    
+    <div class="row">&nbsp;</div>
+    
+    <div class="row">
+        {% trans 'Fingerprint(s) from key:' %}
+    </div>
+    
+    {% for fingerprint in fingerprints %}
+        <div class="row">
+            <div class="form-group">
+                <div class=" col-sm-10 col-lg-10 ">
+                    {{ fingerprint }}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+{% endblock contentpane %}
+

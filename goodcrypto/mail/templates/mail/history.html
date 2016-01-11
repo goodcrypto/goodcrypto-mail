@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-02-23
+    
+{% endcomment %}
+{% load i18n custom %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static "admin/css/base.css" %}" />
+  <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}" />
+  <link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}" />
+{% endblock %}
+
+{% block contentpane %}
+
+    <div class="row">
+        <p>&nbsp;</p>
+        <h2>{{ headline }}</h2>
+    </div>
+
+    <div class="row">
+        {% if results %}
+            <form id="changelist-form" action="" method="post"{% csrf_token %}
+        
+                <div class="results">
+                <table class="table" id="result_list">
+                <thead>
+                    <tr>
+                        {% for header in result_headers %}
+                        <th scope="col" {{ header.class_attrib }}>
+                           <div class="text">
+                            {% if header.sortable %}
+                                <a href="{{ header.url_primary }}">{{ header.text|capfirst }}</a>
+                            {% else %}
+                                <span>{{ header.text|capfirst }}</span>
+                            {% endif %}
+                            </div>
+                           <div class="clear"></div>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                        <tr class="{% cycle 'row1' 'row2' %}">
+                            {% for item in result %}<td>{{ item }}</td>{% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+                </div>
+            </form>
+        {% elif error_message %}
+            <p>&nbsp;</p>
+            <h3 class="dropcap">
+            {{ error_message|safe }}
+            </h3>
+        {% else %}
+            <p>&nbsp;</p>
+            <h3 class="dropcap">
+            {% blocktrans %}Your GoodCrypto Server has not {{ status }} any messages for you, yet.{% endblocktrans %}
+            </h3>
+        {% endif %}
+    </div>
+
+{% endblock contentpane %}
+

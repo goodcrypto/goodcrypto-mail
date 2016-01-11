@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-02-22
+{% endcomment %}
+{% load i18n bootstrap custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="fingerprint">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Verify the fingerprint for a contact.">
+  {% endblock meta_description %}
+  
+  {% block titlevar %}{{ page_title }}{% endblock %}
+
+{% block contentpane %}
+
+    <div class="row">
+        <h2>{{ page_title }}</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <form method="POST" action="/mail/verify_fingerprint/" class="form-horizontal" role="form">{% csrf_token %}
+        <div class="row">
+            <div class="form-group">
+                <label class="control-label col-sm-2 col-lg-2 " for="fingerprint_label">{% trans 'Fingerprint' %}</label>
+                <div class=" col-sm-10 col-lg-10 ">
+                    {{ fingerprint }}
+                </div>
+            </div>
+        </div>
+    
+        <div class="row">
+            <div class="form-group">
+                <label class="control-label col-sm-2 col-lg-2 " for="verified_label">{% trans 'Verified' %}</label>
+                <div class=" col-sm-10 col-lg-10 ">
+                    {% if checked %}
+                        <input id="id_verified" name="verified" type="checkbox" checked="checked"/>
+                    {% else %}
+                        <input id="id_verified" name="verified" type="checkbox"/>
+                    {% endif %}
+                    <p class="help">{% trans 'Add a check mark if you checked the fingerprint with the user that the fingerprint is correct.' %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
+            <div class=" col-sm-10 col-lg-10 ">
+                <input class="btn btn-primary" type="submit" value="Update" name="submit"> <font color="red">{{ error_message }}</font>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <input id="id_email" name="email" type="hidden" value="{{ email }}"/>
+            <input id="id_encryption_name" name="encryption_name" type="hidden" value="{{ encryption_name }}"/>
+            <input id="id_fingerprint" name="fingerprint" type="hidden" value="{{ fingerprint }}"/>
+        </div>
+    </form>
+{% endblock contentpane %}
+

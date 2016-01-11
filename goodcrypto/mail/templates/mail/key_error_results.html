@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-10
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="public key">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Results from key processing.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}{{ page_title }}{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h2>{{ page_title }}</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <div class="row">
+        <p class="dropcap">
+        <font color="red">{% trans 'Error' %}:</font> {{ result }}
+        </p>
+    </div>
+{% endblock contentpane %}
+

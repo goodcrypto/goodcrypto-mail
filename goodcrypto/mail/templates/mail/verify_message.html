@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-02-08
+{% endcomment %}
+{% load i18n bootstrap custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="verify message">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Verify message processed by GoodCrypto server.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}{{ header }}{% endblock %}
+  
+{% block contentpane %}
+
+    <div class="row">
+        <h2>{{ header }}</h2> 
+    </div>
+    
+    <div class="row">&nbsp;</div>
+    
+    <form method="POST" action="/mail/{{ url }}/" class="form-horizontal" role="form">{% csrf_token %}
+        {{ form|bootstrap_horizontal }}
+        <div class="form-group">
+            <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
+            <div class=" col-sm-10 col-lg-10 ">
+                <input class="btn btn-primary" type="submit" value="Verify" name="submit"> <font color="red">{{ error_message }}</font>
+            </div>
+        </div>
+    </form>
+{% endblock contentpane %}
+
