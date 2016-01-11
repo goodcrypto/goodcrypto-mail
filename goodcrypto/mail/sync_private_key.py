@@ -2,26 +2,26 @@
     Sync the django database and 
     the encryption databases (i.e., keyrings).
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-18
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from base64 import b64decode, b64encode
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software
 from goodcrypto.mail.message.notices import notify_user
-from goodcrypto.mail.options import get_domain
+from goodcrypto.mail.options import get_domain, get_goodcrypto_server_url
 from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
-from goodcrypto.mail.utils import email_in_domain, gen_passcode, ok_to_modify_key
+from goodcrypto.mail.utils import email_in_domain, gen_passcode, ok_to_modify_key, create_user
 from goodcrypto.mail.utils.queues import remove_queue_semaphore
 from goodcrypto.oce import constants as oce_constants
 from goodcrypto.oce.key.constants import EXPIRES_IN, EXPIRATION_UNIT
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import parse_address
+from goodcrypto.utils import i18n
 from goodcrypto.utils.log_file import LogFile
 #from syr.log import get_log
 
@@ -162,10 +162,15 @@ class SyncDbKey(object):
         
         try:
             if self.result_ok:
+                # first, configure the database so the passcode is saved
                 self._config_database()
-            if self.result_ok:
-                self._config_keys()
-            if self.result_ok:
+                if self.contacts_passcode is not None:
+                    # then, create the public/private key pair
+                    self._config_key_pair()
+                # configure the user even if the key pair had trouble
+                self._create_user()
+                # and try to save the fingerprint in case 
+                # the key got configured later than expected
                 self._save_fingerprint()
         except Exception as exception:
             self.result_ok = False
@@ -237,13 +242,16 @@ class SyncDbKey(object):
                 self.contacts_passcode.passcode = get_passcode()
                 self.contacts_passcode.save()
                 self.log.write_and_flush('updated passcode in database for {}'.format(self.email))
+                
+        if self.contacts_passcode is None:
+            self.log.write_and_flush("unable to configure contacts' passcode")
 
-    def _config_keys(self):
+    def _config_key_pair(self):
         ''' 
             Configure the key pair for the user.
         '''
 
-        if ok_to_modify_key(self.crypto_name, self.key_plugin) and self.contacts_passcode is not None:
+        if ok_to_modify_key(self.crypto_name, self.key_plugin):
             self.log.write_and_flush('configuring {} for {}'.format(self.crypto_name, self.email))
             passcode = self.contacts_passcode.passcode
     
@@ -258,8 +266,8 @@ class SyncDbKey(object):
                     self.result_ok = False
                     self.log.write_and_flush("{}'s passphrase does not match {}'s key.".format(self.email, self.crypto_name))
 
-                    MISMATCHED_PASSPHRASES = _("{email}'s passphrase does not match {encryption}'s key.").format(
-                      email=self.email, encryption=self.crypto_name)
+                    MISMATCHED_PASSPHRASES = i18n("{email}'s passphrase does not match {encryption}'s key.".format(
+                      email=self.email, encryption=self.crypto_name))
                     notify_user(self.email, MISMATCHED_PASSPHRASES, MISMATCHED_PASSPHRASES)
                 else:
                     self.log.write_and_flush("{} {} passphrase is good.".format(self.email, self.crypto_name))
@@ -287,29 +295,81 @@ class SyncDbKey(object):
                 if self.result_ok:
                     self.new_key = True
                     self.log.write_and_flush('created {} key for {}'.format(self.crypto_name, self.email))
-                    notify_user(self.email, 
-                       _('Your {encryption} key is ready').format(encryption=self.crypto_name),
-                       _('Your public and private {encryption} key pair is ready. Any messages sent to others with keys in the database will be protected during transit.').format(
-                          encryption=self.crypto_name))
-                    self.log.write_and_flush('notified {}'.format(self.email))
+                    body = i18n("Anyone with PGP can now send you private mail. Other GoodCrypto users don't have to do anything. Other PGP user just need to get your key and import it.")
+                    url = get_goodcrypto_server_url()
+                    if url is not None and len(url) > 0:
+                        body += '\n\n'
+                        body += i18n(
+                          'You can export your public key and view its fingerprint at: {}/mail/'.format(url))
+                    else:
+                        body += '\n\n'
+                        body += i18n(
+                            "Learn more: https://goodcrypto.com/qna/knowledge-base/export-public-key")
+                    notify_user(self.email, i18n('GoodCrypto - You can now receive private mail'), body)
                 elif timed_out:
                     self.log.write_and_flush('timed out creating a private {} key for {}.'.format(
                         self.crypto_name, self.email))
+                    subject = i18n("Creating your private key timed out.")
                     notify_user(self.email, 
-                       _("Creating {encryption} keys timedout.").format(encryption=self.crypto_name),
-                       _("You might wait and then ask your sysadmin to see if the key was created. If it wasn't then, s/he can try to create it for you."))
+                       i18n("GoodCrypto - {}".format(subject)),
+                       i18n("Your GoodCrypto server is probably very buzy. You might wait a 5-10 minutes and then try sending a message again. If that doesn't work, then ask your sysadmin to create your key manually."))
                 else:
                     self.log.write_and_flush('unable to create a private {} key for {}.'.format(
                         self.crypto_name, self.email))
                     
-                    UNABLE_TO_CREATE_KEY = _('Unable to create {encryption} keys.').format(encryption=self.crypto_name)
-                    notify_user(self.email, UNABLE_TO_CREATE_KEY, UNABLE_TO_CREATE_KEY)
+                    subject = i18n('GoodCrypto - Error while creating a private key for you')
+                    body = '{}\n{}'.format(
+                        subject,
+                       i18n("Contact your sysadmin ask them to create it for you manually."))
+                    notify_user(self.email, subject, body)
         else:
             self.log.write_and_flush('not ok to create private {} key'.format(self.crypto_name))
             self.result_ok = True
-            
+        
+        # return the value for the tests
         return self.result_ok
+
+    def _create_user(self):
+        '''
+            Create a regular user so they can verify messages, fingerprints, etc.
+        '''
+
+        password = error_message = None
+        try:
+            password, error_message = create_user(self.email)
+            if password is None and error_message is None:
+                # user already exists so nothing to do
+                self.log.write_and_flush('{} already has an account'.format(self.email))
     
+            elif error_message is not None:
+                details = i18n('Ask your sysadmin to add a user for your email account manually.')
+                body = '{}\n{}'.format(error_message, details)
+                notify_user(self.email, error_message, body)
+                self.log.write_and_flush('notified {} about error: {}'.format(self.email, error_message))
+    
+            else:
+                subject = i18n('GoodCrypto - You can now check if a message was private')
+                line1 = i18n("GoodCrypto adds a tag to the bottom of all messages it decrypts for you.")
+                line2 = i18n("Of course, that tag could be spoofed (i.e., added by somone other than GoodCrypto) to make you think the message was exchanged privately when it wasn't.")
+                line3 = i18n("You can now login to your GoodCrypto Server to check if messages were exchanged privately.")
+                line4 = i18n('Use the following credentials:')
+                line5 = i18n('Email: {}'.format(self.email))
+                line6 = i18n('Password: {}'.format(password))
+                body = '{line1} {line2}\n\n{line3} {line4}\n   {line5}\n   {line6}\n'.format(
+                    line1=line1, line2=line2, line3=line3, line4=line4, line5=line5, line6=line6)
+
+                url = get_goodcrypto_server_url()
+                if url is not None and len(url.strip()) > 0:
+                    body += '   {}\n'.format(i18n('GoodCrypto Server: {}'.format(url)))
+                notify_user(self.email, subject, body)
+                self.log.write_and_flush('notified {} about new django account'.format(self.email))
+    
+            self.log.write_and_flush('error message {} passhrase ok: {}'.format(error_message, password is not None))
+        except:
+            self.log.write_and_flush(format_exc())
+
+        return password, error_message
+        
     def _save_fingerprint(self):
         '''
             Save the fingerprint in the database.
@@ -327,16 +387,13 @@ class SyncDbKey(object):
         
         if self.key_plugin is None:
             self.log.write_and_flush('no {} plugin defined for {}'.format(self.crypto_name, self.email))
+        elif self.contacts_passcode is None:
+            self.log.write_and_flush('no {} passcode record defined for {}'.format(self.crypto_name, self.email))
         else:
             fingerprint, __ = self.key_plugin.get_fingerprint(self.email)
             if fingerprint is None:
-                self.result_ok = False
                 self.log.write_and_flush('unable to get {} fingerprint for {}'.format(self.crypto_name, self.email))
-            elif self.contacts_passcode is None:
-                self.result_ok = False
-                self.log.write_and_flush('no {} passcode record defined for {}'.format(self.crypto_name, self.email))
             else:
-                self.result_ok = True
                 if (self.contacts_passcode.contacts_encryption.fingerprint is not None and
                     self.contacts_passcode.contacts_encryption.fingerprint != fingerprint):
                     self.log.write_and_flush('replaced old fingerprint')

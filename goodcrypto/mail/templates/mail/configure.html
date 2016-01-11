@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% comment %}
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-10-17
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-22
     
 {% endcomment %}
 {% load i18n %}
@@ -12,28 +12,29 @@
 {% block contentpane %}
 
     <h1 class="headline">
-        Configure your mail server to work with GoodCrypto
+        {% trans 'Configure your mail server to work with GoodCrypto' %}
     </h1>  
 
     <ol>
         <li>
-            <a href="https://goodcrypto.com/qna/knowledge-base/configure-mail-server/">Configure your existing mail server.</a>
-            Postfix, sendmail, etc.
+            <a href="https://goodcrypto.com/qna/knowledge-base/configure-mail-server/">{% trans 'Configure your existing mail server.' %}</a>
+            {% trans 'Postfix, sendmail, etc.' %}
         </li>
         <li>
-            Configure your SMTP/IMAP/POP servers to default to SSL.
+            {% trans 'Configure your SMTP/IMAP/POP servers to default to SSL.' %}
         </li>
         <li>
-            Configure your users to connect via SSL for mail.
+            {% trans 'Configure your users to connect via SSL for mail.' %}
         </li>
         <li>
-            Configure your SMTP/IMAP/POP servers to require your users to connect via SSL.
+            {% trans 'Configure your SMTP/IMAP/POP servers to require your users to connect via SSL.' %}
         </li>
         <li>
-            Encourage others to use GoodCrypto so your mail with them is encrypted.
+            {% trans 'Encourage others to use GoodCrypto so your mail with them is encrypted.' %}
         </li>
         
         <li>
+            {% blocktrans %}
             Whenever GoodCrypto receives a new key from another GoodCrypto Server, 
             the key is automatically imported. 
             GoodCrypto sends mail to the user reminding them to 
@@ -43,11 +44,13 @@
             If some of your contacts use PGP without GoodCrypto,
             log into your GoodCrypto Server and
             <a href="/mail/import_key/">import</a> their public keys.
+            </p>
+            {% endblocktrans %}
         </li>
     </ol>
     
     <p class="dropcap">
-    Back up to the previous page to finish the GoodCrypto Server configuration. 
+    {% trans 'Back up to the previous page to finish the GoodCrypto Server configuration.' %}
     </p>
 
 {% endblock contentpane %}

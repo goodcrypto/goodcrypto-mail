@@ -1,17 +1,15 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2015-01-01
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from datetime import datetime
 from email.encoders import encode_7or8bit
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from random import random
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, contacts_passcodes, options
@@ -21,13 +19,16 @@ from goodcrypto.mail.message import mime_constants, utils
 from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
+from goodcrypto.mail.message.history import add_encrypted_record
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.utils import get_charset
+from goodcrypto.mail.message.mime_constants import DATE_KEYWORD, MESSAGE_ID_KEYWORD
+from goodcrypto.mail.message.utils import get_charset, get_message_id
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from goodcrypto.oce.utils import parse_address
+from goodcrypto.utils import i18n
 
 
 
@@ -55,8 +56,8 @@ class EncryptFilter(CryptoFilter):
     PASSCODE_KEYWORD = 'passcode'
     CHARSET_KEYWORD = 'charset'
     
-    UNABLE_TO_ENCRYPT = _("Error while trying to encrypt message from {from_email} to {to_email} using {encryption}")
-    POSSIBLE_ENCRYPT_SOLUTION = _("Report this error to your sysadmin.")
+    UNABLE_TO_ENCRYPT = "Error while trying to encrypt message from {from_email} to {to_email} using {encryption}"
+    POSSIBLE_ENCRYPT_SOLUTION = i18n("Report this error to your sysadmin.")
 
     def __init__(self):
         '''
@@ -118,7 +119,7 @@ class EncryptFilter(CryptoFilter):
                        crypto_message.get_email_message().to_string()))
             else:
                 crypto_message.add_tag_once('{}{}'.format(
-                  WARNING_PREFIX, _('Anyone could have read this message. Use encryption, it works.')))
+                  WARNING_PREFIX, i18n('Anyone could have read this message. Use encryption, it works.')))
 
             tags_added = crypto_message.add_tag_to_message()
             self.log_message('Tags added to message: {}'.format(tags_added))
@@ -142,10 +143,11 @@ class EncryptFilter(CryptoFilter):
         fatal_error = False
         error_message = ''
         encrypted_with = []
+        encrypted_classnames = []
         self.log_message("using {} encryption software".format(encryption_names))
         for encryption_name in encryption_names:
             encryption_classname = get_key_classname(encryption_name)
-            if encryption_classname not in encrypted_with:
+            if encryption_classname not in encrypted_classnames:
                 try:
                     if options.require_key_verified():
                         __, key_ok = contacts.get_fingerprint(to_user, encryption_name)
@@ -155,10 +157,11 @@ class EncryptFilter(CryptoFilter):
                         
                     if key_ok:
                         if self._encrypt_message(encryption_name, crypto_message, from_user, to_user):
-                            encrypted_with.append(encryption_classname)
+                            encrypted_classnames.append(encryption_classname)
+                            encrypted_with.append(encryption_name)
                     else:
-                        error_message += _('You will need to verify the {encryption} key for {email} before you can use it.').format(
-                            encryption=encryption_name, email=to_user)
+                        error_message += i18n('You need to verify the {encryption} key for {email} before you can use it.'.format(
+                            encryption=encryption_name, email=to_user))
                         self.log_message(error_message)
                 except MessageException as message_exception:
                     fatal_error = True
@@ -168,13 +171,20 @@ class EncryptFilter(CryptoFilter):
 
         # if the user has encryption software defined, then the message 
         # must be encrypted or bounced to the sender
-        if len(encrypted_with) < 1:
+        if len(encrypted_classnames) < 1:
             fatal_error = True
             if error_message is None or len(error_message) <= 0:
                 error_message = '{}\n{}'.format(
-                    _("Message not sent to {email} because there was a problem encrypting. It's possible the recipient's key is missing.").format(
-                        email=to_user),
+                    i18n("Message not sent to {email} because there was a problem encrypting. It's possible the recipient's key is missing.".format(
+                        email=to_user)),
                     self.POSSIBLE_ENCRYPT_SOLUTION)
+
+        else:
+            message_id = get_message_id(crypto_message.get_email_message())
+            message_date = crypto_message.get_email_message().get_header(DATE_KEYWORD)
+            add_encrypted_record(
+              from_user, to_user, encrypted_with, message_id, message_date=message_date)
+            self.log_message('added encrypted history record')
 
         if fatal_error:
             self.log_message('raising message exception in _encrypt_message_with_all')
@@ -218,21 +228,21 @@ class EncryptFilter(CryptoFilter):
             if options.clear_sign_email():
                 if from_user is None or passcode is None:
                     error_message = '{}  '.format(
-                        _("Message not sent to {email} because currently there isn't a private {encryption} key for you and your sysadmin requires all encrypted messages also be clear signed.").format(
-                            email=to_user, encryption=encryption_name))
+                        i18n("Message not sent to {email} because currently there isn't a private {encryption} key for you and your sysadmin requires all encrypted messages also be clear signed.".format(
+                            email=to_user, encryption=encryption_name)))
                     if options.create_private_keys():
-                        error_message += _("GoodCrypto is creating a private key now. You will receive email when your keys are ready so you can resend your message.")
+                        error_message += i18n("GoodCrypto is creating a private key now. You will receive email when your keys are ready so you can resend your message.")
                     else:
-                        error_message += _("Ask your sysadmin to create a private key for you and then try resending the message.")
+                        error_message += i18n("Ask your sysadmin to create a private key for you and then try resending the message.")
                 else:
                     error_message = '{}\n{}'.format(
-                        self.UNABLE_TO_ENCRYPT.format(
-                            from_email=from_user, to_email=to_user, encryption=encryption_name),
+                        i18n(self.UNABLE_TO_ENCRYPT.format(
+                            from_email=from_user, to_email=to_user, encryption=encryption_name)),
                         self.POSSIBLE_ENCRYPT_SOLUTION)
             else:
                 error_message = '{}\n{}'.format(
-                    self.UNABLE_TO_ENCRYPT.format(
-                        from_email=from_user, to_email=to_user, encryption=encryption_name),
+                    i18n(self.UNABLE_TO_ENCRYPT.format(
+                        from_email=from_user, to_email=to_user, encryption=encryption_name)),
                     self.POSSIBLE_ENCRYPT_SOLUTION)
                 
             return error_message

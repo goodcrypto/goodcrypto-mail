@@ -2,8 +2,8 @@
 '''
     Send notices from the GoodCrypto Server daemon.
     
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-15
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -41,11 +41,11 @@ def create_notice_message(to_address, subject, text=None, attachment=None, filen
         
         >>> # In honor of Sukhbir Singh, developed and maintains TorBirdy.
         >>> message = create_notice_message('sukhbir@goodcrypto.remote', 'test notice')
-        >>> message.find('To: sukhbir@goodcrypto.remote') >= 0
+        >>> 'To: sukhbir@goodcrypto.remote' in message
         True
-        >>> message.find('From: GoodCrypto Daemon <mailer-daemon@goodcrypto.local>') >= 0
+        >>> 'From: GoodCrypto Daemon <mailer-daemon' in message
         True
-        >>> message.find('Subject: test notice') >= 0
+        >>> 'Subject: test notice' in message
         True
     '''
 

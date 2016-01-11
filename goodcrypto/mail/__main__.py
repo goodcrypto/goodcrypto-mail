@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-14
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,14 +9,14 @@ import sh, sys
 from traceback import format_exc
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator 
-from django.utils.translation import ugettext as _
 
 from goodcrypto.mail.message.pipe import Pipe
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.queue import queue_message
-from goodcrypto.mail.options import get_mail_server_address, get_mta_listen_port, max_message_length
+from goodcrypto.mail.options import max_message_length
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.utils import parse_address
+from goodcrypto.utils import i18n
 from goodcrypto.utils.log_file import LogFile
 from syr.lock import locked
 
@@ -124,7 +124,7 @@ class Main(object):
                 email_validator(email)
             except ValidationError as validator_error:
                 self.log_message(str(validator_error))
-                raise ValidationError(_('Bad email address'))
+                raise ValidationError(i18n('Bad email address'))
                 
             return email
 

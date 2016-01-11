@@ -1,8 +1,8 @@
 '''
     Urls for Mail
    
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-09-24
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-18
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,10 +16,21 @@ urlpatterns = patterns('',
 
     url(r'^$', views.home, name='home'),
     url(r'view_fingerprint/?', views.view_fingerprint, name='view_fingerprint'),
+    url(r'verify_fingerprint/?', views.verify_fingerprint, name='verify_fingerprint'),
     url(r'export_key/?', views.export_key, name='export_key'),
     url(r'import_key/?', views.import_key, name='import_key'),
 
+    url(r'verify_encrypted/?$', views.verify_encrypted, name='verify_encrypted'),
+    url(r'msg-encrypted/(.*)/?$', views.msg_encrypted, name='msg_encrypted'),
+    url(r'show_encrypted_history/?', views.show_encrypted_history, name='show_encrypted_history'),
+        
+    url(r'verify_decrypted/?$', views.verify_decrypted, name='verify_decrypted'),
+    url(r'msg-decrypted/(.*)/?$', views.msg_decrypted, name='msg_decrypted'),
+    url(r'show_decrypted_history/?', views.show_decrypted_history, name='show_decrypted_history'),
+        
     url(r'^configure/?', views.configure, name='mail_configure'),
+    url(r'^get_diagnostic_logs/?', views.get_diagnostic_logs, name='mail_get_diagnostic_logs'),
+    
     url(r'^api/?', views.api, name='mail_api'),
 )
 

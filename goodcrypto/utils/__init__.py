@@ -1,13 +1,15 @@
 '''
     GoodCrypto utilities.
     
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-09-30
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-25
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import sh
+import re, sh
+from socket import inet_pton, AF_INET, AF_INET6
 from traceback import format_exc
+from django.utils.translation import ugettext
 
 from syr.utils import trim
 from syr.log import get_log
@@ -106,9 +108,9 @@ def is_program_running(search_string):
     '''
         Return whether a program is running.
 
-        >>> is_running('nginx')
+        >>> is_program_running('nginx')
         True
-        >>> is_running('nothing.is.running')
+        >>> is_program_running('nothing.is.running')
         False
     '''
 
@@ -126,4 +128,92 @@ def is_program_running(search_string):
 
     return running
 
+
+def is_mta_ok(mail_server_address):
+    '''
+        Verify the MTA is ok.
+        
+        >>> is_mta_ok('goodcrypto.local')
+        True
+        >>> is_mta_ok('127.0.0.1')
+        True
+        >>> is_mta_ok('goodcrypto local')
+        False
+        >>> is_mta_ok(None)
+        False
+    '''
+
+    """
+    from smtplib import SMTP, SMTP_SSL
+    def smtp_connection_ok(self, mta):
+        '''
+            Try to connect to the MTA via SMTP and SMTP_SSL.
+        '''
+        
+        connection_ok = False
+        try:
+            smtp = SMTP(host=mta)
+            smtp.quit()
+            connection_ok = True
+        except:
+            connection_ok = False
+
+        if not connection_ok:
+            try:
+                smtp = SMTP_SSL(host=mta)
+                smtp.quit()
+                connection_ok = True
+            except:
+                connection_ok = False
+            
+        return connection_ok
+    """
+
+    ok = False
+    
+    # the mail_server_address should either be an ip address or a domain
+    if mail_server_address is not None:
+        mail_server_address = mail_server_address.strip()
+        try: 
+            inet_pton(AF_INET, mail_server_address) 
+            ok = True 
+            log('mail server address IP4 compliant: {}'.format(ok))
+        except: 
+            ok = False
+            log(format_exc())
+
+        if not ok:
+            try: 
+                inet_pton(AF_INET6, mail_server_address) 
+                ok = True 
+                log('mail server address IP6 compliant: {}'.format(ok))
+            except:
+                match = re.search("^[\u00c0-\u01ffa-zA-Z0-9'\-\.]+$", mail_server_address)
+                if match:
+                    ok = True
+                log('mail server address ok: {}'.format(ok))
+
+    return ok
+
+def i18n(raw_message):
+    ''' 
+        Convert a raw message to an internationalized string.
+        
+        >>> i18n('Test message')
+        'Test message'
+        >>> i18n('Test with variable: {variable}'.format(variable='test variable'))
+        'Test with variable: test variable'
+        >>> i18n(u'Test with variable: {variable}'.format(variable='test variable'))
+        'Test with variable: test variable'
+    '''
+    
+    unicode_message = ugettext(raw_message)
+    try:
+        message = '{}'.format(unicode_message)
+    except:
+        message = unicode_message
+        log(format_exc())
+        log('trying to internationalize: {}'.format(raw_message))
+        
+    return message
 

@@ -1,13 +1,11 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
-from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import crypto_software
 from goodcrypto.mail.contacts import is_key_ok
 from goodcrypto.mail.message.message_exception import MessageException
@@ -15,12 +13,15 @@ from goodcrypto.mail.options import require_key_verified
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
+from goodcrypto.utils import i18n
+from goodcrypto.utils.log_file import LogFile
 from syr.timestamp import Timestamp
 
 DEBUGGING = True
 USE_UTC = True
 DEFAULT_CRYPTO = CryptoFactory.DEFAULT_ENCRYPTION_NAME
-DECRYPTED_MESSAGE_TAG = '{}{}'.format(_('GoodCrypto: '), _('received this message securely'))
+DECRYPTED_MESSAGE_TAG = '{}{}'.format(i18n('GoodCrypto: '), 
+                                      i18n('received this message securely'))
 
 
 _log = None
@@ -39,8 +40,10 @@ def add_tag_to_message(crypto_message):
         ...    crypto_message.set_crypted(True)
         ...    add_tag_to_message(crypto_message)
         ...    final_message_string = crypto_message.get_email_message().to_string()
-        ...    final_message_string.strip().find('received this message securely\\n\\nThere still appears to be an extra protective layer.') >= 0
+        ...    final_message_string.strip().find('received this message securely') >= 0
+        ...    final_message_string.strip().find('There still appears to be an extra protective layer.') >= 0
         ...    final_message_string.strip().find('<div><hr>') >= 0
+        True
         True
         True
         False
@@ -84,9 +87,9 @@ def get_tags(crypto_message):
             log_message("crypted: {}".format(crypto_message.is_crypted()))
             analyzer = OpenPGPAnalyzer()
             content = crypto_message.get_email_message().get_content()
-            crypto_message.add_prefix_to_tag_once(DECRYPTED_MESSAGE_TAG)
+            crypto_message.add_prefix_to_tag_once(get_decrypt_tag())
             if analyzer.is_encrypted(content):
-                crypto_message.add_tag_once(_('There still appears to be an extra protective layer.'))
+                crypto_message.add_tag_once(i18n('There still appears to be an extra protective layer.'))
                 if not DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
 
         #  if we have something to say, it's still been filtered
@@ -104,6 +107,22 @@ def get_tags(crypto_message):
 
     return tags, filtered
 
+def get_decrypt_tag():
+    '''
+        Get the decrypt tag.
+        
+        >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
+        >>> from goodcrypto.mail.message.email_message import EmailMessage
+        >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
+        >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
+        ...    crypto_message = CryptoMessage(EmailMessage(input_file))
+        ...    tag = get_decrypt_tag()
+        ...    tag.find('received this message securely') >= 0
+        True
+    '''
+
+    return DECRYPTED_MESSAGE_TAG
+
 def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypto=None):
     '''
         Check the signature if message is signed.
@@ -117,7 +136,7 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO)
         ...    crypto_message.get_tag()
-        u'This message was clear signed by an unknown user.'
+        'This message was clear signed by an unknown user.'
     '''
     
     def verify_signature(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
@@ -140,12 +159,12 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
                     log_message('signature block\n{}'.format(signature_block))
                     signer = crypto.get_signer(signature_block)
                     if signer is None:
-                        error_message = _('This message was clear signed by an unknown user.')
+                        error_message = i18n('This message was clear signed by an unknown user.')
                         log_message(error_message)
                         raise MessageException(error_message)
                     else:
-                        error_message = _('This message was not clear signed by the sender {email}, but by {signer}.').format(
-                            email=email, signer=signer)
+                        error_message = i18n('This message was not clear signed by the sender {email}, but by {signer}.'.format(
+                            email=email, signer=signer))
                         log_message(error_message)
                         raise CryptoException(error_message)
         else:
@@ -161,9 +180,9 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
             key_verified = verify_signature(email, signature_blocks, encryption_name=encryption_name)
             if key_verified or not require_key_verified():
                 # Translator: Do not alter {email} simply move it wherever would be appropriate in the sentence.
-                crypto_message.add_tag_once(_('This message was clear signed by {email}.').format(email=email))
+                crypto_message.add_tag_once(i18n('This message was clear signed by {email}.'.format(email=email)))
             else:
-                crypto_message.add_tag_once(_('This message appears to be clear signed by {email}, but the key has not been verified.').format(email=email))
+                crypto_message.add_tag_once(i18n('This message appears to be clear signed by {email}, but the key has not been verified.'.format(email=email)))
         except MessageException as message_exception:
             crypto_message.add_tag_once(message_exception.value)
     else:

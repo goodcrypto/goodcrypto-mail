@@ -1,15 +1,14 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-01-05
+    Last modified: 2015-02-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os
+import os, urllib
 from datetime import datetime
 from email.encoders import encode_base64, encode_quopri
 from email.message import Message
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, options
@@ -19,13 +18,17 @@ from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.header_keys import HeaderKeys
+from goodcrypto.mail.message.history import add_decrypted_record, gen_validation_code
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.mime_constants import DATE_KEYWORD
 from goodcrypto.mail.message.notices import notify_user
+from goodcrypto.mail.message.utils import get_message_id
 from goodcrypto.mail.utils import email_in_domain, parse_address
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
+from goodcrypto.utils import i18n
 from syr.html import firewall_html
 from syr.timestamp import Timestamp
 
@@ -64,8 +67,7 @@ class DecryptFilter(CryptoFilter):
         
         self.log = LogFile()
         
-        self.recipient = None
-        self.crypto_message = None
+        self.recipient = self.crypto_message = None
 
 
     def crypt_from(self, crypto_msg, from_user, to_user):
@@ -112,7 +114,7 @@ class DecryptFilter(CryptoFilter):
                     decrypt_utils.check_signature(from_user, self.crypto_message)
 
                     tag = '{}{}'.format(
-                      WARNING_PREFIX, _('Anyone could have read this message.'))
+                      WARNING_PREFIX, i18n('Anyone could have read this message.'))
                     if self.crypto_message.get_email_message().to_string().find(tag) < 0:
                         self.crypto_message.add_prefix_to_tag(tag)
                         filtered = decrypt_utils.add_tag_to_message(self.crypto_message)
@@ -145,16 +147,15 @@ class DecryptFilter(CryptoFilter):
                     decrypted = self._decrypt_message(encryption_software, from_user, to_user)
                 elif email_in_domain(to_user) and options.create_private_keys():
                     self.crypto_message.add_tag_once(
-                      _('{email} does not have a matching key to decrypt the message').format(email=to_user))
+                      i18n('{email} does not have a matching key to decrypt the message'.format(email=to_user)))
                     self.crypto_message.create_private_key(encryption_software, to_user)
                     self.log_message("started to create a new {} key for {}".format(encryption_software, to_user))
                 else:
                     self.log_message("no encryption software for {}".format(to_user))
                     self.crypto_message.add_tag_once(
-                        _('{email} does not use any known encryption').format(email=to_user))
-                    if contacts_passcodes.ok_to_send_notice(to_user, encryption_software, datetime.today()):
-                        subject = _('{} Unable to decrypt message'.format(SERIOUS_ERROR_PREFIX))
-                        notify_user(to_user, subject, message)
+                        i18n('{email} does not use any known encryption'.format(email=to_user)))
+                    subject = i18n('{} Unable to decrypt message'.format(SERIOUS_ERROR_PREFIX))
+                    notify_user(to_user, subject, self.crypto_message.get_email_message().to_string())
 
                 if options.filter_html():
                     self._filter_html()
@@ -201,7 +202,7 @@ class DecryptFilter(CryptoFilter):
                     self.log_message(self.crypto_message.get_email_message().to_string())
                     ExceptionLog.log_message(log_msg)
                     
-                    tag = _('Unable to decrypt message with {encryption}').format(encryption=software)
+                    tag = i18n('Unable to decrypt message with {encryption}'.format(encryption=software))
                     self.crypto_message.add_tag_once(tag)
             except CryptoException as crypto_exception:
                 raise CryptoException(crypto_exception.value)
@@ -217,6 +218,8 @@ class DecryptFilter(CryptoFilter):
         '''
 
         decrypted = False
+        decrypted_with = []
+
         try:
             #  the sender probably used the order of services in the
             #  AcceptedEncryptionSoftware header we sent out, so we want to
@@ -232,6 +235,7 @@ class DecryptFilter(CryptoFilter):
                         if self._decrypt_message_with_crypto(encryption_name, from_user, to_user):
                             #  if any encryption decrypts, the message was decrypted
                             decrypted = True
+                            decrypted_with.append(encryption_name)
                             self.crypto_message.set_crypted(decrypted)
                             self.log_message("decrypted using {}".format(encryption_name))
                     except CryptoException as crypto_exception:
@@ -246,6 +250,16 @@ class DecryptFilter(CryptoFilter):
             raise CryptoException(crypto_exception.value)
         except Exception:
             self.log_message(format_exc())
+
+        if decrypted:
+            validation_code = gen_validation_code()
+            message_id = get_message_id(self.crypto_message.get_email_message())
+            message_date = self.crypto_message.get_email_message().get_header(DATE_KEYWORD)
+            add_decrypted_record(
+              from_user, to_user, decrypted_with, message_id, validation_code, message_date=message_date)
+            self.log_message('added decrypted record')
+
+            self.add_validation_code(validation_code)
 
         return decrypted
 
@@ -417,7 +431,7 @@ class DecryptFilter(CryptoFilter):
             
             if signed_by is None:
                 tag = '{}{}'.format(
-                    decrypt_utils.DECRYPTED_MESSAGE_TAG, _(', but it was not signed by anyone.'))
+                    decrypt_utils.get_decrypt_tag(), i18n(', but it was not signed by anyone.'))
             else:
                 __, from_user_addr = parse_address(from_user)
                 __, signed_by_addr = parse_address(signed_by)
@@ -431,18 +445,18 @@ class DecryptFilter(CryptoFilter):
 
                     if key_ok:
                         tag = '{}{}'.format(
-                          decrypt_utils.DECRYPTED_MESSAGE_TAG, 
-                          _(' and it was signed by the sender, {email}.').format(email=signed_by_addr))
+                          decrypt_utils.get_decrypt_tag(), 
+                          i18n(' and it was signed by the sender, {email}.'.format(email=signed_by_addr)))
                     else:
                         tag = '{}{}'.format(
-                          decrypt_utils.DECRYPTED_MESSAGE_TAG, 
-                          _(' and it appears to be signed by the sender, {email}, but the key has not been verified.').format(
-                              email=signed_by_addr))
+                          decrypt_utils.get_decrypt_tag(), 
+                          i18n(' and it appears to be signed by the sender, {email}, but the key has not been verified.'.format(
+                              email=signed_by_addr)))
                 else:
                     tag = '{}{}'.format(
-                      decrypt_utils.DECRYPTED_MESSAGE_TAG, 
-                      _(', but it was signed by {signer}, not by the sender, {sender}.').format(
-                          signer=signed_by_addr, sender=from_user_addr))
+                      decrypt_utils.get_decrypt_tag(), 
+                      i18n(', but it was signed by {signer}, not by the sender, {sender}.'.format(
+                          signer=signed_by_addr, sender=from_user_addr)))
 
             if tag is not None:
                 self.crypto_message.add_prefix_to_tag_once(tag)
@@ -473,7 +487,7 @@ class DecryptFilter(CryptoFilter):
                         verify_signature(signed_by)
                     elif result_code == 2:
                         self.crypto_message.add_tag_once(
-                          _("Can't verify signature. Ask the sender to use GoodCrypto with auto-key exchange, or manually import their public key."))
+                          i18n("Can't verify signature. Ask the sender to use GoodCrypto with auto-key exchange, or you can manually import their public key."))
                     if isinstance(decrypted_data, str):
                         self.log_message('plaintext length: {}'.format(len(decrypted_data)))
                     if self.DEBUGGING: self.log_message('plaintext:\n{}'.format(decrypted_data))
@@ -556,6 +570,20 @@ class DecryptFilter(CryptoFilter):
                         self.log_message("html filtered {} content".format(part_content_type))
         except Exception:
             self.log_message(format_exc())
+
+    def add_validation_code(self, validation_code):
+        ''' Add validation code to message. '''
+
+        goodcrypto_server_url = options.get_goodcrypto_server_url()
+        if goodcrypto_server_url and len(goodcrypto_server_url) > 0:
+            quoted_code = urllib.quote(validation_code)
+            validation_msg = i18n('Verify GoodCrypto decrypted this message: {url}mail/msg-decrypted/{quoted_code}'.format(
+                url=goodcrypto_server_url, quoted_code=quoted_code))
+        else:
+            validation_msg = i18n('Message validation code: {validation_code}'.format(validation_code=validation_code))
+
+        self.crypto_message.add_tag_once(validation_msg)
+        self.log_message(validation_msg)
 
     def log_message(self, message):
         '''

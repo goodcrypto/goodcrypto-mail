@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -18,6 +18,7 @@ from goodcrypto.mail import crypto_software
 from goodcrypto.mail.message import mime_constants
 from goodcrypto.mail.message.constants import DEFAULT_CHAR_SET, PUBLIC_KEY_HEADER, TAGLINE_DELIMITER
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.mime_constants import MESSAGE_ID_KEYWORD
 from goodcrypto.mail.utils.dirs import get_test_directory
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -30,6 +31,25 @@ _log = None
 
 _tagline_delimiter = TAGLINE_DELIMITER
 
+
+def get_message_id(email_message):
+    '''
+        Gets the message id or None from an email_message.
+        
+        >>> # Test extreme case
+        >>> get_message_id(None)
+    '''
+
+    message_id = None
+    try:
+        if email_message is not None:
+            message_id = email_message.get_header(MESSAGE_ID_KEYWORD)
+        if message_id is not None:
+            message_id = message_id.strip().strip('<').strip('>')
+    except:
+        log_message(format_exc())
+
+    return message_id
 
 def get_current_timestamp():
     '''

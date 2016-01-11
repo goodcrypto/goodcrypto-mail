@@ -1,14 +1,12 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2015-01-01
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-18
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
-from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, crypto_software
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
 from goodcrypto.mail.message import mime_constants, utils
@@ -19,6 +17,8 @@ from goodcrypto.mail.options import require_key_verified
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import parse_address, format_fingerprint, strip_fingerprint
+from goodcrypto.utils import i18n
+from goodcrypto.utils.log_file import LogFile
 
 
 class HeaderKeys(object):
@@ -98,7 +98,7 @@ class HeaderKeys(object):
         except:
             self.log_message(format_exc())
             ExceptionLog.log_message(format_exc())
-            crypto_message.add_tag_once(_('An unexpected error ocurred while processing this message'))
+            crypto_message.add_tag_once(i18n('An unexpected error ocurred while processing this message'))
     
     
     def _manage_key_header(self, from_user, crypto_message, encryption_name, key_block):
@@ -233,15 +233,25 @@ class HeaderKeys(object):
             
             result_ok = True
 
-            tag = _('You received a new public key with this message.')
+            # use the first email address from the imported key
+            email, __ = id_fingerprint_pairs[0]
+
+            tip = i18n("Learn more: https://goodcrypto.com/qna/knowledge-base/user-verify-key")
+            header = i18n("The key contained the following email address(es) and fingerprint(s):")
             if require_key_verified():
-                body_text = "\n{} {}\n".format(
-                    _('You received a new public key.'), 
-                    _("The key cannot be used until you check with the sender to verify the key and update the database if it's okay. Otherwise, any mail you send to this user will be returned to you."))
+                subject = i18n('Mail to {email} cannot be sent until you verify their key'.format(email=email))
+                body_text = "\n{} {} {}\n\n{}\n".format(
+                    subject,
+                    i18n("You received a public key for the email address(es) below. You cannot send mail until you check with the sender to verify the key and update the database if it's okay. Otherwise, any mail you send to this user will be returned to you."),
+                    tip,
+                    header)
             else:
-                body_text = "\n{} {}\n".format(
-                    _('You received a new public key.'), 
-                    _("It's strongly recommended that you check with the sender to verify the key. Otherwise, someone could spoof secure mail from this user."))
+                subject = i18n('Mail to {email} is now private'.format(email=email))
+                body_text = "\n{} {} {}\n\n{}\n".format(
+                    subject,
+                    i18n("To be safe, verify their key now."),
+                    tip,
+                    header)
 
             for (user_id, fingerprint) in id_fingerprint_pairs:
                 body_text += "    {}: {}".format(user_id, format_fingerprint(fingerprint))
@@ -256,9 +266,9 @@ class HeaderKeys(object):
                     self.log_message('successfully added contact')
                     
             if result_ok:
-                self._notify_recipient(_('You received a new public key.'), body_text)
+                self._notify_recipient('GoodCrypto - {}'.format(str(subject)), body_text)
 
-            return result_ok, tag
+            return result_ok
 
         tag = None
         result_ok = False
@@ -291,13 +301,13 @@ class HeaderKeys(object):
                     self.log_message('imported key: {}'.format(result_ok))
 
                 if result_ok:
-                    result_ok, tag = add_contacts_and_notify()
+                    result_ok = add_contacts_and_notify()
                     self.log_message('added contacts: {}'.format(result_ok))
 
             if not result_ok:
                 tag = '{} {}\n'.format(
                     SERIOUS_ERROR_PREFIX, 
-                    _('Could not import new {encryption} key for {email}'.format(
+                    i18n('Could not import new {encryption} key for {email}'.format(
                         encryption=encryption_name, email=from_user)))
                 self.log_message('WARNING: Unable to import new public key for {}'.format(from_user))
         except:
@@ -305,7 +315,7 @@ class HeaderKeys(object):
             ExceptionLog.log_message(format_exc())
             tag = '{} {}\n'.format(
                 SERIOUS_ERROR_PREFIX, 
-                _('Could not import new {encryption} key for {email}'.format(
+                i18n('Could not import new {encryption} key for {email}'.format(
                    encryption=encryption_name, email=from_user)))
     
         self.log_message('import new key ok: {}'.format(result_ok))
@@ -357,7 +367,7 @@ class HeaderKeys(object):
             Report that they key in the header doesn't match an existing key (internal use only).
         '''
     
-        subject = _('A new {encryption} key arrived for {email} that is not the same as the current key'.format(
+        subject = i18n('A new {encryption} key arrived for {email} that is not the same as the current key'.format(
             encryption=encryption_name, email=from_user))
         tag = subject
     
@@ -365,16 +375,16 @@ class HeaderKeys(object):
         message_lines.append(tag)
         message_lines.append('\n')
     
-        message_lines.append(_(
+        message_lines.append(i18n(
           "Contact the sender and verify if they've changed their {encryption} key.".format(encryption=encryption_name)))
-        message_lines.append(_('If they *do* have a new key, then use your GoodCrypto server to delete the contact and ask them to resend the message.'))
+        message_lines.append(i18n('If they *do* have a new key, then use your GoodCrypto server to delete the contact and ask them to resend the message.'))
         message_lines.append('\n')
         
-        message_lines.append(_(
+        message_lines.append(i18n(
           'If the sender has *not* replaced their key, then reconfirm the fingerprint in your GoodCrypto server.'))
         message_lines.append('\n')
         
-        message_lines.append(_(
+        message_lines.append(i18n(
           'Remember, never use email for the verification of fingerprints and header keys.'))
     
         self._notify_recipient(subject, message_lines, crypto_message=crypto_message)
@@ -385,26 +395,26 @@ class HeaderKeys(object):
         ''' 
             Report a key is missing for the user (internal use only).
         '''
-        subject = _('Missing the key for {email}'.format(email=from_user))
+        subject = i18n('Missing the key for {email}'.format(email=from_user))
         tag = subject
         
         message_lines = []
         if key_matches:
-            message_lines.append(_('The message arrived with a key that matches the fingerprint in your GoodCrypto server, but that key is missing.'))
+            message_lines.append(i18n('The message arrived with a key that matches the fingerprint in your GoodCrypto server, but that key is missing.'))
         else:
-            message_lines.append(_('The message arrived with a key that does not match the fingerprint in your GoodCrypto server and the key is missing.'))
+            message_lines.append(i18n('The message arrived with a key that does not match the fingerprint in your GoodCrypto server and the key is missing.'))
 
-        message_lines.append(_('This should never happen so you need to communicate with the user *without* using email.'))
+        message_lines.append(i18n('This should never happen so you need to communicate with the user *without* using email.'))
         message_lines.append('\n')
     
-        message_lines.append(_('*After* you verify that the following fingerprint is correct'))
+        message_lines.append(i18n('*After* you verify that the following fingerprint is correct'))
         for (user_id, fingerprint) in id_fingerprint_pairs:
-            message_lines.append(_('    user: {email} fingerprint: {fingerprint}'.format(
+            message_lines.append(i18n('    user: {email} fingerprint: {fingerprint}'.format(
                 email=user_id, fingerprint=fingerprint)))
-        message_lines.append(_(
+        message_lines.append(i18n(
           'then, use your GoodCrypto server to delete the {email} contact.'.format(email=from_user)))
-        message_lines.append(_('Next, ask {email} to resend the message.'.format(email=from_user)))
-        message_lines.append(_(
+        message_lines.append(i18n('Next, ask {email} to resend the message.'.format(email=from_user)))
+        message_lines.append(i18n(
           'Finally, verify the new fingerprint with {email}. Remember not to use email for the verification or someone could insert a bad key.'.format(
               email=from_user)))
     
@@ -417,18 +427,18 @@ class HeaderKeys(object):
             Report a key expired (internal use only).
         '''
     
-        tag = _("The {encryption} key for {email} expired on {date}.".format(
+        tag = i18n("The {encryption} key for {email} expired on {date}.".format(
             encryption=encryption_name, email=from_user, date=expiration))
-        subject = _('Received a message from {email} with a {encryption} key that expired on {date}'.format(
+        subject = i18n('Received a message from {email} with a {encryption} key that expired on {date}'.format(
           email=from_user, encryption=encryption_name, date=expiration))
         
         message_lines = []
         message_lines.append(tag)
         message_lines.append('\n')
-        message_lines.append(_(
+        message_lines.append(i18n(
           'First, use your GoodCrypto server to delete the {email} contact.'.format(email=from_user)))
-        message_lines.append(_('Next, ask {email} to create a new key and resend the message.'.format(email=from_user)))
-        message_lines.append(_(
+        message_lines.append(i18n('Next, ask {email} to create a new key and resend the message.'.format(email=from_user)))
+        message_lines.append(i18n(
           'Finally, verify the new fingerprint with {email}. Do not use email for the verification or someone could insert a bad key.'.format(
               email=from_user)))
     
@@ -440,24 +450,24 @@ class HeaderKeys(object):
         '''
             Report the keys don't match (internal use only).
         '''
-        subject = _("Keys do not match {email}".format(email=from_user))
+        subject = i18n("Keys do not match {email}".format(email=from_user))
         tag = subject
     
         message_lines = []
-        message_lines.append(_(
+        message_lines.append(i18n(
            "You received a message from {email} that has a key which is different than the existing key in the {encryption} database.".format(
                email=from_user, encryption=encryption_name)))
         message_lines.append('\n\n')
 
-        message_lines.append(_(
+        message_lines.append(i18n(
           'First, contact {email} and see if they have changed their key. If they have use your GoodCrypto server to delete their contact.'.format(email=from_user)))
         message_lines.append(
-            _('Next, ask {email} to create a new key and resend the message.'.format(email=from_user)))
-        message_lines.append(_(
+            i18n('Next, ask {email} to create a new key and resend the message.'.format(email=from_user)))
+        message_lines.append(i18n(
           'Finally, verify the new fingerprint with {email}. Do not use email for the verification or someone could insert a bad key.'.format(email=from_user)))
         message_lines.append('\n\n')
     
-        message_lines.append(_(
+        message_lines.append(i18n(
           'Of course, if they have not changed their key, then future messages with the bad key will continue to be saved as attachment and not decrypted.'))
     
         self._notify_recipient(subject, message_lines, crypto_message=crypto_message)
@@ -468,13 +478,13 @@ class HeaderKeys(object):
         '''
             Report the key comparison got an error during comparison (internal use only).
         '''
-        subject = _("Unable to verify fingerprint for {email}".format(email=from_user))
+        subject = i18n("Unable to verify fingerprint for {email}".format(email=from_user))
         tag = subject
     
         message_lines = []
         message_lines.append(
-          _('The message arrived with a key, but unable to compare the {encryption} fingerprint.'.format(encryption=encryption_name)))
-        message_lines.append(_('It is possible the database was just busy, but if this happens again please report it to your sysadmin immediately.'))
+          i18n('The message arrived with a key, but unable to compare the {encryption} fingerprint.'.format(encryption=encryption_name)))
+        message_lines.append(i18n('It is possible the database was just busy, but if this happens again please report it to your sysadmin immediately.'))
     
         self._notify_recipient(subject, message_lines, crypto_message=crypto_message)
         
@@ -484,13 +494,13 @@ class HeaderKeys(object):
         '''
             Report the header's key doesn't match the sender (internal use only).
         '''
-        subject = _("Message contained a bad {encryption} key in header".format(encryption=encryption_name))
+        subject = i18n("Message contained a bad {encryption} key in header".format(encryption=encryption_name))
     
         if len(user_ids) == 1:
-            tag = _('Message included a {encryption} key for {email} when the message was sent from {from_email}.'.format(
+            tag = i18n('Message included a {encryption} key for {email} when the message was sent from {from_email}.'.format(
                encryption=encryption_name, email=user_ids[0], from_email=from_user))
         else:
-            tag = _('Message included multiple {encryption} keys for "{ids}", but only a key from the sender, {email}, can be imported.'.format(
+            tag = i18n('Message included multiple {encryption} keys for "{ids}", but only a key from the sender, {email}, can be imported.'.format(
                 encryption=encryption_name, ids=', '.join(user_ids), email=from_user))
 
         message_lines = []
@@ -506,14 +516,14 @@ class HeaderKeys(object):
             Report a database error to the user (internal use only).
         '''
     
-        subject = _('Unable to save the {encryption} fingerprint in the database.'.format(encryption=encryption_name))
-        tag = _('The {encryption} fingerprint for {email} could not be saved.'.format(
+        subject = i18n('Unable to save the {encryption} fingerprint in the database.'.format(encryption=encryption_name))
+        tag = i18n('The {encryption} fingerprint for {email} could not be saved.'.format(
                       encryption=encryption_name, email=from_user))
         
         message_lines = []
         message_lines.append(tag)
         message_lines.append('\n')
-        message_lines.append(_('Forward this email message to your system or mail administrator immediately.'))
+        message_lines.append(i18n('Forward this email message to your system or mail administrator immediately.'))
         
         self._notify_recipient(subject, message_lines)
         

@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,14 +17,14 @@ from email.mime.text import MIMEText
 from email.parser import Parser
 from StringIO import StringIO
 from traceback import format_exc
-from django.utils.translation import ugettext as _
 
-from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail.message import constants, mime_constants
 from goodcrypto.mail.message.validator import Validator
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import get_charset, is_open_pgp_mime
 from goodcrypto.mail.utils.exception_log import ExceptionLog
+from goodcrypto.utils import i18n
+from goodcrypto.utils.log_file import LogFile
 
 
 class EmailMessage(object):
@@ -1001,7 +1001,7 @@ class EmailMessage(object):
             body_text = ''.join(body)
 
         if len(self.bad_header_lines) > 0:
-            body_text += '\n\n{}\n'.format(_('Removed bad header lines'))
+            body_text += '\n\n{}\n'.format(i18n('Removed bad header lines'))
             for bad_header_line in self.bad_header_lines:
                 body_text += '  {}\n'.format(bad_header_line)
 

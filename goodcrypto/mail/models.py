@@ -2,24 +2,24 @@
     Models for Mail app.
     
     Better to use the goodcrypto.mail classes (e.g., Contacts, ContactsPasscodes) 
-    to access data than access it directly via the Models. Using these classes will increase 
+    to access data than access it directly via the Models. Using those classes will increase 
     the probability of future compatibility in case GoodCrypto uses another way to store data
     or moves to another framework which doesn't interface with databases the same way as django.
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2015-01-01
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-28
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from django.core import validators
 from django.db import models
 from django.db.models.signals import post_delete, post_save
-from django.utils.translation import ugettext as _
 
 from goodcrypto.mail import constants
 from goodcrypto.mail.model_signals import post_save_contacts_crypto, post_delete_contacts_crypto, post_save_options
 from goodcrypto.mail.options import get_domain
 from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.utils import i18n
 # do not use LogFile because it references models.System
 from syr.log import get_log
 
@@ -39,22 +39,22 @@ class EncryptionSoftware(models.Model):
         >>> test_gpg.delete()
     '''
     
-    name = models.CharField(_('Name'),
+    name = models.CharField(i18n('Name'),
        max_length=100, unique=True, blank=False,
-       help_text=_('Name of the encryption software (e.g., GPG).'))
+       help_text=i18n('Name of the encryption software (e.g., GPG).'))
 
-    active = models.BooleanField(_('Active?'), default=True,
-       help_text=_('Is encryption software installed and available?'))
+    active = models.BooleanField(i18n('Active?'), default=True,
+       help_text=i18n('Is encryption software installed and available?'))
     
-    classname = models.CharField(_('Classname'),
+    classname = models.CharField(i18n('Classname'),
        max_length=100, blank=True, null=True,
-       help_text=_("Leave blank unless you are using encryption software not supplied by GoodCrypto. See GoodCrypto's OCE docs for more details."))
+       help_text=i18n("Leave blank unless you are using encryption software not supplied by GoodCrypto. See GoodCrypto's OCE docs for more details."))
 
     def __unicode__(self):
         return '{}'.format(self.name)
 
     class Meta:
-        verbose_name = _('encryption software')
+        verbose_name = i18n('encryption software')
         verbose_name_plural = verbose_name
         
     
@@ -64,7 +64,7 @@ class LongEmailField(models.CharField):
         Django's default EmailField limits the max length to 75 characters.
     '''
     default_validators = [validators.validate_email]
-    description = _("Email address")
+    description = i18n("Email address")
 
     def __init__(self, *args, **kwargs):
         kwargs['max_length'] = kwargs.get('max_length', 254)
@@ -117,12 +117,12 @@ class Contact(models.Model):
         
     '''
     
-    email = LongEmailField(_('Email'), blank=False,
-       unique=True, help_text=_('Email address of someone that uses encryption software.'))
+    email = LongEmailField(i18n('Email'), blank=False,
+       unique=True, help_text=i18n('Email address of someone that uses encryption software.'))
 
-    user_name = models.CharField(_('User name'),
+    user_name = models.CharField(i18n('User name'),
        max_length=100, blank=True, null=True,
-       help_text=_('Printable name for the contact. It is not required, but strongly recommended as encryption software often requires it.'))
+       help_text=i18n('Printable name for the contact. It is not required, but strongly recommended as encryption software often requires it.'))
 
     def save(self, *args, **kwargs):
         # maintain all addresses in lower case
@@ -138,8 +138,8 @@ class Contact(models.Model):
             return '{}'.format(self.email)
 
     class Meta:
-        verbose_name = _('contact')
-        verbose_name_plural = _('contacts')
+        verbose_name = i18n('contact')
+        verbose_name_plural = i18n('contacts')
 
 
 class ContactsCrypto(models.Model):
@@ -177,23 +177,26 @@ class ContactsCrypto(models.Model):
     '''
     
     contact = models.ForeignKey(Contact,
-       help_text=_('Email address.'))
+       help_text=i18n('Email address.'))
     
     encryption_software = models.ForeignKey(EncryptionSoftware,
-       help_text=_('Encryption software used by this contact.'))
+       help_text=i18n('Encryption software used by this contact.'))
 
-    fingerprint = models.CharField(_('Fingerprint'),
+    fingerprint = models.CharField(i18n('Fingerprint'),
        max_length=100, blank=True, null=True,
-       help_text=_("The fingerprint for the contact's public key."))
+       help_text=i18n("The fingerprint for the contact's public key."))
 
-    verified = models.BooleanField(_('Verified?'), default=False,
-       help_text=_('We strongly recommend that you verify this fingerprint in a secure manner, not via email.'))
+    verified = models.BooleanField(i18n('Verified?'), default=False,
+       help_text=i18n('We strongly recommend that you verify this fingerprint in a secure manner, not via email.'))
+    
+    active = models.BooleanField(i18n('Active?'), default=True,
+       help_text=i18n('If True, then the associate key will be used whenever possible. Otherwise, GoodCrypto will ignore the key.'))
     
     def __unicode__(self):
         return '{}: {}'.format(self.contact, self.encryption_software)
 
     class Meta:
-        verbose_name = _("contact's encryption software")
+        verbose_name = i18n("contact's encryption software")
         verbose_name_plural = verbose_name
 
         unique_together = ('contact', 'encryption_software')
@@ -238,41 +241,91 @@ class ContactsPasscode(models.Model):
     EXPIRE_IN_MONTHS = 'm'
     EXPIRE_IN_YEARS = 'y'
     EXPIRATION_CHOICES = (
-    (EXPIRE_IN_DAYS, 'Days'),
-    (EXPIRE_IN_WEEKS, 'Weeks'),
-    (EXPIRE_IN_MONTHS, 'Months'),
-    (EXPIRE_IN_YEARS, 'Years'),)
+      (EXPIRE_IN_DAYS, i18n('Days')),
+      (EXPIRE_IN_WEEKS, i18n('Weeks')),
+      (EXPIRE_IN_MONTHS, i18n('Months')),
+      (EXPIRE_IN_YEARS, i18n('Years')),
+    )
 
     # default time until key expires: 1 year
     DEFAULT_EXPIRATION_TIME = 1
     DEFAULT_EXPIRATION_PERIOD = EXPIRE_IN_YEARS
 
     contacts_encryption = models.OneToOneField(ContactsCrypto,
-       help_text=_('Encryption software used by a contact.'))
+       help_text=i18n('Encryption software used by a contact.'))
 
-    passcode = models.CharField(_('Passcode'),
+    passcode = models.CharField(i18n('Passcode'),
        max_length=constants.PASSCODE_MAX_LENGTH, blank=True, null=True,
-       help_text=_(
+       help_text=i18n(
          'Secret passcode, also known as a passphrase, used with this encryption software. It is recommended that you allow GoodCrypto to create the passcode because it should be long and difficult to remember.'))
 
-    auto_generated = models.BooleanField(_('Auto generate?'), default=True,
-       help_text=_('Add a check mark if you want GoodCrypto to generate a private passcode.'))
+    auto_generated = models.BooleanField(i18n('Auto generate?'), default=True,
+       help_text=i18n('Add a check mark if you want GoodCrypto to generate a private passcode.'))
     
-    expires_in = models.PositiveSmallIntegerField(_('Expires in'), default=DEFAULT_EXPIRATION_TIME,
-       help_text=_('The quantity of time the key is valid. If set to 0, it never expires which is not recommended.'))
+    expires_in = models.PositiveSmallIntegerField(i18n('Expires in'), default=DEFAULT_EXPIRATION_TIME,
+       help_text=i18n('The quantity of time the key is valid. If set to 0, it never expires which is not recommended.'))
     
     expiration_unit = models.CharField(max_length=1, default=DEFAULT_EXPIRATION_PERIOD, choices=EXPIRATION_CHOICES,
-       help_text=_('The unit of time the key is valid.'))
+       help_text=i18n('The unit of time the key is valid.'))
     
-    last_notified = models.DateTimeField(_('Last notified'), blank=True, null=True,
-       help_text=_('Last date a notice about this key was sent to the user.'))
+    last_notified = models.DateTimeField(i18n('Last notified'), blank=True, null=True,
+       help_text=i18n('Last date a notice about this key was sent to the user.'))
     
     def __unicode__(self):
         return '{}'.format(self.contacts_encryption)
 
     class Meta:
-        verbose_name = _('passcode')
-        verbose_name_plural = _('passcodes')
+        verbose_name = i18n('passcode')
+        verbose_name_plural = i18n('passcodes')
+
+class MessageHistory(models.Model):
+    '''
+        Log of messages that were encrypted or decrypted.
+
+        Each user can verify a message was encrypted before it was sent or it
+        was decrypted by the GoodCrypto server. Users can only see details about
+        messages they sent or received. This eliminates concerns about a message's
+        tag being spoofed by a third party.
+    '''
+    
+    DECRYPTED_MESSAGE_STATUS = 'd'
+    ENCRYPTED_MESSAGE_STATUS = 'e'
+    MESSAGE_STATUS = (
+      (DECRYPTED_MESSAGE_STATUS, i18n('decrypted')),
+      (ENCRYPTED_MESSAGE_STATUS, i18n('encrypted')),
+    )
+    MAX_ENCRYPTION_PROGRAMS = 50
+    MAX_MESSAGE_DATE = 50
+    MAX_MESSAGE_ID = 100
+    MAX_VALIDATION_CODE = 25
+    
+    sender = LongEmailField(i18n('Sender email'), blank=False, unique=False,
+              help_text=i18n('From user email address.'))
+    
+    recipient = LongEmailField(i18n('Recipient email'), blank=False,  unique=False,
+                  help_text=i18n('To user email address.'))
+
+    status = models.CharField(max_length=1, choices=MESSAGE_STATUS,
+       help_text=i18n('Shows whether the message was decrypted or encrypted by your GoodCrypto server.'))
+    
+    encryption_programs = models.CharField(max_length=MAX_ENCRYPTION_PROGRAMS,
+       help_text=i18n('List of encryption software programs used with this message.'))
+
+    message_date = models.CharField(max_length=MAX_MESSAGE_DATE,
+       help_text=i18n("The date from the message header or if there isn't one, then the date when message processed."))
+    
+    message_id = models.CharField(i18n('Message ID'), max_length=MAX_MESSAGE_ID, 
+       help_text=i18n("The ID for the message from the header."))
+    
+    validation_code = models.CharField(i18n('Validation code'), max_length=MAX_VALIDATION_CODE, 
+       help_text=i18n("The special code generated when the message is encrypted/decrypted."))
+    
+    def __unicode__(self):
+        return '{}: {} at {}'.format(self.sender, self.recipient, self.message_date)
+
+    class Meta:
+        verbose_name = i18n('message history')
+        verbose_name_plural = i18n('message history')
 
 class Options(models.Model):
     ''' 
@@ -288,60 +341,64 @@ class Options(models.Model):
     DEFAULT_GOODCRYPTO_LISTEN_PORT = 10025
     DEFAULT_MTA_LISTEN_PORT = 10026
     
-    mail_server_address = models.CharField(_('Mail server address'),
+    mail_server_address = models.CharField(i18n('Mail server address'),
        max_length=100, blank=True, null=True,
-       help_text=_("The address for the domain's mail transport agent (e.g., postfix, sendmail)."))
+       help_text=i18n("The address for the domain's mail transport agent (e.g., postfix, sendmail)."))
     
-    goodcrypto_listen_port = models.PositiveSmallIntegerField(_('MTA inbound port'),
+    goodcrypto_listen_port = models.PositiveSmallIntegerField(i18n('MTA inbound port'),
        default=DEFAULT_GOODCRYPTO_LISTEN_PORT,
-       help_text=_("The port where the goodcrypto mail server listens for messages FROM the MTA."))
+       help_text=i18n("The port where the goodcrypto mail server listens for messages FROM the MTA."))
     
-    mta_listen_port = models.PositiveSmallIntegerField(_('MTA outbound port'),
+    mta_listen_port = models.PositiveSmallIntegerField(i18n('MTA outbound port'),
        default=DEFAULT_MTA_LISTEN_PORT,
-       help_text=_("The port where the MTA listens for messages FROM the the goodcrypto mail server."))
+       help_text=i18n("The port where the MTA listens for messages FROM the the goodcrypto mail server."))
     
-    auto_exchange = models.BooleanField(_('Exchange public keys P2P'), default=True,
-       help_text=_("Automatically exchange public keys P2P. Always include the sender's public key in the header."))
+    auto_exchange = models.BooleanField(i18n('Exchange public keys P2P'), default=True,
+       help_text=i18n("Automatically exchange public keys P2P. Always include the sender's public key in the header."))
     
-    create_private_keys = models.BooleanField(_('Create keys'), default=True,
-       help_text=_("Generate keys for users who don't have one."))
+    create_private_keys = models.BooleanField(i18n('Create keys'), default=True,
+       help_text=i18n("Generate keys for users who don't have one."))
     
-    clear_sign = models.BooleanField(_('Clear sign mail'), default=False,
-       help_text=_("If you elect to clear sign, then all outbound encrypted mail will include the sender's encrypted signature."))
+    clear_sign = models.BooleanField(i18n('Clear sign mail'), default=False,
+       help_text=i18n("If you elect to clear sign, then all outbound encrypted mail will include the sender's encrypted signature."))
     
-    filter_html = models.BooleanField(_('Filter HTML'), default=True,
-       help_text=_("GoodCrypto can remove HTML that may harm your system."))
+    filter_html = models.BooleanField(i18n('Filter HTML'), default=True,
+       help_text=i18n("GoodCrypto can remove HTML that may harm your system."))
 
-    max_message_length = models.PositiveSmallIntegerField(_('Max kilobytes of a message'), default=5120,
-       help_text=_('The maximum size, in K, of encrypted/decrypted messages, including attachments. This helps prevent your mail system from being DOSed.'))
+    max_message_length = models.PositiveIntegerField(i18n('Max kilobytes of a message'), default=500120,
+       help_text=i18n('The maximum size, in K, of encrypted/decrypted messages, including attachments. This helps prevent your mail system from being DOSed.'))
 
     domain = models.CharField(max_length=100, blank=True, null=True)
 
     subscription = models.CharField(max_length=100, blank=True, null=True)
     
-    debugging_enabled = models.BooleanField(_('Enable diagnostic logs'), default=True,
-       help_text=_('Activate logs to help debug unexpected behavior.'))
+    debugging_enabled = models.BooleanField(i18n('Enable diagnostic logs'), default=True,
+       help_text=i18n('Activate logs to help debug unexpected behavior.'))
     
-    require_key_verified = models.BooleanField(_('Require new key verified'), default=False,
-       help_text=_("Do not use a new public key until it is flagged as verified in the database."))
+    require_key_verified = models.BooleanField(i18n('Require verify new keys'), default=False,
+       help_text=i18n("Do not use a new public key until it is flagged as verified in the database."))
     
-    login_to_view_fingerprints = models.BooleanField(_('Require login to view fingerprints'), default=False,
-       help_text=_("Require that a user login to view any fingerprints."))
+    login_to_view_fingerprints = models.BooleanField(i18n('Require login to view fingerprints'), default=False,
+       help_text=i18n("Require that a user login to view any fingerprints."))
     
-    login_to_export_keys = models.BooleanField(_('Require login to export keys'), default=False,
-       help_text=_("Require that a user login to export any public keys."))
+    login_to_export_keys = models.BooleanField(i18n('Require login to export keys'), default=False,
+       help_text=i18n("Require that a user login to export any public keys."))
     
-    add_keys_to_keyservers = models.BooleanField(_('Add keys to public keyservers'), default=False,
-       help_text=_("Add public keys created by GoodCrypto to public keyservers?"))
+    add_keys_to_keyservers = models.BooleanField(i18n('Add keys to public keyservers'), default=False,
+       help_text=i18n("Add public keys created by GoodCrypto to public keyservers?"))
     
-    verify_new_keys_with_keyservers = models.BooleanField(_('Verify new keys with public keyservers'), default=False,
-       help_text=_("Verify new public keys imported with public keyservers?"))
+    verify_new_keys_with_keyservers = models.BooleanField(i18n('Verify new keys with public keyservers'), default=False,
+       help_text=i18n("Verify new public keys imported with public keyservers?"))
+    
+    goodcrypto_server_url = models.CharField(i18n('GoodCrypto server url'), 
+        max_length=100, blank=True, null=True,
+        help_text=i18n("The full url to reach your GoodCrypto server's website, including the port. For example, http://194.10.334.1:8080 or https://194.10.334.1:8443"))
     
     def __unicode__(self):
         return '{}'.format(self.mail_server_address)
 
     class Meta:
-        verbose_name = _('options')
+        verbose_name = i18n('options')
         verbose_name_plural = verbose_name
 post_save.connect(post_save_options, sender=Options)
 

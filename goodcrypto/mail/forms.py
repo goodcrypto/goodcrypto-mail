@@ -1,24 +1,24 @@
 '''
     Mail app forms.
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-25
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from traceback import format_exc
 
 from django import forms
+from django.forms.widgets import HiddenInput
 from django.core.exceptions import ValidationError
-from django.utils.translation import ugettext_lazy as _
-from smtplib import SMTP, SMTP_SSL
 
 from goodcrypto import api_constants
 from goodcrypto.mail import models
-from goodcrypto.mail.options import get_domain
+from goodcrypto.mail.options import get_domain, get_mta_listen_port
 from goodcrypto.mail.utils import email_in_domain, gen_passcode
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils.log_file import LogFile
+from goodcrypto.utils import i18n, is_mta_ok
 from reinhardt.admin_extensions import RequireOneFormSet
 
 _log = LogFile()
@@ -33,7 +33,7 @@ class EncryptionSoftwareForm(forms.ModelForm):
         classname = cleaned_data.get('classname')
         crypto = CryptoFactory.get_crypto(name, classname)
         if not crypto or not crypto.is_available():
-            error_message = _('{encryption} is not available.').format(encryption=name)
+            error_message = i18n('{encryption} is not available.'.format(encryption=name))
             _log.write(error_message)
             raise ValidationError(error_message)
 
@@ -82,7 +82,7 @@ class ContactsPasscodeAdminForm(forms.ModelForm):
             >>> form.clean()
             Traceback (most recent call last):
                 ...
-            ValidationError: [u'kirk@goodcrypto.remote does not use the goodcrypto.local domain so unable to create a private key.']
+            ValidationError: ['kirk@goodcrypto.remote does not use the goodcrypto.local domain so unable to create a private key.']
             >>> contact.delete()
             >>> gpg.delete()
             >>> TESTS_RUNNING = False
@@ -101,7 +101,7 @@ class ContactsPasscodeAdminForm(forms.ModelForm):
             >>> form.clean()
             Traceback (most recent call last):
                 ...
-            ValidationError: [u''You must enter a passcode or add a check mark to "Auto generate" it.']
+            ValidationError: ['You must enter a passcode or add a check mark to "Auto generate" it.']
             >>> contact.delete()
             >>> gpg.delete()
             >>> TESTS_RUNNING = False
@@ -117,8 +117,8 @@ class ContactsPasscodeAdminForm(forms.ModelForm):
         if contacts_encryption is not None and contacts_encryption.contact is not None:
             email = contacts_encryption.contact.email
             if not email_in_domain(email):
-                error_message = _('{email} does not use the {domain} domain so unable to create a private key.').format(
-                    email=email, domain=get_domain())
+                error_message = i18n('{email} does not use the {domain} domain so unable to create a private key.'.format(
+                    email=email, domain=get_domain()))
                 _log.write(error_message)
                 raise ValidationError(error_message)
             else:
@@ -133,7 +133,7 @@ class ContactsPasscodeAdminForm(forms.ModelForm):
             cleaned_data['passcode'] = passcode
 
         if passcode is None or len(passcode.strip()) <= 0:
-            error_message = _('You must enter a passcode or add a check mark to "Auto generate" it.')
+            error_message = i18n('You must enter a passcode or add a check mark to "Auto generate" it.')
             _log.write(error_message)
             raise ValidationError(error_message)
         else:
@@ -156,29 +156,6 @@ class ContactsPasscodeAdminForm(forms.ModelForm):
 
 class OptionsAdminForm(forms.ModelForm):
 
-    def smtp_connection_ok(self, mta, mta_listen_port):
-        '''
-            Try to connect to the MTA via SMTP and SMTP_SSL.
-        '''
-        
-        connection_ok = False
-        try:
-            smtp = SMTP(host=mta, port=mta_listen_port)
-            smtp.quit()
-            connection_ok = True
-        except:
-            connection_ok = False
-
-        if not connection_ok:
-            try:
-                smtp = SMTP_SSL(host=mta, port=mta_listen_port)
-                smtp.quit()
-                connection_ok = True
-            except:
-                connection_ok = False
-            
-        return connection_ok
-
     def clean(self):
         '''Verify there is only 1 general info record.'''
 
@@ -190,20 +167,26 @@ class OptionsAdminForm(forms.ModelForm):
         if domain is not None:
             cleaned_data['domain'] = domain.lower()
         
-        # the MTA IP or domain
+        # the mail_server_address should either be an ip address or a domain
         mail_server_address = cleaned_data.get('mail_server_address')
-        if mail_server_address is not None and len(mail_server_address.strip()) > 0:
-            mta_listen_port = cleaned_data.get('mta_listen_port')
-            if not self.smtp_connection_ok(mail_server_address, mta_listen_port):
-                raise ValidationError(_('Unable to connect to the mail transport agent (MTA) via port {mta_port}.').format(
-                    mta_port=mta_listen_port))
+        if is_mta_ok(mail_server_address):
+            _log.write('mail server address ok')
+            self.cleaned_data['mail_server_address'] = mail_server_address
+        else:
+            del self.cleaned_data['mail_server_address']
+            _log.write('deleted mail server address from cleaned data')
+            
+            error_message = i18n('The mail server address contains one or more bad characters or spaces.')
+            _log.write(error_message)
+            
+            raise forms.ValidationError(error_message, code='invalid')
 
         # if we're adding a record
         if self.adding:
             try:
                 records = models.Options.objects.all()
                 if records and len(records) > 0:
-                    raise ValidationError(_('You may only have one mail options record. Either change the current record or delete it before adding.'))
+                    raise ValidationError(i18n('You may only have one mail options record. Either change the current record or delete it before adding.'))
             except models.Options.DoesNotExist:
                 pass
 
@@ -250,44 +233,69 @@ class ContactsCryptoInlineFormSet(RequireOneFormSet):
 
         _log.write('total good contact encryption programs: {}'.format(good_programs))
         if good_programs < 1:
-            raise ValidationError(_('You must include at least one encryption program for this contact.'))
+            raise ValidationError(i18n('You must include at least one encryption program for this contact.'))
 
-class FingerprintForm(forms.Form):
+class GetFingerprintForm(forms.Form):
     
     email = forms.EmailField(max_length=254,
-       help_text=_('Enter the email address whose fingerprint you want to verify.'),)
+       help_text=i18n('Enter the email address whose fingerprint you want to verify.'),)
     encryption_software = forms.ModelChoiceField(
        queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
-       help_text=_('Select the encryption software for the key.'),)
+       help_text=i18n('Select the encryption software for the key.'),)
 
+
+class VerifyFingerprintForm(forms.Form):
+
+    email = forms.EmailField(max_length=254, widget=HiddenInput,)
+    encryption_name = forms.CharField(max_length=100, widget=HiddenInput,)
+    fingerprint = forms.CharField(max_length=100, widget=HiddenInput,)
+    verified = forms.BooleanField(required=False,
+       help_text=i18n('Add a check mark if you checked the fingerprint is correct for the user.'),)
+
+
+class GetFingerprintForm(forms.Form):
+    
+    email = forms.EmailField(max_length=254,
+       help_text=i18n('Enter the email address whose fingerprint you want to verify.'),)
+    encryption_software = forms.ModelChoiceField(
+       queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
+       help_text=i18n('Select the encryption software for the key.'),)
+
+class VerifyDecryptForm(forms.Form):
+
+    validation_code = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(models.MessageHistory.MAX_VALIDATION_CODE)}),
+       help_text=i18n('Enter the validation code to verify GoodCrypto decrypted your message.'),)
+
+class VerifyEncryptForm(forms.Form):
+
+    message_id = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(models.MessageHistory.MAX_MESSAGE_ID)}),
+       help_text=i18n('Enter the message id to verify GoodCrypto encrypted your message.'),)
 
 class ExportKeyForm(forms.Form):
     
     email = forms.EmailField(max_length=254,
-       help_text=_('Enter the email address whose public key you want exported.'),)
+       help_text=i18n('Enter the email address whose public key you want exported.'),)
     encryption_software = forms.ModelChoiceField(
        queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
-       help_text=_('Select the type of encryption software associated with the key.'),)
+       help_text=i18n('Select the type of encryption software associated with the key.'),)
 
-
+MAX_PUBLIC_KEY_FILEZISE = 500000
 class ImportKeyForm(forms.Form):
     
-    public_key_file = forms.FileField(max_length=500000,
-       help_text=_('Select the file that contains the public key.'),)
+    public_key_file = forms.FileField(max_length=MAX_PUBLIC_KEY_FILEZISE,
+       help_text=i18n('Select the file that contains the public key.'),)
     encryption_software = forms.ModelChoiceField(
        queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
-       help_text=_('Select the type of encryption software associated with the key.'),)
+       help_text=i18n('Select the type of encryption software associated with the key.'),)
     user_name = forms.CharField(max_length=100, required=False,
        help_text='Printable name of the contact in case the key does not contain it. Optional.')
     fingerprint = forms.CharField(max_length=100, required=False,
        help_text="The fingerprint for the contact's public key, if known. Optional.")
 
-
-
 API_Actions = (
     (api_constants.STATUS, api_constants.STATUS), 
     (api_constants.CONFIGURE, api_constants.CONFIGURE),
-    (api_constants.CREATE_USER, api_constants.CREATE_USER),
+    (api_constants.CREATE_SUPERUSER, api_constants.CREATE_SUPERUSER),
     (api_constants.IMPORT_KEY, api_constants.IMPORT_KEY),
     (api_constants.GET_FINGERPRINT, api_constants.GET_FINGERPRINT),
     (api_constants.GET_CONTACT_LIST, api_constants.GET_CONTACT_LIST),
@@ -298,7 +306,7 @@ class APIForm(forms.Form):
     
     action = forms.ChoiceField(required=False, 
        choices=API_Actions,
-       error_messages={'required': _('You must select an action.')})
+       error_messages={'required': i18n('You must select an action.')})
       
     sysadmin = forms.EmailField(required=False)
 

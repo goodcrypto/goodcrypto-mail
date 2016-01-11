@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -56,7 +56,7 @@ class MailAPI(object):
 
                         self.action = cleaned_data.get(api_constants.ACTION_KEY)
                         self.log_message('action: {}'.format(self.action))
-                        if self.action == api_constants.CREATE_USER:
+                        if self.action == api_constants.CREATE_SUPERUSER:
                             self.sysadmin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
                             self.log_message('sysadmin: {}'.format(self.sysadmin))
                         elif self.action == api_constants.CONFIGURE:
@@ -107,14 +107,14 @@ class MailAPI(object):
                 self.log_attempted_access('Attempted GET connection')
                 
                 self.log_message('redirecting api GET request to website')
-                response = HttpResponsePermanentRedirect(api_constants.SYSTEM_API_URL)
+                response = HttpResponsePermanentRedirect('/')
                         
             if response is None:
                 response = self.get_api_response(request, result)
                 
         except:
             self.log_message(format_exc())
-            response = HttpResponsePermanentRedirect(api_constants.SYSTEM_API_URL)
+            response = HttpResponsePermanentRedirect('/')
     
         return response
     
@@ -131,12 +131,12 @@ class MailAPI(object):
                 result = self.format_result(api_constants.CONFIGURE, ok)
                 self.log_message('configure result: {}'.format(result))
 
-            elif self.action == api_constants.CREATE_USER:
+            elif self.action == api_constants.CREATE_SUPERUSER:
                 password, error_message = create_superuser(self.sysadmin)
                 if password is None:
                     result = self.format_bad_result(error_message)
                 else:
-                    result = self.format_message_result(api_constants.CREATE_USER, ok, password)
+                    result = self.format_message_result(api_constants.CREATE_SUPERUSER, ok, password)
                 self.log_message('create user result: {}'.format(result))
 
             elif self.action == api_constants.STATUS:
@@ -199,7 +199,7 @@ class MailAPI(object):
                     ok = True
                     self.log_message('minimum configure data found')
 
-            elif self.action == api_constants.CREATE_USER:
+            elif self.action == api_constants.CREATE_SUPERUSER:
                 if self.has_content(self.sysadmin):
                     ok = True
                     self.log_message('minimum create user data found: {}'.format(self.sysadmin))
@@ -349,7 +349,7 @@ class MailAPI(object):
         '''
 
         if self.log is None:
-            self.log = LogFile('goodcrypto.mail.api.log')
+            self.log = LogFile()
 
-        self.log.write(message)
+        self.log.write_and_flush(message)
 

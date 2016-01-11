@@ -2,7 +2,7 @@
     Manage GoodCrypto Mail's options.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-01-10
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -50,6 +50,10 @@ def get_goodcrypto_listen_port():
     '''
 
     goodcrypto_listen_port = get_options().goodcrypto_listen_port
+    if goodcrypto_listen_port is None:
+        from goodcrypto.mail.models import Options
+
+        goodcrypto_listen_port = Options.DEFAULT_GOODCRYPTO_LISTEN_PORT
 
     return goodcrypto_listen_port
     
@@ -80,6 +84,10 @@ def get_mta_listen_port():
     '''
 
     mta_listen_port = get_options().mta_listen_port
+    if mta_listen_port is None:
+        from goodcrypto.mail.models import Options
+
+        mta_listen_port = Options.DEFAULT_MTA_LISTEN_PORT
 
     return mta_listen_port
     
@@ -99,6 +107,60 @@ def set_mta_listen_port(new_mta_listen_port):
     record.mta_listen_port = new_mta_listen_port
     save_options(record)
 
+
+def get_goodcrypto_server_url():
+    '''
+       Get the url for the goodcrypto server.
+
+       >>> goodcrypto_server_url = get_goodcrypto_server_url()
+       >>> set_goodcrypto_server_url('http://goodcrypto.server:8080')
+       >>> get_goodcrypto_server_url() is not None
+       True
+       >>> set_goodcrypto_server_url('goodcrypto.server:8080')
+       >>> get_goodcrypto_server_url().startswith('http://')
+       True
+       >>> set_goodcrypto_server_url('goodcrypto.server:8443')
+       >>> get_goodcrypto_server_url().startswith('https://')
+       True
+       >>> set_goodcrypto_server_url(goodcrypto_server_url)
+    '''
+
+    goodcrypto_server_url = get_options().goodcrypto_server_url
+    if goodcrypto_server_url and len(goodcrypto_server_url.strip()) > 0:
+        goodcrypto_server_url = goodcrypto_server_url.strip()
+        if not goodcrypto_server_url.startswith('http'):
+            if ':8443' in goodcrypto_server_url:
+                goodcrypto_server_url = 'https://{}'.format(goodcrypto_server_url)
+            else:
+                goodcrypto_server_url = 'http://{}'.format(goodcrypto_server_url)
+        if not goodcrypto_server_url.endswith('/'):
+            goodcrypto_server_url += '/'
+            
+    return goodcrypto_server_url
+
+
+def set_goodcrypto_server_url(new_goodcrypto_server_url):
+    '''
+       Set the url for the goodcrypto server.
+    
+       >>> goodcrypto_server_url = get_goodcrypto_server_url()
+       >>> set_goodcrypto_server_url('http://goodcrypto.server:8080')
+       >>> get_goodcrypto_server_url() is not None
+       True
+       >>> set_goodcrypto_server_url(goodcrypto_server_url)
+    '''
+
+    record = get_options()
+    record.goodcrypto_server_url = new_goodcrypto_server_url
+    save_options(record)
+    
+    try:
+        # until we build an interface to the system's options, we'll maintain info in both db
+        from goodcrypto.system.options import set_goodcrypto_server_url as set_gcs_url
+        
+        set_gcs_url(new_goodcrypto_server_url)
+    except:
+        pass
 
 def auto_exchange_keys():
     '''

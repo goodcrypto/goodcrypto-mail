@@ -1,18 +1,19 @@
 '''
     Mail utilities.
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2015-01-01
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from traceback import format_exc
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 
-from goodcrypto.mail.constants import PASSCODE_MAX_LENGTH
+from goodcrypto.mail.constants import PASSCODE_MAX_LENGTH, PASSWORD_MAX_LENGTH
 from goodcrypto.oce.utils import parse_address
-from goodcrypto.utils import is_program_running
+from goodcrypto.utils import i18n, is_program_running
 from goodcrypto.utils.log_file import LogFile
 
 log = LogFile()
@@ -21,11 +22,17 @@ def get_mail_status():
     '''
         Return whether Mail is running.
 
-        >>> # This test frequently fails, 
+        >>> # This test frequently fails even though all apps are running, 
         >>> # but it never seems to fail in real environment
         >>> get_mail_status()
         True
     '''
+
+    """
+    log.write('is rq_crypto_settings: {}'.format(is_program_running('goodcrypto.mail.rq_crypto_settings')))
+    log.write('is rq_gpg_settings: {}'.format(is_program_running('goodcrypto.oce.rq_gpg_settings')))
+    log.write('is redis: {}'.format(is_program_running('redis')))
+    """
 
     running = (is_program_running('goodcrypto.mail.rq_crypto_settings') and
                is_program_running('goodcrypto.oce.rq_gpg_settings') and
@@ -66,9 +73,9 @@ def email_in_domain(email):
 def gen_passcode(max_length=PASSCODE_MAX_LENGTH):
     ''' 
         Generate a passcode. 
-        
-        >>> passcode = gen_passcode()
-        >>> len(passcode)
+        This will only be used internally so we want as many chars as possible. 
+
+        >>> len(gen_passcode())
         1000
     '''
     
@@ -84,6 +91,49 @@ def gen_passcode(max_length=PASSCODE_MAX_LENGTH):
               pass
     
     return passcode
+
+def gen_password(max_length=PASSWORD_MAX_LENGTH):
+    ''' 
+        Generate a word that a user is likely to use so keep it reasonable. 
+
+        >>> len(gen_password().strip())
+        25
+    '''
+    
+    def char_range(start, stop):
+        return [chr(c) for c in range(ord(start), ord(stop))]
+    
+    # the password must be random, but the characters must be valid for django
+    password = ''
+    
+    goodchars = set()
+    for start, stop in [
+        ('A', 'Z'),
+        ('a', 'z'),
+        ('0', '9'),
+        ]:
+        for c in char_range(start, stop):
+            goodchars.add(c)
+    for c in ['_', '-', '!', '#', '%', '&', '*', '+', '=', ' ']:
+        goodchars.add(c)
+
+    while len(password) < max_length:
+        new_char = os.urandom(1)
+        try:
+            new_char.decode('utf-8')
+            # the character must be a printable character
+            # and the password must not start or end with a space
+            if new_char in goodchars:
+                if (new_char == ' ' and 
+                    (len(password) == 0 or (len(password) + 1) == max_length)):
+                    pass
+                else:
+                    password += new_char
+        except:
+            pass
+
+    return password
+    
 
 def ok_to_modify_key(encryption_name, key_plugin):
     '''
@@ -110,22 +160,25 @@ def ok_to_modify_key(encryption_name, key_plugin):
 
     return ok
 
-def create_superuser(sysadmin, passphrase=None):
+def create_superuser(sysadmin, password=None):
     '''
-        Create a superuser.
+        Create a django superuser.
         
         >>> # In honor of Sergeant Michal, who publicly denounced and refused to serve in operations involving the 
         >>> # occupied Palestinian territories because of the widespread surveillance of innocent residents.
-        >>> passphrase, error_message = create_superuser('michal@goodcrypto.remote')
-        >>> passphrase == None
+        >>> password, error_message = create_superuser('michal@goodcrypto.remote')
+        >>> password == None
         True
         >>> error_message is None
         True
+        >>> __, error_message = create_superuser(None)
+        >>> error_message
+        'Sysadmin is not defined so unable to finish configuration.'
     '''
 
     error_message = None
     if sysadmin is None:
-        error_message = "Sysadmin is not defined so unable to finish configuration."
+        error_message = i18n("Sysadmin is not defined so unable to finish configuration.")
         log.write('sysadmin not defined')
     else:
         try:
@@ -138,15 +191,80 @@ def create_superuser(sysadmin, passphrase=None):
             log.write_and_flush('{} user(s) already exist'.format(len(users)))
         else:
             try:
-                if passphrase is None:
-                    # create a passphrase
-                    passphrase = gen_passcode(max_length=24)
+                if password is None:
+                    # create a password
+                    password = gen_passcode(max_length=24)
 
-                user = User.objects.create_superuser(sysadmin, sysadmin, passphrase)
-                log.write_and_flush('user: {}'.format(user))
+                user = User.objects.create_superuser(sysadmin, sysadmin, password)
+                log.write_and_flush('created superuser: {}'.format(user))
             except:
-                error_message = 'Unable to add a sysadmin user.'
+                error_message = i18n('Unable to add a sysadmin user.')
                 log.write_and_flush(format_exc())
     
-    return passphrase, error_message
+    return password, error_message
+
+def create_user(email):
+    '''
+        Create a regular django user.
+        
+        >>> __, error_message = create_user(None)
+        >>> error_message
+        'Email is not defined so unable to finish configuration.'
+    '''
+
+    password = error_message = None
+    if email is None:
+        error_message = i18n("Email is not defined so unable to finish configuration.")
+        log.write('email not defined')
+    else:
+        try:
+            users = User.objects.filter(username=email)
+        except:
+            users = []
+            log.write(format_exc())
+
+        if len(users) > 0:
+            log.write_and_flush('{} user(s) already exist'.format(len(users)))
+        else:
+            try:
+                # create a password
+                password = str(gen_password(max_length=24))
+
+                user = User.objects.create_user(email, email, password)
+                log.write_and_flush('created user: {}'.format(user))
+            except:
+                error_message = i18n('Unable to add a regular user for {email}.'.format(email=email))
+                log.write_and_flush(format_exc())
+    
+    return password, error_message
+
+def authenticate_user(email, password):
+    '''
+        Authenticate a django user.
+
+        >>> __, __, error_message = authenticate_user(None, None)
+        >>> error_message
+        'Email or password are not defined so unable to authenticate user.'
+    '''
+
+    ok = False
+    user = error_message = None
+    if email is None or password is None:
+        error_message = i18n("Email or password are not defined so unable to authenticate user.")
+        log.write(error_message)
+    else:
+        user = authenticate(username=email, password=password)
+        if user is not None:
+            # the password verified for the user
+            if user.is_active:
+                ok = True
+                log.write("{} is valid, active and authenticated".format(email))
+            else:
+                error_message = i18n("The {} account has been disabled.".format(email))
+                log.write(error_message)
+        else:
+            # the authentication system was unable to verify the username and password
+            error_message = i18n("The email and password do not match the previously configured account.")
+
+    return ok, user, error_message
 

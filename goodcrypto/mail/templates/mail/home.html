@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% comment %}
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-06
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-02-22
     
 {% endcomment %}
 {% load i18n custom %}
@@ -26,16 +26,102 @@
         </h3> 
     </div>
     
-    <div class="col-md-12">
+    <div class="col-md-12 col-xm-6">
         <div class="row">&nbsp;</div>
-        {% include 'mail/snippets/mail_options.html' %}
-        
+        <div class="table-responsive">
+            <table class="table" cellpadding="10">
+                <tr>
+                    <th>
+                        {% trans 'Messages received securely' %} 
+                    </th>
+                    <td>
+                        <a href="/mail/verify_decrypted/" title="{% trans 'Verify a message was decrypted by your GoodCrypto Server.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% trans 'Verify' %}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+                        </a>
+                    </td>
+                    </td>
+                    <td>
+                        <a href="/mail/show_decrypted_history/" title="{% trans 'Show summary of the messages to you decrypted.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Show all' %}&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        &nbsp;
+                    </td>
+                </tr>
+                <tr>
+                    <th>
+                        {% trans 'Messages sent securely' %} 
+                    </th>
+                    <td>
+                        <a href="/mail/verify_encrypted/" title="{% trans 'Verify a message was encrypted from you.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% trans 'Verify' %}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+                        </a>
+                    </td>
+                    </td>
+                    <td>
+                        <a href="/mail/show_encrypted_history/" title="{% trans 'Show summary of the messages from you encrypted.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Show all' %}&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        &nbsp;
+                    </td>
+                </tr>
+                <tr>
+                    <th>
+                        {% trans 'Keys' %} 
+                    </th>
+                    <td>
+                        <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint of a contact.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Fingerprint' %}&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        <a href="/mail/export_key/" title="{% trans 'View the public key for a user.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;&nbsp;&nbsp;{% trans 'Export' %}&nbsp;&nbsp;&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Import' %}&nbsp;</button>
+                        </a>
+                    </td>
+                </tr>
+                <tr>
+                    <th>
+                        {% trans 'Sysadmin' %} 
+                    </th>
+                    <td>
+                        <a href="/admin/mail/options/1/" title="{% trans 'Manage options for encrypting/decrypting mail.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% trans 'Options' %}&nbsp;&nbsp;&nbsp;&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        <a href="/admin/mail/contact/" title="{% trans 'Show the contacts who have keys. Manually create private keys for users.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Contacts' %}&nbsp;</button>
+                        </a>
+                    </td>
+                    <td>
+                        <a href="/admin/auth/user/" title="{% trans 'Manage users who can check on which messages were exchanged privately.' %}">
+                            <button type="button" class="btn btn-primary">&nbsp;&nbsp;&nbsp;{% trans 'Users' %}&nbsp;&nbsp;&nbsp;</button>
+                        </a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="row">
         {% if mta %}
             {% if mta == '127.0.0.1' or mta == 'localhost' %}
                 <div class="row">&nbsp;</div>
                 <div class="row">
-                    Warning: Your MTA configured for the local machine ({{ mta }}). If this isn't correct,
-                    then <a href="/admin/mail/">change the Options</a>.
+                    {% blocktrans %}
+                    Warning: Your MTA is configured for the local machine at ({{ mta }}). 
+                    We strongly recommend that you use a different computer for your MTA and your GoodCrypto server.
+                    You can change the MTA address in the  <a href="/admin/mail/options/1/">Options</a>.
+                    {% endblocktrans %}
                 </div>
             {% endif %}
         {% endif %}
