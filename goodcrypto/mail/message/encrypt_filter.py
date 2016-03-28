@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,20 +15,20 @@ from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, contacts_passcodes, options
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
 from goodcrypto.mail.crypto_software import get_classname, get_key_classname
-from goodcrypto.mail.message import mime_constants, utils
+from goodcrypto.mail.message import utils
 from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
-from goodcrypto.mail.message.history import add_encrypted_record
+from goodcrypto.mail.message.history import add_encrypted_record, gen_validation_code
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.mime_constants import DATE_KEYWORD, MESSAGE_ID_KEYWORD
-from goodcrypto.mail.message.utils import get_charset, get_message_id
+from goodcrypto.mail.message.utils import add_private_key
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from goodcrypto.oce.utils import parse_address
 from goodcrypto.utils import i18n
+from syr import mime_constants
 
 
 
@@ -56,7 +56,8 @@ class EncryptFilter(CryptoFilter):
     PASSCODE_KEYWORD = 'passcode'
     CHARSET_KEYWORD = 'charset'
     
-    UNABLE_TO_ENCRYPT = "Error while trying to encrypt message from {from_email} to {to_email} using {encryption}"
+    ENCRYPTION_VALIDATION_CODE = '\n\n{}'.format(i18n('GoodCrypto encryption validation code: {validation_code}'))
+    UNABLE_TO_ENCRYPT = i18n("Error while trying to encrypt message from {from_email} to {to_email} using {encryption}")
     POSSIBLE_ENCRYPT_SOLUTION = i18n("Report this error to your sysadmin.")
 
     def __init__(self):
@@ -69,6 +70,7 @@ class EncryptFilter(CryptoFilter):
         super(EncryptFilter, self).__init__()
         
         self.log = LogFile()
+        self.validation_code = None
 
 
     def crypt_from_to(self, crypto_message, from_user, to_user):
@@ -99,6 +101,10 @@ class EncryptFilter(CryptoFilter):
                 if options.auto_exchange_keys():
                     # add the public key so the receiver can use crypto in the future
                     crypto_message.add_public_key_to_header(from_user)
+                # if we're not exchange keys, but we are creating them, then do so now
+                elif options.create_private_keys():
+                    add_private_key(from_user)
+
                 crypto_message.set_filtered(True)
             else:
                 try:
@@ -145,12 +151,15 @@ class EncryptFilter(CryptoFilter):
         encrypted_with = []
         encrypted_classnames = []
         self.log_message("using {} encryption software".format(encryption_names))
+        self.validation_code = gen_validation_code()
+        self.log_message("validation code: {}".format(self.validation_code))
+    
         for encryption_name in encryption_names:
             encryption_classname = get_key_classname(encryption_name)
             if encryption_classname not in encrypted_classnames:
                 try:
                     if options.require_key_verified():
-                        __, key_ok = contacts.get_fingerprint(to_user, encryption_name)
+                        __, key_ok, __ = contacts.get_fingerprint(to_user, encryption_name)
                         self.log_message("{} {} key verified: {}".format(to_user, encryption_name, key_ok))
                     else:
                         key_ok = True
@@ -180,10 +189,11 @@ class EncryptFilter(CryptoFilter):
                     self.POSSIBLE_ENCRYPT_SOLUTION)
 
         else:
-            message_id = get_message_id(crypto_message.get_email_message())
-            message_date = crypto_message.get_email_message().get_header(DATE_KEYWORD)
+            message_id = utils.get_message_id(crypto_message.get_email_message())
+            message_date = crypto_message.get_email_message().get_header(mime_constants.DATE_KEYWORD)
             add_encrypted_record(
-              from_user, to_user, encrypted_with, message_id, message_date=message_date)
+              from_user, to_user, encrypted_with, message_id, message_date=message_date,
+              validation_code=self.validation_code)
             self.log_message('added encrypted history record')
 
         if fatal_error:
@@ -200,7 +210,6 @@ class EncryptFilter(CryptoFilter):
         '''
 
         def prep_crypto_details(init_result):
-            ids = user_ids
             result_ok = init_result
 
             if result_ok:
@@ -211,14 +220,15 @@ class EncryptFilter(CryptoFilter):
             if from_user_id is None:
                 # add a key if there isn't one for the sender and we're creating keys
                 if options.create_private_keys():
-                    crypto_message.create_private_key(encryption_name, from_user)
+                    add_private_key(from_user, encryption_software=encryption_name)
                 else:
                     self.log_message("not creating a new {} key for {} because auto-create disabled".format(
                         encryption_name, from_user_id))
             else:
                 self.log_message('found matching user id: {}'.format(from_user_id))
+            self.log_message('prep_crypto_details result: {}'.format(result_ok))
 
-            return ids, result_ok
+            return result_ok
 
         def get_error_message(users_dict, encryption_name):
             to_user = users_dict[self.TO_KEYWORD]
@@ -266,7 +276,7 @@ class EncryptFilter(CryptoFilter):
                 result_ok = private_user_ids is not None and len(private_user_ids) > 0
                 if result_ok or options.create_private_keys():
 
-                    user_ids, result_ok = prep_crypto_details(result_ok)
+                    result_ok = prep_crypto_details(result_ok)
 
                     users_dict, result_ok = self._get_crypto_details(
                        crypto_message, encryption_name, from_user, to_user, user_ids)
@@ -325,13 +335,15 @@ class EncryptFilter(CryptoFilter):
         if crypto_message is None or crypto_message.get_email_message() is None:
             charset = 'UTF-8'
         else:
-            charset, __ = get_charset(crypto_message.get_email_message().get_message())
+            charset, __ = utils.get_charset(crypto_message.get_email_message().get_message())
 
         users_dict = {self.FROM_KEYWORD: from_user_id, 
                       self.TO_KEYWORD: to_user_id, 
                       self.PASSCODE_KEYWORD: passcode,
                       self.CHARSET_KEYWORD: charset}
 
+        self.log_message('got crypto details and ready to encrypt: {}'.format(ready_to_encrypt))
+        
         return users_dict, ready_to_encrypt
 
 
@@ -424,7 +436,7 @@ class EncryptFilter(CryptoFilter):
             address_content = ''
             
         if utils.is_multipart_message(email_message):
-            addresses_added_to_text = addresses_added_to_html = False
+            addresses_added_to_text = addresses_added_to_html = added_validation_code = False
             for part in email_message.walk():
                 content_type = part.get_content_type()
                 if addresses_added_to_text and addresses_added_to_html:
@@ -442,12 +454,21 @@ class EncryptFilter(CryptoFilter):
                         addresses_added_to_text = True
                         content = '{}{}'.format(address_content, content)
 
+                '''
+                # adding the validation code to a message makes it a bit confusing -- needs more thought
+                if not added_validation_code:
+                    content += self.ENCRYPTION_VALIDATION_CODE.format(validation_code=self.validation_code)
+                    added_validation_code = True
+                '''
+
                 result_ok = encrypt_text_part(content, crypto_message, crypto, users_dict)
                 if not result_ok:
                     break
         else:
             final_content = '{}{}'.format(address_content, email_message.get_content())
             if self.DEBUGGING: self.log_message("  content:\n{!s}".format(final_content))
+            # adding the validation code to a message makes it a bit confusing -- needs more thought
+            # final_content += self.ENCRYPTION_VALIDATION_CODE.format(validation_code=self.validation_code)
             
             result_ok = encrypt_text_part(final_content, crypto_message, crypto, users_dict)
     
@@ -490,7 +511,7 @@ class EncryptFilter(CryptoFilter):
                MIMEApplication(ciphertext, mime_constants.OCTET_STREAM_SUB_TYPE, encode_7or8bit))
     
             boundary = 'Part{}{}--'.format(random(), random())
-            charset, __ = get_charset(crypto_message.get_email_message().get_message())
+            charset, __ = utils.get_charset(crypto_message.get_email_message().get_message())
             params = {mime_constants.PROTOCOL_KEYWORD:mime_constants.PGP_TYPE,
                       mime_constants.CHARSET_KEYWORD:charset,}
             msg = MIMEMultipart(mime_constants.ENCRYPTED_SUB_TYPE, boundary, parts, **params)

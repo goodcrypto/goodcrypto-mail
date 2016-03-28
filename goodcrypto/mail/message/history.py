@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
     Copyright 2015 GoodCrypto.
-    Last modified: 2015-02-16
+    Last modified: 2015-03-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -46,11 +46,12 @@ def get_encrypted_message_status():
     return description
 
 
-def add_encrypted_record(sender, recipient, encryption_programs, message_id, message_date=None):
+def add_encrypted_record(sender, recipient, encryption_programs, message_id, message_date=None, validation_code=None):
     ''' Add the encrypted message's record. '''
     
     return add_record(sender, recipient, encryption_programs, 
-                      message_id, message_date, MessageHistory.ENCRYPTED_MESSAGE_STATUS)
+                      message_id, message_date, MessageHistory.ENCRYPTED_MESSAGE_STATUS,
+                      validation_code=validation_code)
 
 def add_decrypted_record(sender, recipient, encryption_programs, message_id, validation_code, message_date=None):
     ''' Add the decrypted message's summary details. '''

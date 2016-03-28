@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-27
+    Last modified: 2015-04-15
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -13,22 +13,22 @@ from traceback import format_exc
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, options
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
-from goodcrypto.mail.message import decrypt_utils, mime_constants, utils
+from goodcrypto.mail.message import decrypt_utils, utils
 from goodcrypto.mail.message.constants import PGP_ENCRYPTED_CONTENT_TYPE
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.header_keys import HeaderKeys
 from goodcrypto.mail.message.history import add_decrypted_record, gen_validation_code
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.mime_constants import DATE_KEYWORD
-from goodcrypto.mail.message.notices import notify_user
-from goodcrypto.mail.message.utils import get_message_id
+from goodcrypto.mail.message.utils import add_private_key, get_message_id
 from goodcrypto.mail.utils import email_in_domain, parse_address
 from goodcrypto.mail.utils.exception_log import ExceptionLog
+from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from goodcrypto.utils import i18n
+from syr import mime_constants
 from syr.html import firewall_html
 from syr.timestamp import Timestamp
 
@@ -50,7 +50,7 @@ class DecryptFilter(CryptoFilter):
         See the unit tests to see how to use the DecryptFilter class.
     '''
 
-    DEBUGGING = True
+    DEBUGGING = False
     USE_ANALYZER = False
 
     #  the encrypted content is the second part; indexing starts at 0
@@ -122,7 +122,9 @@ class DecryptFilter(CryptoFilter):
                         filtered = True
                     decrypted = False
                     self.log_message("message doesn't appear to be encrypted")
-    
+
+                    add_private_key(to_user)
+                        
             self.log_message('  final status: filtered: {} decrypted: {}'.format(filtered, decrypted))
 
         return filtered, decrypted
@@ -148,7 +150,7 @@ class DecryptFilter(CryptoFilter):
                 elif email_in_domain(to_user) and options.create_private_keys():
                     self.crypto_message.add_tag_once(
                       i18n('{email} does not have a matching key to decrypt the message'.format(email=to_user)))
-                    self.crypto_message.create_private_key(encryption_software, to_user)
+                    add_private_key(to_user, encryption_software=encryption_software)
                     self.log_message("started to create a new {} key for {}".format(encryption_software, to_user))
                 else:
                     self.log_message("no encryption software for {}".format(to_user))
@@ -254,7 +256,7 @@ class DecryptFilter(CryptoFilter):
         if decrypted:
             validation_code = gen_validation_code()
             message_id = get_message_id(self.crypto_message.get_email_message())
-            message_date = self.crypto_message.get_email_message().get_header(DATE_KEYWORD)
+            message_date = self.crypto_message.get_email_message().get_header(mime_constants.DATE_KEYWORD)
             add_decrypted_record(
               from_user, to_user, decrypted_with, message_id, validation_code, message_date=message_date)
             self.log_message('added decrypted record')
@@ -280,7 +282,7 @@ class DecryptFilter(CryptoFilter):
             self.crypto_message.add_tag_once(tag)
         else:
             # make sure that the key for the recipient is ok; if it's not, a CryptoException is thrown
-            __, verified = contacts.is_key_ok(to_user, encryption_name)
+            __, verified, __ = contacts.is_key_ok(to_user, encryption_name)
             self.log_message('{} {} key pinned'.format(to_user, encryption_name))
             self.log_message('{} {} key verified: {}'.format(to_user, encryption_name, verified))
 
@@ -441,7 +443,7 @@ class DecryptFilter(CryptoFilter):
                     # assume the key is ok unless it's required to be verified before we use it
                     key_ok = not options.require_key_verified()
                     if not key_ok:
-                        __, key_ok = contacts.get_fingerprint(signed_by_addr, crypto.get_name())
+                        __, key_ok, __ = contacts.get_fingerprint(signed_by_addr, crypto.get_name())
 
                     if key_ok:
                         tag = '{}{}'.format(

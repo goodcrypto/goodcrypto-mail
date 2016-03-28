@@ -3,7 +3,7 @@
     the encryption databases (i.e., keyrings).
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-18
+    Last modified: 2015-04-13
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,10 +12,10 @@ from base64 import b64decode, b64encode
 from traceback import format_exc
 
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software
-from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.options import get_domain, get_goodcrypto_server_url
 from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
 from goodcrypto.mail.utils import email_in_domain, gen_passcode, ok_to_modify_key, create_user
+from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.mail.utils.queues import remove_queue_semaphore
 from goodcrypto.oce import constants as oce_constants
 from goodcrypto.oce.key.constants import EXPIRES_IN, EXPIRATION_UNIT
@@ -295,17 +295,17 @@ class SyncDbKey(object):
                 if self.result_ok:
                     self.new_key = True
                     self.log.write_and_flush('created {} key for {}'.format(self.crypto_name, self.email))
-                    body = i18n("Anyone with PGP can now send you private mail. Other GoodCrypto users don't have to do anything. Other PGP user just need to get your key and import it.")
-                    url = get_goodcrypto_server_url()
-                    if url is not None and len(url) > 0:
-                        body += '\n\n'
-                        body += i18n(
-                          'You can export your public key and view its fingerprint at: {}/mail/'.format(url))
-                    else:
-                        body += '\n\n'
-                        body += i18n(
-                            "Learn more: https://goodcrypto.com/qna/knowledge-base/export-public-key")
-                    notify_user(self.email, i18n('GoodCrypto - You can now receive private mail'), body)
+                    subject = i18n('GoodCrypto - You can now receive private mail')
+                    
+                    body = i18n('You can now receive private mail from anyone using PGP.')
+                    body += '\n\n'
+                    body += i18n(
+                          "Other GoodCrypto users don't have to do anything.")
+                    body += ' '
+                    body += i18n(
+                       'Other PGP users need to exchange keys with you. Learn more: https://goodcrypto.com/qna/knowledge-base/export-public-key')
+                    body += '\n'
+                    notify_user(self.email, subject, body)
                 elif timed_out:
                     self.log.write_and_flush('timed out creating a private {} key for {}.'.format(
                         self.crypto_name, self.email))
@@ -348,19 +348,33 @@ class SyncDbKey(object):
                 self.log.write_and_flush('notified {} about error: {}'.format(self.email, error_message))
     
             else:
-                subject = i18n('GoodCrypto - You can now check if a message was private')
-                line1 = i18n("GoodCrypto adds a tag to the bottom of all messages it decrypts for you.")
-                line2 = i18n("Of course, that tag could be spoofed (i.e., added by somone other than GoodCrypto) to make you think the message was exchanged privately when it wasn't.")
-                line3 = i18n("You can now login to your GoodCrypto Server to check if messages were exchanged privately.")
-                line4 = i18n('Use the following credentials:')
-                line5 = i18n('Email: {}'.format(self.email))
-                line6 = i18n('Password: {}'.format(password))
-                body = '{line1} {line2}\n\n{line3} {line4}\n   {line5}\n   {line6}\n'.format(
-                    line1=line1, line2=line2, line3=line3, line4=line4, line5=line5, line6=line6)
+                subject = i18n('GoodCrypto - You can now check if a message arrived privately')
+                line1 = i18n(
+                    'Your sysadmin has installed GoodCrypto to protect your email.')
+                line2 = i18n(
+                    'You will see a GoodCrypto tag on every message.' +
+                    ' The tag tells you whether it arrived privately.')
+                line3 = i18n("It's not likely, but that tag might be faked.")
 
+                verify_private_msg = i18n('You can verify a private message is genuine.')
                 url = get_goodcrypto_server_url()
+                # if we know the private url
                 if url is not None and len(url.strip()) > 0:
-                    body += '   {}\n'.format(i18n('GoodCrypto Server: {}'.format(url)))
+                    simply_click = i18n('Simply click on the link in the tag.')
+                    line4 = '{} {}\n'.format(verify_private_msg, simply_click)
+                else:
+                    sign_in = i18n('1) Sign in to your GoodCrypto private server')
+                    click_mail = i18n('2) Click "Mail"')
+                    click_verify = i18n('3) Click "Verify decrypted"')
+                    enter_code = i18n('4) Enter the validation code.')
+                    line4 = '{}\n   {}\n   {}\n   {}\n   {}\n'.format(
+                       verify_private_msg, sign_in, click_mail, click_verify, enter_code)
+                    
+                line5 = i18n('Use the following credentials:')
+                line6 = i18n('    Username: {email}'.format(email=self.email))
+                line7 = i18n('    Password: {password}'.format(password=password))
+                body = '{line1}\n\n{line2}\n\n{line3} {line4}\n\n{line5}\n   {line6}\n   {line7}\n'.format(
+                    line1=line1, line2=line2, line3=line3, line4=line4, line5=line5, line6=line6, line7=line7)
                 notify_user(self.email, subject, body)
                 self.log.write_and_flush('notified {} about new django account'.format(self.email))
     

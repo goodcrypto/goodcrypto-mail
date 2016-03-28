@@ -1,11 +1,10 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-11
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-
-import os, time
+import os
 from email.message import Message
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -14,15 +13,16 @@ from hashlib import sha224
 from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail import crypto_software
-from goodcrypto.mail.message import mime_constants
+from goodcrypto.mail import crypto_software, options
+from goodcrypto.mail.contacts_passcodes import create_passcode
 from goodcrypto.mail.message.constants import DEFAULT_CHAR_SET, PUBLIC_KEY_HEADER, TAGLINE_DELIMITER
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.mime_constants import MESSAGE_ID_KEYWORD
+from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.mail.utils.dirs import get_test_directory
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.utils import parse_address
+from syr import mime_constants
 
 DEBUGGING = False
 
@@ -43,23 +43,13 @@ def get_message_id(email_message):
     message_id = None
     try:
         if email_message is not None:
-            message_id = email_message.get_header(MESSAGE_ID_KEYWORD)
+            message_id = email_message.get_header(mime_constants.MESSAGE_ID_KEYWORD)
         if message_id is not None:
             message_id = message_id.strip().strip('<').strip('>')
     except:
         log_message(format_exc())
 
     return message_id
-
-def get_current_timestamp():
-    '''
-        Get the current time with the standard message format.
-        
-        >>> get_current_timestamp() is not None
-        True
-    '''
-    
-    return time.strftime('%a, %e %h %Y %T %Z', time.gmtime())
 
 def get_hashcode(message):
     '''
@@ -687,6 +677,36 @@ def get_public_key_header_name(encryption_name):
         header_name = PUBLIC_KEY_HEADER
         
     return header_name
+
+def add_private_key(email, encryption_software=None):
+    '''
+        Add a private key if it doesn't exist.
+
+        Creating a key takes minutes so a separate process handles it so no return code.
+
+        >>> add_private_key(None)
+    '''
+    
+    try:
+        # only add private keys for members of the domain
+        if email_in_domain(email):
+            if options.create_private_keys():
+                if encryption_software is None:
+                    encryption_software = CryptoFactory.DEFAULT_ENCRYPTION_NAME
+                encryption_software_list = get_encryption_software(email)
+                # if no crypto for a member and we're creating keys, then do so now
+                if encryption_software_list is None or len(encryption_software_list) <= 0:
+                    log_message('creating private {} key for {}'.format(encryption_software, email))
+                    create_passcode(email, encryption_software)
+                else:
+                    log_message('{} already has {} crypto software defined'.format(email, len(encryption_software_list)))
+            else:
+                log_message('creating private key disabled so no key created for {}'.format(email))
+        else:
+            log_message('{} not a member of {}'.format(email, options.get_domain()))
+
+    except Exception:
+        log_message(format_exc())
 
 def set_tagline_delimiter(delimiter):
     '''

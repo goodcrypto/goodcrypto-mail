@@ -30,12 +30,13 @@
     </pre>
 
     Copyright 2014 GoodCrypto.
-    Last modified: 2014-12-31
+    Last modified: 2015-04-13
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from datetime import datetime, timedelta
 from traceback import format_exc
+from django.db.models.query import QuerySet
 
 from goodcrypto.mail import contacts
 from goodcrypto.mail.crypto_software import get_key_classname
@@ -129,6 +130,11 @@ def get(email, encryption_name):
         if contacts_encryption is None:
             log_message("{} does not have a {} encryption record".format(email, encryption_name))
         else:
+            if isinstance(contacts_encryption, QuerySet):
+                try:
+                    contacts_encryption = contacts_encryption[0]
+                except:
+                    log_message(format_exc())
             log_message("getting {} private key record for {} ({})".format(
                 encryption_name, email, contacts_encryption.fingerprint))
             contacts_passcode = ContactsPasscode.objects.get(contacts_encryption=contacts_encryption)

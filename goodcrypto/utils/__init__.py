@@ -2,7 +2,7 @@
     GoodCrypto utilities.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-25
+    Last modified: 2015-04-15
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,6 +11,7 @@ from socket import inet_pton, AF_INET, AF_INET6
 from traceback import format_exc
 from django.utils.translation import ugettext
 
+from syr.net import hostaddress
 from syr.utils import trim
 from syr.log import get_log
 
@@ -119,26 +120,22 @@ def is_program_running(search_string):
         log('psgrep_result: {}'.format(psgrep_result))
         log('exit code: {}'.format(psgrep_result.exit_code))
         log('stdout: {}'.format(psgrep_result.stdout))
-    except sh.ErrorReturnCode as e:
-        running = False
-        log('got sh error while searching for: {}{}'.format(search_string, e))
-    else:
         running = (psgrep_result.exit_code == 0) and (psgrep_result.stdout != '')
+    except sh.ErrorReturnCode:
+        running = False
+        log('psgrep unable to find {}'.format(search_string))
+    except:
+        running = False
+        log(format_exc())
     log('{} is running: {}'.format(search_string, running))
 
     return running
-
 
 def is_mta_ok(mail_server_address):
     '''
         Verify the MTA is ok.
         
-        >>> is_mta_ok('goodcrypto.local')
-        True
-        >>> is_mta_ok('127.0.0.1')
-        True
-        >>> is_mta_ok('goodcrypto local')
-        False
+        Test extreme cases
         >>> is_mta_ok(None)
         False
     '''
@@ -195,6 +192,37 @@ def is_mta_ok(mail_server_address):
 
     return ok
 
+def get_ip_address(request=None):
+    ''' Get the ip address from the request or return None. '''
+
+    ip_address = None
+    try:
+        ip_address = hostaddress()
+        if (ip_address is None or 
+            ip_address == '127.0.0.1' or 
+            ip_address == '10.0.2.2' or 
+            ip_address == '10.0.2.15'):
+            if request and 'HTTP_X_REAL_IP' in request.META:
+                ip_address = request.META['HTTP_X_REAL_IP']
+            elif request and 'HTTP_X_FORWARDED_FOR' in request.META:
+                ip_address = request.META['HTTP_X_FORWARDED_FOR']
+            else:
+                ip_address = None
+
+        if ip_address == '127.0.0.1' or ip_address == '10.0.2.2' or ip_address == '10.0.2.15':
+            ip_address = None
+
+        if request and 'HTTP_X_REAL_IP' in request.META:
+            log('x-real-ip address: {}'.format(request.META['HTTP_X_REAL_IP']))
+        if request and 'HTTP_X_FORWARDED_FOR' in request.META:
+            log('x-forwarded-for address: {}'.format(request.META['HTTP_X_FORWARDED_FOR']))
+    except:
+        log(format_exc())
+
+    log('ip address: {}'.format(ip_address))
+
+    return ip_address
+
 def i18n(raw_message):
     ''' 
         Convert a raw message to an internationalized string.
@@ -207,11 +235,16 @@ def i18n(raw_message):
         'Test with variable: test variable'
     '''
     
-    unicode_message = ugettext(raw_message)
     try:
-        message = '{}'.format(unicode_message)
+        unicode_message = ugettext(raw_message)
+        try:
+            message = '{}'.format(unicode_message)
+        except:
+            message = unicode_message
+            log(format_exc())
+            log('trying to internationalize: {}'.format(raw_message))
     except:
-        message = unicode_message
+        message = raw_message
         log(format_exc())
         log('trying to internationalize: {}'.format(raw_message))
         

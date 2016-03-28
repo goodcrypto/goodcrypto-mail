@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-18
+    Last modified: 2015-04-10
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,12 +9,12 @@ from traceback import format_exc
 
 from goodcrypto.mail import contacts, crypto_software
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
-from goodcrypto.mail.message import mime_constants, utils
+from goodcrypto.mail.message import utils
 from goodcrypto.mail.message.constants import PUBLIC_KEY_HEADER
-from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.message.utils import get_hashcode
 from goodcrypto.mail.options import require_key_verified
 from goodcrypto.mail.utils.exception_log import ExceptionLog
+from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import parse_address, format_fingerprint, strip_fingerprint
 from goodcrypto.utils import i18n
@@ -157,7 +157,7 @@ class HeaderKeys(object):
 
         if from_user in user_ids:
             #  see if we already have a key for this ID or if it has expired
-            saved_fingerprint, verified = contacts.get_fingerprint(from_user, encryption_name)
+            saved_fingerprint, verified, __ = contacts.get_fingerprint(from_user, encryption_name)
             crypto_fingerprint, expiration = key_crypto.get_fingerprint(from_user)
             
             self.log_message("{} {} saved fingerprint {}".format(from_user, encryption_name, saved_fingerprint))

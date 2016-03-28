@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-28
+    Last modified: 2015-04-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -189,9 +189,9 @@ class ContactsCrypto(models.Model):
     verified = models.BooleanField(i18n('Verified?'), default=False,
        help_text=i18n('We strongly recommend that you verify this fingerprint in a secure manner, not via email.'))
     
-    active = models.BooleanField(i18n('Active?'), default=True,
-       help_text=i18n('If True, then the associate key will be used whenever possible. Otherwise, GoodCrypto will ignore the key.'))
-    
+    active = models.BooleanField(i18n('Use key to encrypt?'), default=True,
+       help_text=i18n('If there is *not* a check mark, GoodCrypto will send plain text messages to this user even though there is a key.'))
+
     def __unicode__(self):
         return '{}: {}'.format(self.contact, self.encryption_software)
 
@@ -399,6 +399,6 @@ class Options(models.Model):
 
     class Meta:
         verbose_name = i18n('options')
-        verbose_name_plural = verbose_name
+        verbose_name_plural = i18n('options')
 post_save.connect(post_save_options, sender=Options)
 

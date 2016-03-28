@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-04-15
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,15 +9,18 @@ from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail import contacts, contacts_passcodes, crypto_software, options
-from goodcrypto.mail.message import mime_constants, utils
-from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, PUBLIC_KEY_HEADER
+from goodcrypto.mail.message import utils
+from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, PUBLIC_KEY_HEADER, PUBLIC_FINGERPRINT_HEADER
 from goodcrypto.mail.message.crypto_filter import CryptoFilter
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.message.utils import add_private_key
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
+from goodcrypto.oce.utils import format_fingerprint
+from syr import mime_constants
 
 
 class CryptoMessage(object):
@@ -111,15 +114,15 @@ class CryptoMessage(object):
             encryption_software_list = utils.get_encryption_software(from_user)
             
             # if no crypto and we're creating keys, then do so now
-            if (encryption_software_list is None and 
-                email_in_domain(from__user) and 
+            if ((encryption_software_list is None or len(encryption_software_list) <= 0) and 
+                email_in_domain(from_user) and 
                 options.create_private_keys()):
 
-                self.create_private_key(KeyFactory.DEFAULT_ENCRYPTION_NAME, from_user)
-                self.log_message("started to create a new {} key for {}".format(encryption_software, from_user))
+                add_private_key(from_user)
+                self.log_message("started to create a new key for {}".format(from_user))
                 encryption_software_list = utils.get_encryption_software(from_user)
                 
-            if encryption_software_list is not None:
+            if encryption_software_list is not None and len(encryption_software_list) > 0:
                 self.log_message("getting header with public keys for {}: {}".format(
                    from_user, encryption_software_list))
 
@@ -145,7 +148,7 @@ class CryptoMessage(object):
             else:
                 pub_key = None
                 try:
-                    key_ok, __ = contacts.is_key_ok(from_user, encryption_software)
+                    key_ok, __, __ = contacts.is_key_ok(from_user, encryption_software)
                     if key_ok:
                         key_crypto = KeyFactory.get_crypto(encryption_software)
                         pub_key = key_crypto.export_public(from_user)
@@ -176,19 +179,6 @@ class CryptoMessage(object):
         return key_block
 
 
-    def create_private_key(self, encryption_software, from_user):
-        ''' 
-            Create the public and private key for the user. 
-
-            Creating a key takes minutes so a separate process handles it so no return code.
-       '''
-        
-        try:
-            self.log_message('creating private {} key for {}'.format(encryption_software, from_user))
-            contacts_passcodes.create_passcode(from_user, encryption_software)
-        except Exception:
-            self.log_message(format_exc())
-        
     def extract_public_key_block(self, encryption_software):
         ''' 
             Extract a public key block from the header, if there is one.
@@ -240,11 +230,12 @@ class CryptoMessage(object):
                     self.email_message.add_header(header_name, value)
     
                 self.add_accepted_crypto_software(from_user)
+                self.add_fingerprint(from_user)
                 self.log_message("added key for {} to header".format(from_user))
             else:
                 encryption_name = KeyFactory.DEFAULT_ENCRYPTION_NAME
                 if options.create_private_keys():
-                    self.create_private_key(encryption_name, from_user)
+                    add_private_key(from_user, encryption_software=encryption_name)
                     self.log_message("creating a new {} key for {}".format(encryption_name, from_user))
                 else:
                     self.log_message("not creating a new {} key for {} because auto-create disabled".format(
@@ -254,7 +245,7 @@ class CryptoMessage(object):
 
     def add_accepted_crypto_software(self, from_user):
         ''' 
-            Add accepted encryption software to email_message header.
+            Add accepted encryption software to email message header.
         '''
 
         #  check whether we've already added them
@@ -269,10 +260,9 @@ class CryptoMessage(object):
                 self.email_message.add_header(
                     ACCEPTED_CRYPTO_SOFTWARE_HEADER, ','.join(encryption_software_list))
 
-
     def get_accepted_crypto_software(self):
         ''' 
-            Gets list of accepted encryption software from email_message header.
+            Gets list of accepted encryption software from email message header.
             Crypto services are comma delimited.
         '''
 
@@ -289,6 +279,24 @@ class CryptoMessage(object):
             
         return encryption_software_list
 
+    def add_fingerprint(self, from_user):
+        ''' 
+            Add the fingerprint for each type of crypto used to the email message header.
+        '''
+        
+        try:
+            encryption_software_list = utils.get_encryption_software(from_user)
+            if encryption_software_list == None or len(encryption_software_list) <= 0:
+                self.log_message("Not adding fingerprint for {} because no crypto software".format(from_user))
+            else:
+                for encryption_name in encryption_software_list:
+                    fingerprint, __, active = contacts.get_fingerprint(from_user, encryption_name)
+                    if active and fingerprint is not None and len(fingerprint.strip()) > 0:
+                        self.email_message.add_header(
+                            PUBLIC_FINGERPRINT_HEADER.format(encryption_name.upper()), format_fingerprint(fingerprint))
+                        self.log_message('added {} fingerprint'.format(encryption_name))
+        except:
+            self.log_message(format_exc())
 
     def get_default_key_from_header(self):
         ''' 

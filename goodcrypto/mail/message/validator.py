@@ -1,6 +1,6 @@
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-11-19
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-04-10
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,7 +9,6 @@ from StringIO import StringIO
 from traceback import format_exc
 
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.message import mime_constants
 from goodcrypto.mail.message.message_exception import MessageException
 
 

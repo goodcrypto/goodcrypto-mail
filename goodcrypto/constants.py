@@ -1,8 +1,8 @@
 '''
     Constants for GoodCrypto app.
 
-    Copyright 2014 Good Crypto
-    Last modified: 2015-01-06
+    Copyright 2014-2015 Good Crypto
+    Last modified: 2015-04-16
 '''
 
 import os, os.path
@@ -14,7 +14,7 @@ if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
     WARNING = 'WARNING! WARNING! WARNING! TESTING ONLY! DO NOT SHIP!'
     
 PROJECT = 'GoodCrypto'
-GOODCRYPTO_VERSION = '0.9'
+GOODCRYPTO_VERSION = '1.0'
 
 BASE_PROJECT_DIR = '/var/local/projects'
 SHORT_NAME = PROJECT.lower()
@@ -28,25 +28,39 @@ VM_OWNER = PROJECT.lower()  # set a default
 VM_SCRIPT_DIR = os.path.join(os.path.dirname(__file__), 'vms')
 
 HOME_ROOT = '/home'
-home_dirs = os.listdir(HOME_ROOT)
-for home_dir in home_dirs:
-    server_filename = os.path.join(HOME_ROOT, home_dir, 'VirtualBox VMs', VM_NAME)
-    if os.path.exists(server_filename):
-        VM_OWNER = home_dir
-        break
+try:
+    home_dirs = os.listdir(HOME_ROOT)
+    for home_dir in home_dirs:
+        server_filename = os.path.join(HOME_ROOT, home_dir, 'VirtualBox VMs', VM_NAME)
+        if os.path.exists(server_filename):
+            VM_OWNER = home_dir
+            break
+except:
+    pass
 
 # domain or ip of the system running the hypervisor
 VM_HOST = '127.0.0.1'
 HTTP_PROXY_PORT = 8398
 HTTP_PROXY_URL = 'http://{}:{}'.format(VM_HOST, HTTP_PROXY_PORT)
 
-TOR_PORT = 9151     # tails privoxy
-# TOR_PORT = 9050   # tor default
-# TOR_PORT = 9063   # tails tor
-
+TOR_PORT = 9350
 
 if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
     FORWARDED_APP_SSH_PORT = 8022
     FORWARDED_HOST_SSH_PORT = 8122
     FORWARDED_MAILSERVER_SSH_PORT = 8222
+    
+HTTP_PORT = 8080
+HTTPS_PORT = 8443
+
+POSTFIX_FILTER_PORT = 10025
+
+# apps status
+STATUS_GREEN = 'green'
+STATUS_RED = 'red'
+STATUS_YELLOW = 'yellow'
+
+# tor status file
+TOR_STATUS_FILE = '/tmp/goodcrypto.tor.status'
+
 

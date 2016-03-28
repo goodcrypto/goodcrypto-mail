@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,9 +15,9 @@ from goodcrypto.mail.message.decrypt_filter import DecryptFilter
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.encrypt_filter import EncryptFilter
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.notices import notify_user
 from goodcrypto.mail.options import get_domain, get_mail_server_address, get_mta_listen_port
 from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.utils import i18n
 from goodcrypto.utils.log_file import LogFile
 from syr.lock import locked
@@ -151,36 +151,6 @@ class Pipe(object):
             the domain defined in goodcrypto mail's options. If we're not using
             an SMTP proxy, then it never needs encryption if the message is going
             to and from a user with the domain defined in goodcrypto mail's options.
-            
-            >>> # In honor of Frederic Whitehurst, won the first whistleblowing case against the FBI.
-            >>> from goodcrypto.mail.options import get_domain, set_domain
-            >>> domain = get_domain()
-            >>> set_domain('goodcrypto.local')
-            >>> pipe = Pipe('edward@goodcrypto.local', ['frederic@goodcrypto.remote'], 'message')
-            >>> pipe.possibly_needs_encryption()
-            True
-            >>> pipe = Pipe('edward@goodcrypto.local', ['chelsea@goodcrypto.remote'], 'message')
-            >>> pipe.possibly_needs_encryption()
-            True
-            >>> set_domain('GOODCRYPTO.LOCAL')
-            >>> pipe = Pipe('edward@goodcrypto.local', ['jesselyn@goodcrypto.remote'], 'message')
-            >>> pipe.possibly_needs_encryption()
-            True
-            >>> set_domain('GoodCrypto.Local')
-            >>> pipe = Pipe('edward@goodcrypto.local', ['jesselyn@goodcrypto.remote'], 'message')
-            >>> pipe.possibly_needs_encryption()
-            True
-            >>> pipe = Pipe('frederic@goodcrypto.remote', ['edward@goodcrypto.local'], 'message')
-            >>> pipe.recipient = 'edward@goodcrypto.local'
-            >>> pipe.possibly_needs_encryption()
-            False
-            >>> set_domain('GoodCrypto.Local')
-            >>> pipe = Pipe('edward@goodcrypto.local', ['frederic@goodcrypto.remote'], 'message')
-            >>> pipe.sender = 'not an email address'
-            >>> pipe.recipient = 'edward@goodcrypto.local'
-            >>> pipe.possibly_needs_encryption()
-            False
-            >>> set_domain(domain)
         '''
 
         maybe_needs_encryption = email_in_domain(self.sender)

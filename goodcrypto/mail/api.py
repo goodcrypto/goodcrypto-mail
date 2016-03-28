@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -13,9 +13,8 @@ from django.template import RequestContext
 from django.http import HttpResponsePermanentRedirect
 
 from goodcrypto import api_constants
-from goodcrypto.mail import contacts
+from goodcrypto.mail import contacts, options
 from goodcrypto.mail.forms import APIForm
-from goodcrypto.mail.options import set_domain, set_mail_server_address
 from goodcrypto.mail.utils import get_mail_status, create_superuser
 from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils.log_file import LogFile
@@ -126,8 +125,10 @@ class MailAPI(object):
         ok, error_message = self.is_data_ok()
         if ok:
             if self.action == api_constants.CONFIGURE:
-                set_domain(self.domain)
-                set_mail_server_address(self.mail_server_address)
+                mail_options = options.get_options()
+                mail_options.domain = self.domain
+                mail_options.mail_server_address = self.mail_server_address
+                options.save_options(mail_options)
                 result = self.format_result(api_constants.CONFIGURE, ok)
                 self.log_message('configure result: {}'.format(result))
 
@@ -164,7 +165,7 @@ class MailAPI(object):
 
             elif self.action == api_constants.GET_FINGERPRINT:
                 
-                fingerprint, verified = contacts.get_fingerprint(self.email, self.encryption_name)
+                fingerprint, verified, active = contacts.get_fingerprint(self.email, self.encryption_name)
                 if fingerprint is None:
                     ok = False
                     error_message = 'No {} fingerprint for {}'.format(self.encryption_name, self.email)

@@ -2,7 +2,7 @@
     Manage GoodCrypto Mail's options.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-10
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -153,14 +153,6 @@ def set_goodcrypto_server_url(new_goodcrypto_server_url):
     record = get_options()
     record.goodcrypto_server_url = new_goodcrypto_server_url
     save_options(record)
-    
-    try:
-        # until we build an interface to the system's options, we'll maintain info in both db
-        from goodcrypto.system.options import set_goodcrypto_server_url as set_gcs_url
-        
-        set_gcs_url(new_goodcrypto_server_url)
-    except:
-        pass
 
 def auto_exchange_keys():
     '''

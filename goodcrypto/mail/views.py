@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-23
+    Last modified: 2015-04-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -22,6 +22,7 @@ from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
 from goodcrypto.utils import i18n
 from goodcrypto.utils.log_file import LogFile
+from reinhardt.utils import is_secure_connection
 from syr.user_tests import superuser_required
 from syr.utils import get_remote_ip
 
@@ -36,11 +37,12 @@ def home(request):
     if (domain is None or len(domain.strip()) <= 0 or
         mta is None or len(mta.strip()) <= 0):
         log.write('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
-        response = HttpResponseRedirect('/system/configure/')
+        response = HttpResponseRedirect('/system/customize/')
     else:
+        is_secure = is_secure_connection(request)
         template = 'mail/home.html'
         response = render_to_response(
-            template, {'domain': domain, 'mta': mta}, context_instance=RequestContext(request))
+            template, {'domain': domain, 'mta': mta, 'secure': is_secure}, context_instance=RequestContext(request))
 
     return response
 
@@ -66,10 +68,10 @@ def view_fingerprint(request):
                     page_title = i18n('{encryption_software} Fingerprint for {email}'.format(
                         encryption_software=encryption_software, email=email))
 
-                    fingerprint, verified = contacts.get_fingerprint(email, encryption_software.name)
+                    fingerprint, verified, active = contacts.get_fingerprint(email, encryption_software.name)
                     if fingerprint is None:
                         fingerprint = i18n('No fingerprint defined')
-                        verified_msg = ''
+                        checked = None
                     elif request.user.is_authenticated():
                         if verified:
                             checked = 'checked'
@@ -82,11 +84,12 @@ def view_fingerprint(request):
                                             'email': email, 
                                             'encryption_name': encryption_software.name,
                                             'fingerprint': format_fingerprint(fingerprint),
-                                            'checked': checked}, 
+                                            'checked': checked,
+                                            'active': active}, 
                                             context_instance=RequestContext(request))
 
                     if response is None:
-                        response = show_fingerprint(request, email, fingerprint, verified, page_title)
+                        response = show_fingerprint(request, email, fingerprint, verified, active, page_title)
                 except Exception:
                     log.write(format_exc())
     
@@ -122,6 +125,7 @@ def verify_fingerprint(request):
                     fingerprint = form.cleaned_data['fingerprint']
 
                     contacts_crypto = contacts.get_contacts_crypto(email, encryption_name)
+                    active = contacts_crypto.active
                     if (contacts_crypto.fingerprint == strip_fingerprint(fingerprint) and
                         contacts_crypto.verified != verified):
 
@@ -134,7 +138,7 @@ def verify_fingerprint(request):
                     page_title = i18n('{encryption_software} Fingerprint for {email}'.format(
                         encryption_software=encryption_software, email=email))
 
-                    response = show_fingerprint(request, email, fingerprint, verified, page_title)
+                    response = show_fingerprint(request, email, fingerprint, verified, active, page_title)
                 except Exception:
                     log.write(format_exc())
     
@@ -678,20 +682,25 @@ def api(request):
 
     return response
 
-def show_fingerprint(request, email, fingerprint, verified, page_title):
+def show_fingerprint(request, email, fingerprint, verified, active, page_title):
     ''' Show the fingerprint. '''
     
     if verified:
         verified_msg = i18n('Yes')
     else:
         verified_msg = i18n('No')
+    if active:
+        active_msg = i18n('Yes')
+    else:
+        active_msg = i18n('No')
 
     log.write('showing {} fingerprint verified: {}'.format(email, verified))
     
     template = 'mail/show_fingerprint.html'
     data = {'page_title': page_title,
             'fingerprint': format_fingerprint(fingerprint),
-            'verified': verified_msg}
+            'verified': verified_msg,
+            'active': active_msg}
     return render_to_response(template, data, context_instance=RequestContext(request))
 
 

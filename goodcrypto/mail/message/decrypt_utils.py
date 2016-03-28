@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-03-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -150,10 +150,14 @@ def check_signature(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypt
             log_message('checking if message signed by {}'.format(email))
             for signature_block in signature_blocks:
                 if crypto.verify(signature_block, email):
-                    # make sure that the key for the sender is ok; if it's not, a CryptoException is thrown
-                    __, key_verified = is_key_ok(email, encryption_name)
-                    log_message('{} signed message'.format(email))
-                    log_message('{} {} key pinned'.format(email, encryption_name))
+                    try:
+                        # make sure that the key for the sender is ok; if it's not, a CryptoException is thrown
+                        __, key_verified, __ = is_key_ok(email, encryption_name)
+                        log_message('{} signed message'.format(email))
+                        log_message('{} {} key pinned'.format(email, encryption_name))
+                    except CryptoException:
+                        key_verified = False
+                        log_message('see contacts.log for details about failure')
                     log_message('{} {} key verified: {}'.format(email, encryption_name, key_verified))
                 else:
                     log_message('signature block\n{}'.format(signature_block))

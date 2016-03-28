@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-11-22
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-04-15
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -23,6 +23,9 @@ END_PGP_SIGNATURE = '-----END PGP SIGNATURE-----'
 
 #  Email header for public key of sender. 
 PUBLIC_KEY_HEADER = 'X-OpenPGP-PublicKey'
+
+#  Email header for public fingerprint of sender. 
+PUBLIC_FINGERPRINT_HEADER = 'X-{}-Fingerprint'
 
 #  Email header for openpgp services accepted. 
 ACCEPTED_CRYPTO_SOFTWARE_HEADER = 'X-OpenPGP-Accepts'

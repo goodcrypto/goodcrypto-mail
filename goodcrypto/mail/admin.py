@@ -2,12 +2,13 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-17
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from django.contrib import admin
 from django.utils.safestring import mark_safe
+from django_singleton_admin.admin import SingletonAdmin
 
 from goodcrypto.mail import forms, models
 from goodcrypto.utils import i18n
@@ -28,7 +29,7 @@ class ContactsCryptoInline(CustomStackedInline):
         (None, {
             'classes': ('wide',),
             'fields': (('encryption_software',),
-                       ('fingerprint', 'verified',),
+                       ('fingerprint',), ('verified',), ('active',),
                       )
         }),
     )
@@ -53,18 +54,16 @@ class Contact(CustomModelAdmin):
     staff_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': (('email', 'user_name'),)
+            'fields': (('email',), ('user_name',),)
         }),
     )
     superuser_fieldsets = staff_fieldsets
 
 admin.site.register(models.Contact, Contact)
 
-class Options(CustomModelAdmin):
+class Options(SingletonAdmin):
     form = forms.OptionsAdminForm
     
-    readonly_fields = ('domain',)
-
     list_display = ('mail_server_address', 'goodcrypto_server_url', 'auto_exchange', 'create_private_keys', 'clear_sign', 'require_key_verified', 'max_message_length',)
     staff_list_display = list_display
     superuser_list_display = list_display

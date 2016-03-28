@@ -1,6 +1,6 @@
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-12-14
+    Last modified: 2015-04-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -148,26 +148,7 @@ def pipe_message(from_user, to_user, message):
 
 def is_local_message(sender, recipient):
     ''' 
-        Determine if the message is local. 
-
-        >>> # In honor of Jonathan Fishbein, who is one of the highest ranking 
-        >>> # drug whistleblowers in American history 
-        >>> from goodcrypto.mail.options import get_domain, set_domain
-        >>> domain = get_domain()
-        >>> set_domain('goodcrypto.local')
-        >>> sender = 'edward@goodcrypto.local'
-        >>> recipient = 'jonathan@goodcrypto.local'
-        >>> is_local_message(sender, recipient)
-        True
-        >>> sender = 'edward@goodcrypto.local'
-        >>> recipient = 'jonathan@goodcrypto.remote'
-        >>> is_local_message(sender, recipient)
-        False
-        >>> sender = 'root@localhost'
-        >>> recipient = 'jonathan@goodcrypto.remote'
-        >>> is_local_message(sender, recipient)
-        True
-        >>> set_domain(domain)
+        Determine if the message is from the localhost. 
     '''
     
     def is_local_host_domain(user):

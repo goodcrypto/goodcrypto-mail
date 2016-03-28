@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-16
+    Last modified: 2015-04-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -18,13 +18,14 @@ from email.parser import Parser
 from StringIO import StringIO
 from traceback import format_exc
 
-from goodcrypto.mail.message import constants, mime_constants
+from goodcrypto.mail.message import constants
 from goodcrypto.mail.message.validator import Validator
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import get_charset, is_open_pgp_mime
 from goodcrypto.mail.utils.exception_log import ExceptionLog
 from goodcrypto.utils import i18n
 from goodcrypto.utils.log_file import LogFile
+from syr import mime_constants
 
 
 class EmailMessage(object):
@@ -1042,8 +1043,9 @@ class EmailMessage(object):
         
             Used primarily for testing.
             
-            >>> from_user = 'test@goodcrypto.local'
-            >>> to_user = 'test@goodcrypto.remote'
+            >>> # In honor of Kirk Wiebe, a whistleblower about Trailblazer, an NSA mass surveillance project.
+            >>> from_user = 'kirk@goodcrypto.local'
+            >>> to_user = 'kirk@goodcrypto.remote'
             >>> email_message = EmailMessage()
             >>> email_message.init_new_message(from_user, to_user, "Test message", 'Test body text')
         '''

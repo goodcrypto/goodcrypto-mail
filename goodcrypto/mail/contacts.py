@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
     Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-03-01
+    Last modified: 2015-03-16
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -322,34 +322,38 @@ def get_fingerprint(email, encryption_name):
         Get the fingerprint for the encryption software for this email.
 
         >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
-        >>> fingerprint, verified = get_fingerprint(EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> fingerprint, verified, active = get_fingerprint(EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> len(fingerprint) > 0
+        True
+        >>> active
         True
     '''
 
     if email is None or encryption_name is None:
         fingerprint = None
-        verified = False
+        verified = active = False
         log_message("missing data to get fingerprint; email: {} encryption: {}".format(email, encryption_name))
     else:
         log_message("getting {} fingerprint for {}".format(encryption_name, email))
         contacts_crypto = get_contacts_crypto(email, encryption_name=encryption_name)
         if contacts_crypto is None:
             fingerprint = None
-            verified = False
+            verified = active = False
             log_message("unable to get contact's {} record".format(encryption_name))
         else:
             if isinstance(contacts_crypto, QuerySet):
                 fingerprint = contacts_crypto[0].fingerprint
                 verified = contacts_crypto[0].verified
+                active = contacts_crypto[0].active
             else:
                 fingerprint = contacts_crypto.fingerprint
                 verified = contacts_crypto.verified
+                active = contacts_crypto.active
             log_message("{} {} unformatted fingerprint: {}".format(email, encryption_name, fingerprint))
             
     log_message("{} {} fingerprint: {} verified: {}".format(email, encryption_name, fingerprint, verified))
 
-    return fingerprint, verified
+    return fingerprint, verified, active
 
 def update_fingerprint(email, encryption_name, new_fingerprint, verified=False):
     ''' 
@@ -406,8 +410,10 @@ def is_key_ok(email, encryption_name):
         the key has expired, or the key's fingerprint does not match the fingerprint in the database.
 
         >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER_ADDR
-        >>> ok, __ = is_key_ok(EDWARD_LOCAL_USER_ADDR, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> ok, __, active = is_key_ok(EDWARD_LOCAL_USER_ADDR, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> ok
+        True
+        >>> active
         True
         
         # In honor of Georg Koppen, works on Tor Browser, Torbutton, and our build automation.
@@ -420,7 +426,7 @@ def is_key_ok(email, encryption_name):
 
     # we use NO_FINGERPRINT_IN_DB a few times because we don't want to get too technical
 
-    key_ok = verified = False
+    key_ok = verified = active = False
     encryption_software = crypto_software.get(encryption_name)
     if encryption_software is None:
         # this should never happen, but better be prepared
@@ -448,8 +454,8 @@ def is_key_ok(email, encryption_name):
                     encryption=encryption_name, email=email, date=expiration))
                 log_message(message)
                 raise CryptoException(message)
-                
-            database_fingerprint, verified = get_fingerprint(email, encryption_name)
+
+            database_fingerprint, verified, active = get_fingerprint(email, encryption_name)
             # if there isn't a fingerprint, then try to save the crypto fingerprint
             if database_fingerprint is None or len(database_fingerprint.strip()) <= 0:
                 contacts_encryption = get_contacts_crypto(email, encryption_name=encryption_name)
@@ -480,7 +486,7 @@ def is_key_ok(email, encryption_name):
             log_message('{} fingerprints agree and key has not expired for {}'.format(
               encryption_name, email))
 
-    return key_ok, verified
+    return key_ok, verified, active
 
 def get_public_key(email, encryption_software):
     ''' 
@@ -629,7 +635,7 @@ def update_accepted_crypto(email, encryption_software_list):
     
 def get_encryption_names(email):
     '''
-        Get a list of all the encryption program names for this email.
+        Get a list of all the active encryption program names for this email.
   
         # Test extreme case. See unittests to see how to use this function.
         >>> get_encryption_names(None)
@@ -644,9 +650,12 @@ def get_encryption_names(email):
         if query_results:
             log_message("{} has {} address(es)".format(address, len(query_results)))
             for contacts_encryption in query_results:
-                encryption_name = contacts_encryption.encryption_software.name
-                encryption_names.append(encryption_name)
-                log_message("{} encryption software: {}".format(email, encryption_name))
+                if contacts_encryption.active:
+                    encryption_name = contacts_encryption.encryption_software.name
+                    encryption_names.append(encryption_name)
+                    log_message("{} encryption software: {}".format(email, encryption_name))
+                else:
+                    log_message("{} encryption software not active: {}".format(email, encryption_name))
         else:
             log_message("no encryption software for this contact")
     else:
