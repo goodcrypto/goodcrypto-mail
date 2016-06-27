@@ -2,7 +2,7 @@
     Mail utilities.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-16
+    Last modified: 2015-04-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -222,7 +222,8 @@ def create_user(email):
                 log.write_and_flush('created user: {}'.format(user))
             except:
                 password = None
-                error_message = i18n('Unable to add a regular user for {email}.'.format(email=email))
+                error_message = i18n('Need sign in credentials created.')
+                log('unable to add a regular user for {}.'.format(email))
                 log.write_and_flush(format_exc())
     
     return password, error_message

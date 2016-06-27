@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-12
+    Last modified: 2015-04-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -203,13 +203,13 @@ def msg_encrypted(request, message_id):
                 records = records.filter(message_id=urllib.unquote(message_id))
 
             if records:
-                headline = i18n('Verified message sent securely from {email}'.format(email=email))
+                headline = i18n('Verified message sent privately from {email}'.format(email=email))
                 result_headers = get_history_report_header('To')
                 for record in records:
                     results.append(get_encrypt_tupple(record))
             else:
-                headline = i18n('Message not sent securely from {email}'.format(email=email))
-                error_message = i18n('GoodCrypto did <font color="red">not</font> send message  securely from {email} (message id: {message_id}).'.format(
+                headline = i18n('Message not sent privately from {email}'.format(email=email))
+                error_message = i18n('GoodCrypto did <font color="red">not</font> send message  privately from {email} (message id: {message_id}).'.format(
                     email=email, message_id=message_id))
                 log.write(error_message)
 
@@ -245,7 +245,8 @@ def show_encrypted_history(request):
                     results.append(get_encrypt_tupple(record))
             params = {'email': request.user.email,
                       'status': history.get_encrypted_message_status(),
-                      'headline': 'History of messages sent securely from {}'.format(request.user.email),
+                      'headline': i18n('History of messages sent privately from {email}'.format(
+                          email=request.user.email)),
                       'result_headers': result_headers,
                       'results': results,
                       'error_message': error_message}
@@ -307,15 +308,15 @@ def msg_decrypted(request, validation_code):
                 records = records.filter(validation_code=urllib.unquote(validation_code))
 
             if records:
-                headline = i18n('Verified message received securely for {email}'.format(email=email))
+                headline = i18n('Verified message received privately for {email}'.format(email=email))
                 result_headers = get_history_report_header('From')
                 for record in records:
                     results.append(get_decrypt_tupple(record))
             else:
-                headline = i18n('Message not received securely for {email}'.format(email=email))
-                error1 = i18n('GoodCrypto did <font color="red">not</font> receive this message securely for <strong>{email}</strong> (validation code: {validation_code}).'.format(
+                headline = i18n('Message not received privately for {email}'.format(email=email))
+                error1 = i18n('GoodCrypto did <font color="red">not</font> receive this message privately for <strong>{email}</strong> (validation code: {validation_code}).'.format(
                     email=email, validation_code=validation_code))
-                error2 = i18n('If the message has a tag which states it was received securely for {email}, then someone has tampered with the message.'.format(
+                error2 = i18n('If the message has a tag which states it was received privately for {email}, then someone has tampered with the message.'.format(
                     email=email))
                 error_message = '{} {}'.format(error1, error2)
                 log.write(error_message)
@@ -353,7 +354,8 @@ def show_decrypted_history(request):
                     results.append(get_decrypt_tupple(record))
             params = {'email': request.user.email,
                       'status': history.get_decrypted_message_status(),
-                      'headline': 'History of messages received securely for {}'.format(request.user.email),
+                      'headline': i18n('History of messages received privately for {email}'.format(
+                          email=request.user.email)),
                       'result_headers': result_headers,
                       'results': results,
                       'error_message': error_message}

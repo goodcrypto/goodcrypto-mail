@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-15
+    Last modified: 2015-04-20
     
 {% endcomment %}
 {% load i18n %}
@@ -11,9 +11,9 @@
 
 {% block contentpane %}
 
-    <h1 class="headline">
+    <h3 class="headline">
         {% trans 'Integrate your mail server' %}
-    </h1>  
+    </h3>  
 
     <ol>
         <li>
@@ -21,10 +21,10 @@
             {% trans 'Postfix, sendmail, etc.' %}
         </li>
         <li>
-            {% trans 'Configure your SMTP/IMAP/POP servers to default to SSL and to require your users to connect via SSL.' %}
+            {% trans 'Configure your SMTP/IMAP/POP servers to default to TLS and to require your users to connect via TLS.' %}
         </li>
         <li>
-            {% trans 'Configure your users to connect via SSL for mail.' %}
+            {% trans 'Configure your users to connect via TLS for mail.' %}
         </li>
         <li>
             {% trans 'Encourage others to use GoodCrypto or PGP so exchanged messages are private and secure.' %}

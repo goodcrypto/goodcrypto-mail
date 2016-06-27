@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-04-15
+    Last modified: 2015-04-19
     
 {% endcomment %}
 {% load i18n custom %}
@@ -13,6 +13,11 @@
   <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}" />
   <link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}" />
 {% endblock %}
+
+{% block extrascript %}
+  {{ block.super }}
+    <script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
+{% endblock extrascript %}
 
 {% block contentpane %}
 
@@ -26,7 +31,7 @@
             <form id="changelist-form" action="" method="post"{% csrf_token %}
         
                 <div class="results">
-                <table class="table" id="result_list">
+                <table class="table table-hover" id="result_list">
                 <thead>
                     <tr>
                         {% for header in result_headers %}
@@ -65,6 +70,24 @@
             </h3>
         {% endif %}
     </div>
+
+    {% if results %}
+        <p class="dropcap">
+        Click the column headers to change the order of the list.
+        <noscript>
+        You must enable javascript for this page to be able to change the order.
+        </noscript>
+        </p>
+    
+        <script type="text/javascript">
+        $(document).ready(function()
+            {
+                <!-- $("#result_list").tablesorter( {sortList: [[0,0], [1,0]]} );-->
+                $("#result_list").tablesorter({sortList: [[1,0]]} );
+            }
+        );
+        </script>
+    {% endif %}
 
 {% endblock contentpane %}
 

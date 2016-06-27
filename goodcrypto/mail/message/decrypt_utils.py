@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-03-16
+    Last modified: 2015-04-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -21,7 +21,7 @@ DEBUGGING = True
 USE_UTC = True
 DEFAULT_CRYPTO = CryptoFactory.DEFAULT_ENCRYPTION_NAME
 DECRYPTED_MESSAGE_TAG = '{}{}'.format(i18n('GoodCrypto: '), 
-                                      i18n('received this message securely'))
+                                      i18n('received this message privately'))
 
 
 _log = None
@@ -40,7 +40,7 @@ def add_tag_to_message(crypto_message):
         ...    crypto_message.set_crypted(True)
         ...    add_tag_to_message(crypto_message)
         ...    final_message_string = crypto_message.get_email_message().to_string()
-        ...    final_message_string.strip().find('received this message securely') >= 0
+        ...    final_message_string.strip().find('received this message privately') >= 0
         ...    final_message_string.strip().find('There still appears to be an extra protective layer.') >= 0
         ...    final_message_string.strip().find('<div><hr>') >= 0
         True
@@ -73,7 +73,7 @@ def get_tags(crypto_message):
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    crypto_message.set_crypted(True)
         ...    tags, filtered = get_tags(crypto_message)
-        ...    tags.find('received this message securely') >= 0
+        ...    tags.find('received this message privately') >= 0
         ...    filtered
         True
         True
@@ -117,7 +117,7 @@ def get_decrypt_tag():
         >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
         ...    crypto_message = CryptoMessage(EmailMessage(input_file))
         ...    tag = get_decrypt_tag()
-        ...    tag.find('received this message securely') >= 0
+        ...    tag.find('received this message privately') >= 0
         True
     '''
 

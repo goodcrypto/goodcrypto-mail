@@ -3,7 +3,7 @@
     the encryption databases (i.e., keyrings).
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-13
+    Last modified: 2015-04-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -343,8 +343,9 @@ class SyncDbKey(object):
     
             elif error_message is not None:
                 details = i18n('Ask your sysadmin to add a user for your email account manually.')
+                subject = 'GoodCrypto - {}'.format(error_message)
                 body = '{}\n{}'.format(error_message, details)
-                notify_user(self.email, error_message, body)
+                notify_user(self.email, subject, body)
                 self.log.write_and_flush('notified {} about error: {}'.format(self.email, error_message))
     
             else:

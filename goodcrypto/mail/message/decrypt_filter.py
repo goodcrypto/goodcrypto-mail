@@ -50,7 +50,7 @@ class DecryptFilter(CryptoFilter):
         See the unit tests to see how to use the DecryptFilter class.
     '''
 
-    DEBUGGING = False
+    DEBUGGING = True
     USE_ANALYZER = False
 
     #  the encrypted content is the second part; indexing starts at 0

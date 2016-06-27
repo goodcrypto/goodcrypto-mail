@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 '''
     Copyright 2015 GoodCrypto.
-    Last modified: 2015-03-26
+    Last modified: 2015-04-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
     Manage logging messages encrypted and decrypted by the GoodCrypto server to
     prevent others spoofing the security of a message. 
 '''
-import os
+import os, re
+from datetime import datetime
 from time import gmtime, strftime
 from traceback import format_exc
 from django.db.models.query import QuerySet
@@ -62,12 +63,10 @@ def add_decrypted_record(sender, recipient, encryption_programs, message_id, val
 
 def add_record(sender, recipient, encryption_programs, message_id, message_date, status, validation_code=None):
     ''' Add the message's summary details. '''
-    
+
     ok = False
     try:
-        if message_date is None:
-            message_date = strftime("%a, %d %b %Y %H:%M:%S", gmtime())
-
+        timestamp = get_isoformat(message_date)
         __, sender_email = parse_address(sender)
         __, recipient_email = parse_address(recipient)
         if sender_email is None:
@@ -95,7 +94,7 @@ def add_record(sender, recipient, encryption_programs, message_id, message_date,
             MessageHistory.objects.create(sender=sender_email,
                                           recipient=recipient_email,
                                           encryption_programs=programs[:MessageHistory.MAX_ENCRYPTION_PROGRAMS],
-                                          message_date=message_date[:MessageHistory.MAX_MESSAGE_DATE],
+                                          message_date=timestamp[:MessageHistory.MAX_MESSAGE_DATE],
                                           message_id=message_id[:MessageHistory.MAX_MESSAGE_ID],
                                           validation_code=validation_code,
                                           status=status)
@@ -158,7 +157,62 @@ def gen_validation_code():
     validation_code = gen_password(max_length=MessageHistory.MAX_VALIDATION_CODE)
           
     return validation_code
-    
+
+def get_isoformat(message_date):
+    ''' Get the timestamp in iso format. '''
+
+    def get_year(yr):
+        ''' Get the year as a 4 digit number. '''
+        if len(yr) < 4:
+            if yr.startswith('7') or yr.startswith('8') or yr.startswith('9'):
+                yr = '19' + yr
+            else:
+                yr = '20' + yr
+        year = int(yr)
+        return year
+        
+    # map month abbrevs to numeric equivalent
+    MONTH_MAP = {'Jan': 1,
+                 'Feb': 2,
+                 'Mar': 3,
+                 'Apr': 4,
+                 'May': 5,
+                 'Jun': 6,
+                 'Jul': 7,
+                 'Aug': 8,
+                 'Sep': 9,
+                 'Oct': 10,
+                 'Nov': 11,
+                 'Dec': 12}
+
+    if message_date is None:
+        message_date = strftime("%a, %d %b %Y %H:%M:%S", gmtime())
+
+    try:
+        Date_Format = re.compile(r'''(?P<wk_day>.*,)? (?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*) *(?P<gmt_offset>.*)''')
+        m = Date_Format.search(message_date)
+        if not m:
+            Date_Format = re.compile(r'''(?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*) *(?P<gmt_offset>.*)''')
+            m = Date_Format.search(message_date)
+
+        if m:
+            day = int(m.group('day'))
+            month = MONTH_MAP[m.group('month')]
+            year = get_year(m.group('year'))
+            hour = int(m.group('hour'))
+            minutes = int(m.group('min'))
+            seconds = int(m.group('sec'))
+            timestamp = datetime(year, month, day, hour, minutes, seconds).isoformat(' ')
+            if m.group('gmt_offset'):
+                timestamp += ' {}'.format(m.group('gmt_offset'))
+            log_message('formatted date: {}'.format(timestamp))
+        else:
+            timestamp = message_date
+    except:
+        timestamp = message_date
+
+    return timestamp
+
 def log_message(message):
     '''
         Log a message to the local log.
