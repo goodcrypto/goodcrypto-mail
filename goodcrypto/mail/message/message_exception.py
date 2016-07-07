@@ -1,7 +1,6 @@
-#!/usr/bin/env python
 '''
     Copyright 2014 GoodCrypto
-    Last modified: 2014-05-23
+    Last modified: 2015-07-08
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''

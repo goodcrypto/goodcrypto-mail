@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 '''
     Manage GoodCrypto's encryption software.
 
@@ -16,13 +15,12 @@
         active = is_active('GPG')
     </pre>
     
-    Copyright 2014 GoodCrypto.
-    Last modified: 2014-12-31
+    Copyright 2014-2015 GoodCrypto.
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from traceback import format_exc
-
+from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail.models import EncryptionSoftware
 
@@ -65,7 +63,8 @@ def is_ok():
 
     except Exception:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return result_ok
 
@@ -107,7 +106,8 @@ def get(name):
             log_message('"{}" encryption software does not exist'.format(name))
         except Exception:
             software = None
-            log_message(format_exc())
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return software
 
@@ -146,7 +146,8 @@ def set(updated_software):
             log_message("updated encryption program: {}".format(updated_software.name))
     except Exception:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return result_ok
 
@@ -179,7 +180,8 @@ def delete(name_or_software):
                 log_message("deleted {}".format(software.name))
     except Exception:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return result_ok
 
@@ -201,8 +203,9 @@ def is_any_encryption_active():
         active = software and len(software) > 0
     except Exception:
         active = False
-        log_message(format_exc())
-        
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
     return active
 
 def get_active_names():
@@ -219,7 +222,8 @@ def get_active_names():
         for program in programs:
             active_names.append(program.name)
     except Exception:
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     log_message("active programs: {}".format(active_names))
 
@@ -239,8 +243,9 @@ def get_encryption_names():
         for program in programs:
             names.append(program.name)
     except Exception:
-        log_message(format_exc())
-        
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
     log_message("encryption software: {}".format(names))
 
     return names

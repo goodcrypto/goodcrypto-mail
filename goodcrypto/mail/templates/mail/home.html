@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-21
+    Last modified: 2015-07-19
     
 {% endcomment %}
 {% load i18n custom %}
@@ -18,6 +18,8 @@
   
 {% block contentpane %}
 
+    {% include "snippets/secure_button.html" %}
+
     <div class="row">
         <h3>Mail
         {% if domain %}
@@ -26,16 +28,10 @@
         </h3> 
     </div>
     
-    {% if not secure %}
-        <a href="/make_secure/" title="{% trans 'Describe how to make the connection secure.' %}">
-            <button type="button" class="btn btn-primary">&nbsp;{% trans 'Make connection secure' %}&nbsp;</button>
-        </a>
-    {% endif %}
-
     <div class="col-md-12 col-xm-6">
         <div class="row">&nbsp;</div>
         <div class="table-responsive btn-group">
-            <table class="table">
+            <table class="table table-responsive">
                 <tr>
                     <th>
                         <p>&nbsp;</p>
@@ -44,21 +40,21 @@
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/verify_decrypted/" title="{% trans 'Verify a message was decrypted by your GoodCrypto private server' %}">
+                        <a href="/mail/verify_crypted/" title="{% trans 'Verify a message was encrypted or decrypted by your GoodCrypto private server.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Verify' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/show_decrypted_history/" title="{% trans 'Show summary of decrypted messages you received' %}">
+                        <a href="/mail/show_decrypted_history/" title="{% trans 'Show summary of decrypted messages you received.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Received' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/show_encrypted_history/" title="{% trans 'Show summary of encrypted messages you sent' %}">
+                        <a href="/mail/show_encrypted_history/" title="{% trans 'Show summary of encrypted messages you sent.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Sent' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -72,21 +68,21 @@
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint of a contact' %}">
-                            <button type="button" class="btn btn-primary btn-block">{% trans 'Fingerprint' %}</button>
+                        <a href="/mail/view_fingerprint/" title="{% trans 'View the key ID, also known as the fingerprint, of a contact.' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'View ID' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/export_key/" title="{% trans 'Get the public key for a user' %}">
+                        <a href="/mail/export_key/" title="{% trans 'Get the public key for a user.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Export' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact' %}">
+                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Import' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -100,21 +96,21 @@
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/admin/mail/options/1/" title="{% trans 'Manage options for encrypting/decrypting mail' %}">
+                        <a href="/admin/mail/options/" title="{% trans 'Manage options for encrypting/decrypting mail.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Options' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/admin/mail/contact/" title="{% trans 'Show the contacts who have keys. Manually create private keys for users' %}">
+                        <a href="/admin/mail/contact/" title="{% trans 'Show the contacts who have keys. Manually create private keys for users.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Contacts' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/admin/auth/user/" title="{% trans 'Manage users who can check on which messages were exchanged privately' %}">
+                        <a href="/admin/auth/user/" title="{% trans 'Manage users who can check on which messages were exchanged privately.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Users' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -147,7 +143,7 @@
                     {% blocktrans %}
                     Warning: Your MTA is configured for the local machine at ({{ mta }}). 
                     We strongly recommend that you use a different computer for your MTA and your GoodCrypto private server.
-                    You can change the MTA address in the  <a href="/admin/mail/options/1/">Options</a>.
+                    You can change the MTA address in the  <a href="/admin/mail/mailserveroptions/">Mail server options</a>.
                     {% endblocktrans %}
                 </div>
             {% endif %}

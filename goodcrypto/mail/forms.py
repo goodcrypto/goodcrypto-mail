@@ -2,20 +2,18 @@
     Mail app forms.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-17
+    Last modified: 2015-07-02
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from traceback import format_exc
-
 from django import forms
 from django.forms.widgets import HiddenInput
 from django.core.exceptions import ValidationError
 
 from goodcrypto import api_constants
 from goodcrypto.mail import models
-from goodcrypto.mail.options import get_domain, get_mta_listen_port
-from goodcrypto.mail.utils import email_in_domain, gen_passcode
+from goodcrypto.mail.options import mta_listen_port
+from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.utils import i18n, is_mta_ok
@@ -90,6 +88,19 @@ class OptionsAdminForm(forms.ModelForm):
             
             raise forms.ValidationError(error_message, code='invalid')
 
+        encrypt_metadata = cleaned_data.get('encrypt_metadata')
+        bundle_and_pad = cleaned_data.get('bundle_and_pad')
+        if bundle_and_pad and not encrypt_metadata:
+            del self.cleaned_data['encrypt_metadata']
+            _log.write('deleted encrypt_metadata from cleaned data')
+            del self.cleaned_data['bundle_and_pad']
+            _log.write('deleted bundle_and_pad from cleaned data')
+            
+            error_message = i18n('You can only bundle and pad messages if you also encrypt metadata. Either add a check mark to "Encrypt metadata" or remove the check mark from "Bundle and pad".')
+            _log.write(error_message)
+            
+            raise forms.ValidationError(error_message, code='invalid')
+
         return cleaned_data
 
     class Meta:
@@ -103,12 +114,16 @@ class OptionsAdminForm(forms.ModelForm):
                   'require_key_verified',
                   'login_to_view_fingerprints',
                   'login_to_export_keys',
-                  #'add_keys_to_keyservers',
-                  #'verify_new_keys_with_keyservers',
                   'filter_html',
-                  'max_message_length',
                   'debugging_enabled',
+                  'encrypt_metadata',
+                  'bundle_and_pad',
+                  'bundle_frequency',
+                  'bundle_message_kb',
         ]
+
+    class Media:
+        js = ('/static/js/admin_js.js',)
 
 
 class ContactsCryptoInlineFormSet(RequireOneFormSet):
@@ -144,7 +159,7 @@ class ContactsCryptoInlineFormSet(RequireOneFormSet):
 class GetFingerprintForm(forms.Form):
     
     email = forms.EmailField(max_length=254,
-       help_text=i18n('Enter the email address whose fingerprint you want to verify.'),)
+       help_text=i18n('Enter the email address whose key ID, also known as the fingerprint, you want to verify.'),)
     encryption_software = forms.ModelChoiceField(
        queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the encryption software for the key.'),)
@@ -154,28 +169,16 @@ class VerifyFingerprintForm(forms.Form):
 
     email = forms.EmailField(max_length=254, widget=HiddenInput,)
     encryption_name = forms.CharField(max_length=100, widget=HiddenInput,)
-    fingerprint = forms.CharField(max_length=100, widget=HiddenInput,)
+    key_id = forms.CharField(max_length=100, widget=HiddenInput,)
     verified = forms.BooleanField(required=False,
-       help_text=i18n('Add a check mark if you checked the fingerprint is correct for the user.'),)
+       help_text=i18n('Add a check mark if you checked the key ID is correct for the user.'),)
 
 
-class GetFingerprintForm(forms.Form):
-    
-    email = forms.EmailField(max_length=254,
-       help_text=i18n('Enter the email address whose fingerprint you want to verify.'),)
-    encryption_software = forms.ModelChoiceField(
-       queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
-       help_text=i18n('Select the encryption software for the key.'),)
+class VerifyMessageForm(forms.Form):
 
-class VerifyDecryptForm(forms.Form):
-
-    validation_code = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(models.MessageHistory.MAX_VALIDATION_CODE)}),
-       help_text=i18n('Enter the validation code to verify GoodCrypto decrypted your message.'),)
-
-class VerifyEncryptForm(forms.Form):
-
-    message_id = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(models.MessageHistory.MAX_MESSAGE_ID)}),
-       help_text=i18n('Enter the message id to verify GoodCrypto encrypted your message.'),)
+    verification_code = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(
+       models.MessageHistory.MAX_VERIFICATION_CODE)}),
+       help_text=i18n('Enter the verification code to check if GoodCrypto encrypted or decrypted your message.'),)
 
 class ExportKeyForm(forms.Form):
     

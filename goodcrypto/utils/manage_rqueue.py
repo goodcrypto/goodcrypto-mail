@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#! /usr/bin/python
 '''
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-11-17
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,7 +9,6 @@ from random import uniform
 from redis import Redis
 from rq import Queue
 from time import sleep
-from traceback import format_exc
 
 from goodcrypto.utils.constants import REDIS_HOST
 from goodcrypto.utils.log_file import LogFile
@@ -19,9 +18,9 @@ log = LogFile()
 def wait_until_queue_empty(name, port):
     '''
         Wait until the queue is empty.
-        
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_QUEUE, GPG_REDIS_PORT
-        >>> wait_until_queue_empty(GPG_QUEUE, GPG_REDIS_PORT)
+
+        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQUEUE, GPG_REDIS_PORT
+        >>> wait_until_queue_empty(GPG_RQUEUE, GPG_REDIS_PORT)
     '''
 
     redis_connection = Redis(REDIS_HOST, port)
@@ -33,11 +32,11 @@ def wait_until_queue_empty(name, port):
 
 def get_job_count(name, port):
     '''
-        Get the jobs in the queue.
-        
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_QUEUE, GPG_REDIS_PORT
-        >>> wait_until_queue_empty(GPG_QUEUE, GPG_REDIS_PORT)
-        >>> get_job_count(GPG_QUEUE, GPG_REDIS_PORT)
+        Get the count of jobs in the queue.
+
+        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQUEUE, GPG_REDIS_PORT
+        >>> wait_until_queue_empty(GPG_RQUEUE, GPG_REDIS_PORT)
+        >>> get_job_count(GPG_RQUEUE, GPG_REDIS_PORT)
         0
     '''
 
@@ -49,11 +48,11 @@ def get_job_count(name, port):
     return queue.count
 
 def clear_failed_queue(name, port):
-    ''' 
+    '''
         Clear all the jobs in the failed queue.
-        
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_QUEUE, GPG_REDIS_PORT
-        >>> clear_failed_queue(GPG_QUEUE, GPG_REDIS_PORT)
+
+        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQUEUE, GPG_REDIS_PORT
+        >>> clear_failed_queue(GPG_RQUEUE, GPG_REDIS_PORT)
     '''
 
     redis_connection = Redis(REDIS_HOST, port)
@@ -69,12 +68,12 @@ def clear_failed_queue(name, port):
 def log_message(message):
     '''
         Log the message.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test message')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.manage_queue.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.manage_rqueue.log'))
         True
     '''
 

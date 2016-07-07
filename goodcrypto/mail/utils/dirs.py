@@ -1,17 +1,15 @@
-#!/usr/bin/env python
 '''
     Basic for data, messages, etc. directories.
     
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-10-23
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-07-29
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
-from traceback import format_exc
 
 from goodcrypto.constants import GOODCRYPTO_DATA_DIR
-#from syr.sync_function import synchronized
+from goodcrypto.utils.exception import record_exception
 
 
 MAIL_DATA_DIR = os.path.join(GOODCRYPTO_DATA_DIR, 'mail')
@@ -23,16 +21,9 @@ BadPermissionsMessage = "Set the permissions on the directory so GoodCrypto can 
 #  Safe unix permissions for dirs. 
 SafeDirPermissions = 0700
 
-MESSAGES_DIRECTORY = "messages"
 NOTICES_DIRECTORY = "notices"
-QUEUE_DIRECTORY = 'queue'
+PACKETS_DIRECTORY = 'packets'
 TEST_DIRECTORY = "test"
-
-_notices_directory = None
-_test_directory = None
-_messages_directory = None
-_data_directory = None
-_queue_directory = None
 
 
 def dirs_ready():
@@ -73,12 +64,10 @@ def dirs_ready():
             error_code = show_error(data_dir)
     except Exception:
         error_code = show_error(data_dir)
-        print(format_exc())
+        record_exception()
 
     return error_code
 
-
-#@synchronized
 def get_data_directory():
     '''
         Get data directory.
@@ -88,17 +77,12 @@ def get_data_directory():
         >>> os.path.exists(MAIL_DATA_DIR)
         True
     '''
-    global _data_directory
 
-    if _data_directory is None:
-        _data_directory = MAIL_DATA_DIR
-
-    if not os.path.exists(_data_directory):
+    if not os.path.exists(MAIL_DATA_DIR):
         dirs_ready()
 
-    return _data_directory
+    return MAIL_DATA_DIR
 
-#@synchronized
 def get_notices_directory():
     '''
         Gets the pathname for the notices directory.
@@ -107,29 +91,18 @@ def get_notices_directory():
         True
     '''
 
-    global _notices_directory
+    return _get_directory(get_data_directory(), NOTICES_DIRECTORY)
 
-    if _notices_directory is None:
-        _notices_directory = _get_directory(get_messages_directory(), NOTICES_DIRECTORY)
-    return _notices_directory
-
-#@synchronized
-def get_queue_directory():
+def get_packet_directory():
     '''
-        Gets the pathname for the queue directory.
+        Gets the pathname for the packet directory.
 
-        >>> os.path.exists(get_queue_directory())
+        >>> os.path.exists(get_packet_directory())
         True
     '''
 
-    global _queue_directory
+    return  os.path.join(get_data_directory(), PACKETS_DIRECTORY)
 
-    if _queue_directory is None:
-        _queue_directory = _get_directory(MAIL_DATA_DIR, QUEUE_DIRECTORY)
-
-    return _queue_directory
-
-#@synchronized
 def get_test_directory():
     '''
         Gets the pathname for the test directory.
@@ -138,36 +111,26 @@ def get_test_directory():
         True
     '''
 
-    global _test_directory
-
-    if _test_directory == None:
-        _test_directory = _get_directory(get_messages_directory(), TEST_DIRECTORY)
-
-    return _test_directory
-
-#@synchronized
-def get_messages_directory():
-    '''
-         Gets the pathname for the messages directory.
-        
-        >>> get_messages_directory() == os.path.join(MAIL_DATA_DIR, MESSAGES_DIRECTORY)
-        True
-    '''
-
-    global _messages_directory
-
-    if _messages_directory == None:
-        _messages_directory = _get_directory(
-            get_data_directory(), MESSAGES_DIRECTORY)
-    return _messages_directory
+    return _get_directory(get_data_directory(), TEST_DIRECTORY)
 
 def _get_directory(parent_directory, sub_directory):
     '''
         Creates a pathname and directory from the parent directory and subdirectory.
-        
+
+        >>> test_dirname = os.path.join(MAIL_DATA_DIR, 'test')
+        >>> if os.path.exists(test_dirname):
+        ...     filenames = os.listdir(test_dirname)
+        ...     if filenames:
+        ...         for filename in filenames:
+        ...             os.remove(os.path.join(test_dirname, filename))
+        >>> os.rmdir(test_dirname)
         >>> dirname = _get_directory(MAIL_DATA_DIR, 'test')
         >>> os.path.exists(dirname)
         True
+        >>> filenames = os.listdir(os.path.join(MAIL_DATA_DIR, 'test'))
+        >>> if filenames:
+        ...     for filename in filenames:
+        ...         os.remove(os.path.join(MAIL_DATA_DIR, 'test', filename))
         >>> os.rmdir(dirname)
     '''
 
@@ -241,8 +204,17 @@ def _set_permissions(dirname):
         Set safe permissions for the dir.
         
         >>> dirname = os.path.join(MAIL_DATA_DIR, 'test')
+        >>> if os.path.exists(dirname):
+        ...     filenames = os.listdir(dirname)
+        ...     if filenames:
+        ...         for filename in filenames:
+        ...             os.remove(os.path.join(dirname, filename))
         >>> os.makedirs(dirname)
         >>> _set_permissions(dirname)
+        >>> filenames = os.listdir(dirname)
+        >>> if filenames:
+        ...     for filename in filenames:
+        ...         os.remove(os.path.join(dirname, filename))
         >>> os.rmdir(dirname)
     '''
     

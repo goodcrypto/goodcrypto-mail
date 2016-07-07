@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-17
+    Last modified: 2015-07-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,12 +12,7 @@ from django_singleton_admin.admin import SingletonAdmin
 
 from goodcrypto.mail import forms, models
 from goodcrypto.utils import i18n
-from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline, RequireOneFormSet
-
-# indent the 'Details' and 'Advanced' labels
-details_label = mark_safe('<label>&nbsp;</label>{}'.format(i18n('Details')))
-advanced_label = mark_safe('<label>&nbsp;</label>{}'.format(i18n('Advanced')))
-
+from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline
 
 
 class ContactsCryptoInline(CustomStackedInline):
@@ -46,6 +41,8 @@ class Contact(CustomModelAdmin):
     inlines = [ContactsCryptoInline]
     search_fields = ['email', 'user_name']
     
+    save_on_top = True
+
     list_display = ('email', 'user_name',)
     staff_list_display = list_display
     superuser_list_display = list_display
@@ -62,48 +59,48 @@ class Contact(CustomModelAdmin):
 admin.site.register(models.Contact, Contact)
 
 class Options(SingletonAdmin):
-    form = forms.OptionsAdminForm
-    
-    list_display = ('mail_server_address', 'goodcrypto_server_url', 'auto_exchange', 'create_private_keys', 'clear_sign', 'require_key_verified', 'max_message_length',)
-    staff_list_display = list_display
-    superuser_list_display = list_display
-    list_display_links = list_display
-    
-    staff_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': (('mail_server_address'),
-                      )
+    # indent the labels
+    metadata_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Metadata Protection')))
+    traffic_analysis_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Traffic Analysis Protection (Experimental)')))
+    tighter_security_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Tighter security')))
+    misc_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Other')))
+
+    save_on_top = True
+
+    """
+    DISABLE metadata and traffic analysis
+        (metadata_label, {
+            'fields': ('encrypt_metadata',)
         }),
-    )
-    superuser_fieldsets = (
+        DISABLE metadata and traffic analysis
+        (traffic_analysis_label, {
+            'fields': ('bundle_and_pad', 'bundle_message_kb', 'bundle_frequency',)
+        }),
+    """
+    form = forms.OptionsAdminForm
+    fieldsets = (
         (None, {
             'fields': (
                        'mail_server_address',
                        'goodcrypto_server_url',
                        'auto_exchange',
                        'create_private_keys',
-                       'clear_sign',
+                      )
+        }),
+        (tighter_security_label, {
+            'fields': (
                        'require_key_verified',
                        'login_to_view_fingerprints',
                        'login_to_export_keys',
-                       #'add_keys_to_keyservers',
-                       #'verify_new_keys_with_keyservers',
                        'filter_html',
-                       'max_message_length',
+                      )
+        }),
+        (misc_label, {
+            'fields': (
+                       'clear_sign',
                        'debugging_enabled',
                       )
         }),
     )
-    
-    def get_form(self, request, obj=None, **kwargs):
-        '''Add the current user to the form.'''
-        
-        form = super(Options, self).get_form(request, obj, **kwargs)
-        form.adding = obj == None
-        return form
-        
 admin.site.register(models.Options, Options)
-
-
 

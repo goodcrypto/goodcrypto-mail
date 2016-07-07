@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-16
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,14 +16,14 @@ from email.mime.nonmultipart import MIMENonMultipart
 from email.mime.text import MIMEText
 from email.parser import Parser
 from StringIO import StringIO
-from traceback import format_exc
 
 from goodcrypto.mail.message import constants
-from goodcrypto.mail.message.validator import Validator
+from goodcrypto.mail.message.inspect_utils import get_charset, is_open_pgp_mime
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.utils import get_charset, is_open_pgp_mime
-from goodcrypto.mail.utils.exception_log import ExceptionLog
+from goodcrypto.mail.message.validator import Validator
+from goodcrypto.oce import gpg_constants
 from goodcrypto.utils import i18n
+from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
 
@@ -39,7 +39,7 @@ class EmailMessage(object):
         and contains the original unparsable message in the body.
     '''
 
-    DEBUGGING = True
+    DEBUGGING = False
     
     def __init__(self, message_or_file=None):
         '''
@@ -81,7 +81,7 @@ class EmailMessage(object):
                     self._create_good_message_from_bad(message_or_file)
             except Exception:
                 try:
-                    self.log_message(format_exc())
+                    record_exception()
                     
                     self._create_good_message_from_bad(message_or_file)
                     
@@ -90,7 +90,7 @@ class EmailMessage(object):
                         self.log_message('unable to create a valid message')
                         raise MessageException()
                 except Exception:
-                    self.log_message(format_exc())
+                    record_exception()
                     
         if self.DEBUGGING:
             try:
@@ -106,7 +106,7 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
-            ...     email_message.get_header('X-OpenPGP-Accepts')
+            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
             'GPG'
         '''
         
@@ -125,8 +125,8 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
             >>> with open(get_plain_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
-            ...     email_message.add_header('X-OpenPGP-Accepts', 'GPG')
-            ...     email_message.get_header('X-OpenPGP-Accepts')
+            ...     email_message.add_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER, 'GPG')
+            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
             'GPG'
         '''
 
@@ -140,15 +140,15 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('bouncy-castle.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
-            ...     email_message.change_header('X-OpenPGP-Accepts', 'TestGPG')
-            ...     email_message.get_header('X-OpenPGP-Accepts')
+            ...     email_message.change_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER, 'TestGPG')
+            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
             'TestGPG'
         '''
 
-        if self._message.__contains__(key):
-            self.delete_header(key)
-
-        self.add_header(key, value)
+        if self._message.has_key(key):
+            self._message.replace_header(key, value)
+        else:
+            self.add_header(key, value)
 
 
     def delete_header(self, key):
@@ -158,8 +158,8 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('bouncy-castle.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
-            ...     email_message.delete_header('X-OpenPGP-Accepts')
-            ...     email_message.get_header('X-OpenPGP-Accepts') is None
+            ...     email_message.delete_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
+            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER) is None
             True
         '''
         
@@ -212,7 +212,7 @@ class EmailMessage(object):
             
             Python's parser frequently accepts a message that has garbage in the header by
             simply adding all header items after the bad header line(s) to the body text;
-            this can leave a pretty unmanageable message so we apply our own validation
+            this can leave a pretty unmanageable message so we apply our own validation.
             
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
@@ -231,7 +231,7 @@ class EmailMessage(object):
                 self.log_message(validator.get_why())
         except Exception, AttributeError:
             valid = False
-            self.log_message(format_exc())
+            record_exception()
             
         return valid
 
@@ -370,7 +370,7 @@ class EmailMessage(object):
         try:
             payload = message.get_payload(decode=decode)
         except:
-            self.log_message(format_exc())
+            record_exception()
             payload = message.get_payload()
     
         return payload
@@ -426,7 +426,7 @@ class EmailMessage(object):
             self.get_message().set_type(content_type)
 
         else:
-            from goodcrypto.mail.message.utils import is_content_type_mime
+            from goodcrypto.mail.message.inspect_utils import is_content_type_mime
 
             self.log_message('attaching payload for {}'.format(content_type))
             if content_type == mime_constants.OCTET_STREAM_TYPE:
@@ -512,8 +512,8 @@ class EmailMessage(object):
         '''
 
         return (isinstance(text, str) and
-                text.find(constants.BEGIN_PGP_MESSAGE) >= 0 and 
-                text.find(constants.END_PGP_MESSAGE) >= 0)
+                text.find(gpg_constants.BEGIN_PGP_MESSAGE) >= 0 and 
+                text.find(gpg_constants.END_PGP_MESSAGE) >= 0)
 
     def contains_pgp_signature_delimeters(self, text):
         '''
@@ -528,8 +528,8 @@ class EmailMessage(object):
         '''
 
         return (isinstance(text, str) and
-                text.find(constants.BEGIN_PGP_SIGNATURE) >= 0 and 
-                text.find(constants.END_PGP_SIGNATURE) >= 0)
+                text.find(gpg_constants.BEGIN_PGP_SIGNATURE) >= 0 and 
+                text.find(gpg_constants.END_PGP_SIGNATURE) >= 0)
 
     def get_pgp_signature_blocks(self):
         '''
@@ -547,12 +547,12 @@ class EmailMessage(object):
             ''' Get the signed data. '''
 
             signature_block = None
-            start_index = content.find(constants.BEGIN_PGP_SIGNED_MESSAGE)
+            start_index = content.find(gpg_constants.BEGIN_PGP_SIGNED_MESSAGE)
             if start_index < 0:
-                start_index = content.find(constants.BEGIN_PGP_SIGNATURE)
-            end_index = content.find(constants.END_PGP_SIGNATURE)
+                start_index = content.find(gpg_constants.BEGIN_PGP_SIGNATURE)
+            end_index = content.find(gpg_constants.END_PGP_SIGNATURE)
             if start_index >= 0 and end_index > start_index:
-                signature_block = content[start_index:end_index + len(constants.END_PGP_SIGNATURE)]
+                signature_block = content[start_index:end_index + len(gpg_constants.END_PGP_SIGNATURE)]
                 
             return signature_block
 
@@ -579,7 +579,7 @@ class EmailMessage(object):
             ''' Remove the signature from the content. '''
 
             # remove the beginning signature lines
-            if content.startswith(constants.BEGIN_PGP_SIGNED_MESSAGE):
+            if content.startswith(gpg_constants.BEGIN_PGP_SIGNED_MESSAGE):
                 begin_sig_lines = ''
                 for line in content.split('\n'):
                     if len(line) <= 0:
@@ -589,16 +589,16 @@ class EmailMessage(object):
                         begin_sig_lines += '\n'
                 content = content[len(begin_sig_lines):]
                 
-            start_index = content.find(constants.BEGIN_PGP_SIGNATURE)
-            end_index = content.find(constants.END_PGP_SIGNATURE)
+            start_index = content.find(gpg_constants.BEGIN_PGP_SIGNATURE)
+            end_index = content.find(gpg_constants.END_PGP_SIGNATURE)
                 
             # remove the signature itself
-            start_sig_index = content.find(constants.BEGIN_PGP_SIGNATURE)
-            content = content[0:start_sig_index] + content[end_index + len(constants.END_PGP_SIGNATURE):]
+            start_sig_index = content.find(gpg_constants.BEGIN_PGP_SIGNATURE)
+            content = content[0:start_sig_index] + content[end_index + len(gpg_constants.END_PGP_SIGNATURE):]
             
             # remove the extra characters added around the message itself
-            content = content.replace('- {}'.format(constants.BEGIN_PGP_MESSAGE), constants.BEGIN_PGP_MESSAGE)
-            content = content.replace('- {}'.format(constants.END_PGP_MESSAGE), constants.END_PGP_MESSAGE)
+            content = content.replace('- {}'.format(gpg_constants.BEGIN_PGP_MESSAGE), gpg_constants.BEGIN_PGP_MESSAGE)
+            content = content.replace('- {}'.format(gpg_constants.END_PGP_MESSAGE), gpg_constants.END_PGP_MESSAGE)
 
             return content
 
@@ -716,7 +716,7 @@ class EmailMessage(object):
 
             result_ok = True
         except Exception:
-            self.log_message(format_exc())
+            record_exception()
             raise Exception
 
         return result_ok
@@ -752,12 +752,12 @@ class EmailMessage(object):
                 string = file_pointer.getvalue()
             except Exception, AttributeError:
                 try:
-                    self.log_message(format_exc())
+                    self.log_message('unable to flatten message')
 
                     string = msg.as_string()
                 except Exception, AttributeError:
                     #  we explicitly want to catch everything here, even NPE
-                    self.log_message(format_exc())
+                    self.log_message('unable to convert message as a string')
     
                     string = '{}\n{}'.format(
                         '\n'.join(self.get_header_lines()),
@@ -897,7 +897,7 @@ class EmailMessage(object):
                     # if the parser accept this header line, then keep it
                     self.add_header(name, value)
             except Exception:
-                self.log_message(format_exc())
+                record_exception()
                 self.bad_header_lines.append(line)
 
         return name, value, last_name
@@ -924,7 +924,7 @@ class EmailMessage(object):
                         charset = charset[1:len(charset)-1]
                     self._message.set_charset(charset)
             except Exception:
-                self.log_message(format_exc())
+                record_exception()
                 self._message.set_charset(constants.DEFAULT_CHAR_SET)
 
         elif name == mime_constants.CONTENT_XFER_ENCODING_KEYWORD:
@@ -998,7 +998,7 @@ class EmailMessage(object):
                 body_text += line.encode(charset)
         except Exception as body_exception:
             self.log_message(body_exception)
-            self.log_message(format_exc())
+            record_exception()
             body_text = ''.join(body)
 
         if len(self.bad_header_lines) > 0:
@@ -1034,7 +1034,7 @@ class EmailMessage(object):
 
         except Exception as message_exception:
             self.log_message(message_exception)
-            self.log_message(format_exc())
+            record_exception()
             raise MessageException(message_exception)
 
     
@@ -1068,7 +1068,7 @@ class EmailMessage(object):
             >>> email_message.log_message_exception(Exception, 'message', 'log message')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.exception.log'))
             True
         '''
 
@@ -1090,24 +1090,23 @@ class EmailMessage(object):
             >>> email_message.log_exception('test')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.exception.log'))
             True
             >>> email_message.log_exception('test', message_exception='message exception')
         '''
             
-        self.log_message(format_exc())
-        ExceptionLog.log_message(format_exc())
+        record_exception()
         
         self.log_message(log_msg)
-        ExceptionLog.log_message(log_msg)
+        record_exception(message=log_msg)
         
         if message_exception is not None:
             if type(message_exception) == Exception:
                 self.log_message(message_exception.value)
-                ExceptionLog.log_message(message_exception.value)
+                record_exception(message=message_exception.value)
             elif type(message_exception) == str:
                 self.log_message(message_exception)
-                ExceptionLog.log_message(message_exception)
+                record_exception(message=message_exception)
 
     def log_message(self, message):
         ''' 

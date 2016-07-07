@@ -21,8 +21,8 @@ POSTFIX_REDIS_PORT = REDIS_PORT
 # REDIS_DB = 3
 
 # Queues to listen on
-POSTFIX_QUEUE = 'postfix'
-QUEUES = [POSTFIX_QUEUE]
+POSTFIX_RQUEUE = 'postfix'
+QUEUES = [POSTFIX_RQUEUE]
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step

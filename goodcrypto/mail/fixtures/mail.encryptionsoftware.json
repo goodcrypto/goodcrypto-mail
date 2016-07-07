@@ -1,6 +1,6 @@
 [
   {
-    "model": "mail.EncryptionSoftware",
+    "model": "mail.encryptionsoftware",
     "pk": 1,
     "fields": {
       "name": "GPG",

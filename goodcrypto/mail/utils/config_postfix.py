@@ -1,25 +1,34 @@
 '''
     Configure postfix to work with the main MTA
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-10-13
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-06-08
+    IMPORTANT: The doc tests in this module can only be run as root.
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import re, sh
-from traceback import format_exc
+from goodcrypto.utils.exception import record_exception
 from syr.log import get_log
 
 log = get_log()
 
-def configure(mail_server_address, in_port, out_port, domain):
+def configure_mta(mail_server_address, in_port, out_port):
     '''
-        Configure postfix to work with the main MTA and domain.
+        Configure postfix to work with the main MTA.
         
-        >>> configure('125.6.78.1', 10021, 10022, 'test')
+        >>> with open('/etc/postfix/master.cf') as f:
+        ...     master_contents = f.read()
+        >>> with open('/etc/postfix/main.cf') as f:
+        ...     main_contents = f.read()
+        ...     configure_mta('125.6.78.1', 10021, 10022)
+        ...     configure_mta('125.6.78.1', 10021, 10022)
         True
-        >>> configure('125.6.78.1', 10021, 10022, 'test')
         False
+        >>> with open('/etc/postfix/master.cf', 'wt') as f:
+        ...     f.write(master_contents)
+        >>> with open('/etc/postfix/main.cf', 'wt') as f:
+        ...     f.write(main_contents)
     '''
     
     try:
@@ -31,15 +40,12 @@ def configure(mail_server_address, in_port, out_port, domain):
         if configure_master(in_port):
             new_configuration = True
 
-        if configure_mailname(domain):
-            new_configuration = True
-
         if new_configuration:
             # restart postfix with the new settings
             sh.service('postfix', 'restart')
             log.write('postfix restarted')
     except Exception:
-        log.write(format_exc())
+        record_exception()
         raise
 
     return new_configuration
@@ -48,10 +54,14 @@ def configure_main(mail_server_address, out_port):
     '''
         Configure main.cf.
         
-        >>> configure_main('123.456.789.0', 10024)
+        >>> with open('/etc/postfix/main.cf') as f:
+        ...     master_contents = f.read()
+        ...     configure_main('123.456.789.0', 10024)
+        ...     configure_main('123.456.789.0', 10024)
         True
-        >>> configure_main('123.456.789.0', 10024)
         False
+        >>> with open('/etc/postfix/main.cf', 'wt') as f:
+        ...     f.write(master_contents)
     '''
     
     new_configuration = False
@@ -88,10 +98,14 @@ def configure_master(in_port):
     '''
         Configure master.cf.
         
-        >>> configure_master(10023)
+        >>> with open('/etc/postfix/master.cf') as f:
+        ...     main_contents = f.read()
+        ...     configure_master(10023)
+        ...     configure_master(10023)
         True
-        >>> configure_master(10023)
         False
+        >>> with open('/etc/postfix/master.cf', 'wt') as f:
+        ...     f.write(main_contents)
     '''
     
     new_configuration = False
@@ -103,7 +117,7 @@ def configure_master(in_port):
     new_lines = []
     for line in lines:
         l = line.lower()
-        m = re.match('^(\d{2,5}) .*', l)
+        m = re.match('^0.0.0.0:(\d{2,5}) .*', l)
         if m:
             new_line = line.replace(m.group(1), str(in_port))
             if new_line != line:
@@ -123,10 +137,14 @@ def configure_mailname(domain):
     '''
         Configure mailname
 
-        >>> configure_mailname('new_test')
+        >>> with open('/etc/mailname') as f:
+        ...     mailname = f.read()
+        ...     configure_mailname('new_test')
+        ...     configure_mailname('new_test')
         True
-        >>> configure_mailname('new_test')
         False
+        >>> with open('/etc/mailname', 'wt') as f:
+        ...     f.write(mailname)
     '''
     
     new_configuration = False
@@ -146,7 +164,11 @@ def configure_mailname(domain):
     if new_configuration:
         with open(filename, 'wt') as output_file:
             output_file.write(''.join(new_lines))
-        log.write('updated postfix master.cf')
+        log.write('updated mailname')
+
+        # restart postfix with the new settings
+        sh.service('postfix', 'restart')
+        log.write('postfix restarted')
 
     return new_configuration
 

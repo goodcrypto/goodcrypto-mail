@@ -1,20 +1,20 @@
-#!/usr/bin/env python
 '''
     Send notices from the GoodCrypto Server daemon.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-10
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, sh, smtplib
+import os
 from email.utils import formataddr
-from traceback import format_exc
 
-from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail.options import get_domain
+from goodcrypto.mail.internal_settings import get_domain
+from goodcrypto.mail.utils import get_sysadmin_email, is_metadata_address
 from goodcrypto.mail.utils.dirs import get_notices_directory
-from goodcrypto.oce.utils import parse_address
+from goodcrypto.utils import get_email
+from goodcrypto.utils.exception import record_exception
+from goodcrypto.utils.log_file import LogFile
 from syr.message import prep_mime_message
 
 
@@ -45,6 +45,10 @@ def notify_user(to_address, subject, text=None, attachment=None, filename=None):
 
     message = None
     try:
+        # all messages to the metadata user should get routed to the sysadmin
+        if is_metadata_address(to_address):
+            to_address = get_sysadmin_email()
+
         message = create_notice_message(
             to_address, subject, text=text, attachment=attachment, filename=filename)
         if message is None:
@@ -54,26 +58,20 @@ def notify_user(to_address, subject, text=None, attachment=None, filename=None):
             log_message('starting to send notice to {} about {}'.format(to_address, subject))
             
             from_addr = NOTICE_FROM_EMAIL
-            __, to_addr = parse_address(to_address)
+            to_addr = get_email(to_address)
             
             if to_addr is None or message is None:
                 result_ok = False
                 log_message('no to address to send notice')
             else:
-                if USE_SMTP:
-                    smtp = smtplib.SMTP()
-                    smtp.connect()
-                    smtp.sendmail(from_addr, to_addr, message)
-                    smtp.quit()
-                else:
-                    sendmail = sh.Command('/usr/sbin/sendmail')
-                    sendmail('-B', '8BITMIME', '-f', from_addr, to_addr, _in=message)
-
+                from goodcrypto.mail.message.utils import send_message
+                
+                result_ok = send_message(from_addr, to_addr, message)
                 log_message('sent notice to {}'.format(to_address))
-                result_ok = True
     except:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
         
     if not result_ok and message is not None:
         _save(message)
@@ -117,14 +115,14 @@ def _save(message):
             notice_filename = None
             log_message('no notice to save')
         else:
-            from goodcrypto.mail.message.utils import write_message
+            from goodcrypto.mail.message.adjust import write_message
         
             log_message('saving: {}'.format(message))
             notice_filename = write_message(get_notices_directory(), message)
-    except Exception as exception:
+    except:
         notice_filename = None
-        log_message(exception)
-        log_message(format_exc())
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        record_exception()
 
     return notice_filename
 

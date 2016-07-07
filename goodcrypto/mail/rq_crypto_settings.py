@@ -2,7 +2,7 @@
     Crypto RQ worker settings.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2014-10-24
+    Last modified: 2015-06-08
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -21,8 +21,8 @@ CRYPTO_REDIS_PORT = REDIS_PORT
 # REDIS_DB = 3
 
 # Queues to listen on
-CRYPTO_QUEUE = 'crypto'
-QUEUES = [CRYPTO_QUEUE]
+CRYPTO_RQUEUE = 'crypto'
+QUEUES = [CRYPTO_RQUEUE]
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step

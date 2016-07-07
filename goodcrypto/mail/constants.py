@@ -2,7 +2,7 @@
     Constants for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-08
+    Last modified: 2015-06-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -14,4 +14,15 @@ PASSWORD_MAX_LENGTH = 25
 
 # Make this unique, and don't share it with anybody.
 MAIL_DB_PASSWORD = 'secret-password'
+
+TAG_PREFIX = 'GoodCrypto'
+TAG_WARNING = '{} Warning'.format(TAG_PREFIX)
+TAG_ERROR = '{} Error'.format(TAG_PREFIX)
+
+# short form of time periods
+HOURS_CODE = 'h'
+DAYS_CODE = 'd'
+WEEKS_CODE = 'w'
+MONTHS_CODE = 'm'
+YEARS_CODE = 'y'
 

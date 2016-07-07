@@ -1,7 +1,6 @@
-#!/usr/bin/env python
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-15
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -12,14 +11,6 @@
     As of 2006.05.04 Google appears to have changed how they search for,
     e.g. 'X-OpenPGP-Accepts', so this check is not as effective.
 '''
-
-BEGIN_PGP_MESSAGE = '-----BEGIN PGP MESSAGE-----'
-END_PGP_MESSAGE = '-----END PGP MESSAGE-----'
-
-BEGIN_PGP_SIGNED_MESSAGE = '-----BEGIN PGP SIGNED MESSAGE-----'
-BEGIN_PGP_SIGNATURE = '-----BEGIN PGP SIGNATURE-----'
-END_PGP_SIGNATURE = '-----END PGP SIGNATURE-----'
-
 
 #  Email header for public key of sender. 
 PUBLIC_KEY_HEADER = 'X-OpenPGP-PublicKey'
@@ -34,6 +25,10 @@ ACCEPTED_CRYPTO_SOFTWARE_HEADER = 'X-OpenPGP-Accepts'
 # RFC 3156 doesn't specify what was encrypted, so this custom header does.      
 PGP_ENCRYPTED_CONTENT_TYPE = 'X-OpenPGP-EncryptedContentType'
 
+# the original sender and recipient for a message encrypted to protect metadata
+ORIGINAL_FROM = 'X-ORIGINAL-FROM'
+ORIGINAL_TO = 'X-ORIGINAL-TO'
+
 NEW_LINE = '\n'
 
 '''
@@ -46,9 +41,20 @@ TAGLINE_DELIMITER_3676 = '--'
 
 #  We'd like to use <hr> but can't because bayesian spam filters score html badly.
 TAGLINE_DELIMITER_HTML = '<hr>'
-TAGLINE_DELIMITER = '____________________________________________________________________________'
+TAGLINE_DELIMITER = '__________________________________________________________'
 
 CRLF = '\r\n'
 
 DEFAULT_CHAR_SET = 'UTF-8'
+
+# constants for queuing messages to prevent tracking
+MESSAGE_PREFIX = 'msg'
+MESSAGE_SUFFIX = 'txt'
+START_ADDENDUM = '\n\n-----START OF GOODCRYPTO ADDENDUM-----\n'
+END_ADDENDUM = '-----END OF GOODCRYPTO ADDENDUM-----\n'
+
+# extra details needed in a queued message
+CRYPTED_KEYWORD = 'crypted'
+CRYPTED_WITH_KEYWORD = 'crypted-with'
+VERIFICATION_KEYWORD = 'verification-code'
 

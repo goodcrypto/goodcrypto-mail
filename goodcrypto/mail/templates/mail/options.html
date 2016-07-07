@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-07-28
+
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="privacy, encryption, email">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Options for your GoodCrypto private server.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}Mail Options{% endblock %}
+
+{% block contentpane %}
+
+    {% include "snippets/secure_button.html" %}
+
+    <div class="row">
+        <h3>Mail Options</h3>
+    </div>
+
+    <div class="col-md-12 col-xm-6">
+        <div class="row">&nbsp;</div>
+        <div class="table-responsive btn-group">
+            <table class="table table-responsive">
+                <tr>
+                    <th>
+                        <p>&nbsp;</p>
+                        {% trans 'Options' %}
+                        <p>&nbsp;</p>
+                    </th>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/admin/mail/mailoptions/" title="{% trans 'Manage options for encrypting/decrypting mail' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'General' %}</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/admin/mail/metadataoptions/" title="{% trans 'Show the contacts who have keys. Manually create private keys for users' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'Metadata' %}</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/admin/mail/mailserveroptions/" title="{% trans 'Manage users who can check on which messages were exchanged privately' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'Mail server' %}</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
+                </tr>
+                {# blank row to get all the buttons to line up #}
+                <tr>
+                    <th>
+                        &nbsp;
+                    </th>
+                    <td>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </td>
+                    <td>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </td>
+                    <td>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+{% endblock contentpane %}
+

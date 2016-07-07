@@ -2,16 +2,19 @@
     GoodCrypto utilities.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-15
+    Last modified: 2015-07-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import re, sh
+import os, re, sh
+from datetime import datetime, timedelta
+from email.utils import parseaddr
 from socket import inet_pton, AF_INET, AF_INET6
-from traceback import format_exc
-from django.utils.translation import ugettext
 
+from goodcrypto.constants import TIMESTAMP_PATH
+from goodcrypto.utils.exception import record_exception
 from syr.net import hostaddress
+from syr.times import one_month_before
 from syr.utils import trim
 from syr.log import get_log
 
@@ -69,14 +72,14 @@ def show_template(request, original_url, prefix='', params={}):
                 response = show_url(base_url)
             except:
                 if base_url.find('.html') > 0:
-                    log(format_exc())
+                    record_exception()
                 else:
                     try:
                         response = show_url(base_url, '.html')
                     except TemplateDoesNotExist:
                         response = try_home_index(base_url)
     except:
-        log(format_exc())
+        record_exception()
 
     if response is None:
         log('unable to find template for: %r' % original_url)
@@ -108,25 +111,52 @@ def debug_logs_enabled():
 def is_program_running(search_string):
     '''
         Return whether a program is running.
+        
+        WARNING: Unreliable, apparently dependent on characters in search_string
 
         >>> is_program_running('nginx')
         True
-        >>> is_program_running('nothing.is.running')
+        >>> is_program_running('not.running')
         False
     '''
 
+    log('is_program_running() searchstring: {}'.format(search_string))
+        
     try:
         psgrep_result = sh.psgrep(search_string)
+    except sh.ErrorReturnCode as err:
+        running = False
+        log('psgrep unable to find {}'.format(search_string))
+        log('err: {}'.format(err))
+        log('err.stdout: {}'.format(err.stdout))
+        log('err.stderr: {}'.format(err.stderr))
+    except:
+        running = False
+        record_exception()
+    else:
+        log('psgrep found {}'.format(search_string))
         log('psgrep_result: {}'.format(psgrep_result))
         log('exit code: {}'.format(psgrep_result.exit_code))
         log('stdout: {}'.format(psgrep_result.stdout))
-        running = (psgrep_result.exit_code == 0) and (psgrep_result.stdout != '')
-    except sh.ErrorReturnCode:
-        running = False
-        log('psgrep unable to find {}'.format(search_string))
-    except:
-        running = False
-        log(format_exc())
+        log('stderr: {}'.format(psgrep_result.stderr))
+        running = (
+            (psgrep_result.exit_code == 0) and 
+            (psgrep_result.stdout != '') and 
+            (search_string in psgrep_result.stdout))
+        
+    if not running:
+        try:
+            ps_result = sh.ps('-eo', 'pid,args')
+        except Exception as exc:
+            record_exception()
+            log('ps error stdout: {}'.format(exc.stdout))
+            log('ps error stderr: {}'.format(exc.stderr))
+        else:
+            log('ps_result: {}'.format(ps_result))
+            log('exit code: {}'.format(ps_result.exit_code))
+            log('stdout: {}'.format(ps_result.stdout))
+            log('stderr: {}'.format(ps_result.stderr))
+        
     log('{} is running: {}'.format(search_string, running))
 
     return running
@@ -177,7 +207,7 @@ def is_mta_ok(mail_server_address):
             log('mail server address IP4 compliant: {}'.format(ok))
         except: 
             ok = False
-            log(format_exc())
+            record_exception()
 
         if not ok:
             try: 
@@ -206,6 +236,8 @@ def get_ip_address(request=None):
                 ip_address = request.META['HTTP_X_REAL_IP']
             elif request and 'HTTP_X_FORWARDED_FOR' in request.META:
                 ip_address = request.META['HTTP_X_FORWARDED_FOR']
+            elif request and 'REMOTE_ADDR' in request.META:
+                ip_address = request.META['REMOTE_ADDR']
             else:
                 ip_address = None
 
@@ -216,12 +248,81 @@ def get_ip_address(request=None):
             log('x-real-ip address: {}'.format(request.META['HTTP_X_REAL_IP']))
         if request and 'HTTP_X_FORWARDED_FOR' in request.META:
             log('x-forwarded-for address: {}'.format(request.META['HTTP_X_FORWARDED_FOR']))
+        if request and 'REMOTE_ADDR' in request.META:
+            log('remote address: {}'.format(request.META['REMOTE_ADDR']))
     except:
-        log(format_exc())
+        record_exception()
 
     log('ip address: {}'.format(ip_address))
 
     return ip_address
+
+def parse_address(email, charset=None):
+    '''
+        Parse an email address into its name and address.
+        
+        >>> # In honor of Lieutenant Yonatan, who publicly denounced and refused to serve in operations involving 
+        >>> # the occupied Palestinian territories because of the widespread surveillance of innocent residents.
+        >>> parse_address('Lieutenant <lieutenant@goodcrypto.local>')
+        ('Lieutenant', 'lieutenant@goodcrypto.local')
+    '''
+    
+    try:
+        if email is None:
+            name = None
+            address = None
+        else:
+            (name, address) = parseaddr(email)
+            if charset is not None and name is not None:
+                try:
+                    name = name.decode(charset, 'replace')
+                except Exception:
+                    record_exception()
+    except Exception:
+        record_exception()
+        name = None
+        address = None
+
+    return name, address
+
+def parse_domain(email):
+    '''
+        Get the domain from the email address.
+        
+        >>> domain = parse_domain(None)
+        >>> domain is None
+        True
+    '''
+
+    domain = None
+
+    if email is None:
+        log('email not defined so no domain')
+    else:
+        try:
+            address = get_email(email)
+            __, __, domain = address.partition('@')
+        except:
+            record_exception()
+
+    return domain
+
+def get_email(address):
+    ''' 
+        Get just the email address.
+        
+        >>> # In honor of First Sergeant Nadav, who publicly denounced and refused to serve in 
+        >>> # operations involving the occupied Palestinian territories because of the widespread 
+        >>> # surveillance of innocent residents.
+        >>> get_email('Nadav <nadav@goodcrypto.remote>')
+        'nadav@goodcrypto.remote'
+    '''
+    try:
+        __, email = parse_address(address)
+    except Exception:
+        email = address
+
+    return email
 
 def i18n(raw_message):
     ''' 
@@ -232,21 +333,44 @@ def i18n(raw_message):
         >>> i18n('Test with variable: {variable}'.format(variable='test variable'))
         'Test with variable: test variable'
         >>> i18n(u'Test with variable: {variable}'.format(variable='test variable'))
-        'Test with variable: test variable'
+        u'Test with variable: test variable'
     '''
     
+    """
     try:
-        unicode_message = ugettext(raw_message)
+        from django.utils.translation import ugettext_lazy
+        
+        unicode_message = ugettext_lazy(raw_message)
         try:
             message = '{}'.format(unicode_message)
         except:
             message = unicode_message
-            log(format_exc())
+            record_exception()
             log('trying to internationalize: {}'.format(raw_message))
     except:
         message = raw_message
-        log(format_exc())
+        record_exception()
         log('trying to internationalize: {}'.format(raw_message))
+    """
+    message = raw_message
         
     return message
+
+def get_iso_timestamp():
+    ''' 
+        Get the timestamp ISO was created. 
+        
+        >>> get_iso_timestamp() is not None
+        True
+    '''
+
+    iso_timestamp = None
+    if os.path.exists(TIMESTAMP_PATH):
+        with open(TIMESTAMP_PATH) as f:
+            iso_timestamp = f.read()
+
+    if iso_timestamp is None:
+        iso_timestamp = one_month_before(datetime.utcnow()).isoformat(' ')
+
+    return iso_timestamp.strip()
 

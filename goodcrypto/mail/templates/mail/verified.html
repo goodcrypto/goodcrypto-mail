@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-07-19
+    
+{% endcomment %}
+{% load i18n custom %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static "css/admin.css" %}" />
+{% endblock %}
+
+{% block extrascript %}
+  {{ block.super }}
+    <script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
+{% endblock extrascript %}
+
+{% block contentpane %}
+
+    <div class="row">
+        <h2>
+            {% block main_headline %}
+            {% endblock main_headline %}
+        </h2>
+    </div>
+    <div class="row">
+        <h3>
+            {% block subheadline %}
+            {% endblock subheadline %}
+        </h3>
+    </div>
+
+    <div class="row">
+        {% if results %}
+            <form id="changelist-form" action="" method="post"{% csrf_token %}
+                <div class="results">
+                <table class="table table-hover table-responsive" id="result_list">
+                <thead>
+                    <tr>
+                        {% block results_header %}
+                        {% endblock results_header %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                        <tr class="{% cycle 'row1' 'row2' %}">
+                            {% for item in result %}<td>{{ item|safe }}</td>{% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+                </div>
+            </form>
+        {% elif error_message %}
+            <p>&nbsp;</p>
+            <p class="dropcap">
+            Please be sure that you entered the correct verification code. 
+            </p>
+            <p>
+            {{ error_message|safe }}
+            <p>&nbsp;</p>
+            </p>
+        {% else %}
+            <p>&nbsp;</p>
+            <p class="dropcap">
+                {% block no_results %}
+                {% endblock no_results%}
+            </p>
+        {% endif %}
+    </div>
+
+    {% if results %}
+        <div class="row col-md-8">
+            <table class="table well table-responsive" id="protected_chart">
+                <tr>
+                    {% include 'mail/snippets/protect_header.html' %}
+                </tr>
+            {% for user, date, id, status, code in results %}
+                {% if status == "Metadata + content 2x" %}
+                <tr>
+                    {% include 'mail/snippets/protect_metadata_content.html' %}
+                </tr>
+                {% elif status == "Metadata + content" %}
+                <tr>
+                    {% include 'mail/snippets/protect_metadata.html' %}
+                </tr>
+                {% else %}
+                <tr>
+                    {% include 'mail/snippets/protect_content.html' %}
+                </tr>
+                {% endif %}
+            {% endfor %}
+            </table>
+        </div>
+    {% endif %}
+{% endblock contentpane %}
+

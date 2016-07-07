@@ -1,6 +1,0 @@
-Instructions for Translating the server.res file
-======================================
-
-Please use the instructions detailed in the file:
-control/translator.instructions.txt
-

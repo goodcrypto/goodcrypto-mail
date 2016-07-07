@@ -1,15 +1,15 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-10
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from email.mime.multipart import MIMEMultipart
 from StringIO import StringIO
-from traceback import format_exc
 
-from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.utils.exception import record_exception
+from goodcrypto.utils.log_file import LogFile
 
 
 class Validator(object):
@@ -66,7 +66,8 @@ class Validator(object):
                 is_valid = False
                 
                 #  we explicitly want to catch everything here, even NPE
-                self.log_message(format_exc())
+                record_exception()
+                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         self.log_message('message is valid: {}'.format(is_valid))
 

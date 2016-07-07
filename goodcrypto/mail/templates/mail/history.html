@@ -2,16 +2,14 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-04-19
+    Last modified: 2015-07-19
     
 {% endcomment %}
 {% load i18n custom %}
 
 {% block extrastyle %}
   {{ block.super }}
-  <link rel="stylesheet" type="text/css" href="{% static "admin/css/base.css" %}" />
-  <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}" />
-  <link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}" />
+  <link rel="stylesheet" type="text/css" href="{% static "css/admin.css" %}" />
 {% endblock %}
 
 {% block extrascript %}
@@ -22,8 +20,10 @@
 {% block contentpane %}
 
     <div class="row">
-        <p>&nbsp;</p>
-        <h2>{{ headline }}</h2>
+        <h2>
+            {% block main_headline %}
+            {% endblock main_headline %}
+        </h2>
     </div>
 
     <div class="row">
@@ -31,63 +31,96 @@
             <form id="changelist-form" action="" method="post"{% csrf_token %}
         
                 <div class="results">
-                <table class="table table-hover" id="result_list">
-                <thead>
-                    <tr>
-                        {% for header in result_headers %}
-                        <th scope="col" {{ header.class_attrib }}>
-                           <div class="text">
-                            {% if header.sortable %}
-                                <a href="{{ header.url_primary }}">{{ header.text|capfirst }}</a>
-                            {% else %}
-                                <span>{{ header.text|capfirst }}</span>
-                            {% endif %}
-                            </div>
-                           <div class="clear"></div>
-                        </th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in results %}
-                        <tr class="{% cycle 'row1' 'row2' %}">
-                            {% for item in result %}<td>{{ item }}</td>{% endfor %}
+                <table class="table table-hover table-responsive" id="result_list">
+                    <thead>
+                        <tr>
+                            {% block results_header %}
+                            {% endblock results_header %}
                         </tr>
-                    {% endfor %}
-                </tbody>
+                    </thead>
+                    <tbody>
+                        {% for result in results %}
+                            <tr class="{% cycle 'row1' 'row2' %}">
+                                {% for item in result %}<td>{{ item|safe }}</td>{% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
                 </div>
             </form>
         {% elif error_message %}
             <p>&nbsp;</p>
-            <h3 class="dropcap">
-            {{ error_message|safe }}
-            </h3>
+            <p class="dropcap">
+                {{ error_message|safe }}
+            </p>
         {% else %}
             <p>&nbsp;</p>
-            <h3 class="dropcap">
-            {% blocktrans %}Your GoodCrypto private server has not {{ status }} any messages for you, yet.{% endblocktrans %}
-            </h3>
+            <p class="dropcap">
+                {% block no_results %}
+                {% endblock no_results %}
+            </p>
         {% endif %}
     </div>
 
     {% if results %}
-        <p class="dropcap">
-        Click the column headers to change the order of the list.
-        <noscript>
-        You must enable javascript for this page to be able to change the order.
-        </noscript>
-        </p>
-    
-        <script type="text/javascript">
-        $(document).ready(function()
-            {
-                <!-- $("#result_list").tablesorter( {sortList: [[0,0], [1,0]]} );-->
-                $("#result_list").tablesorter({sortList: [[1,0]]} );
-            }
-        );
-        </script>
+        {% if results|length > 1 %}
+            <div class="row">
+                <p class="pull-right">
+                Click the column headers to change the order.
+                <noscript>
+                Javascript required.
+                </noscript>
+                </p>
+            </div>
+            <div class="row col-md-8">
+                <table class="table table-responsive well" id="protected_chart">
+                    <tr>
+                        {% include 'mail/snippets/protect_header.html' %}
+                    </tr>
+                    <tr>
+                        {% include 'mail/snippets/protect_content.html' %}
+                    </tr>
+                    <tr>
+                        {% include 'mail/snippets/protect_metadata.html' %}
+                   </tr>
+                    <tr>
+                        {% include 'mail/snippets/protect_metadata_content.html' %}
+                    </tr>
+                </table>
+            </div>
+        
+            <script type="text/javascript">
+            $(document).ready(function()
+                {
+                    <!-- $("#result_list").tablesorter( {sortList: [[0,0], [1,0]]} );-->
+                    $("#result_list").tablesorter({sortList: [[1,0]]} );
+                }
+            );
+            </script>
+        {% else %}
+            <div class="row col-md-8">
+                <table class="table table-responsive well" id="protected_chart">
+                    <tr>
+                        {% include 'mail/snippets/protect_header.html' %}
+                    </tr>
+                {% for result in results %}
+                    {% if result.status == "Metadata + content 2x" %}
+                    <tr>
+                        {% include 'mail/snippets/protect_metadata_content.html' %}
+                    </tr>
+                    {% elif result.status == "Metadata + content" %}
+                    <tr>
+                        {% include 'mail/snippets/protect_metadata.html' %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        {% include 'mail/snippets/protect_content.html' %}
+                    </tr>
+                    {% endif %}
+                {% endfor %}
+                </table>
+            </div>
+        {% endif %}
     {% endif %}
-
 {% endblock contentpane %}
 

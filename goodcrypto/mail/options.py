@@ -1,129 +1,20 @@
 '''
-    Manage GoodCrypto Mail's options.
+    Manage Mail options.
     
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-10
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from traceback import format_exc
+from goodcrypto.mail.constants import HOURS_CODE, DAYS_CODE, WEEKS_CODE
+from goodcrypto.utils.exception import record_exception
+from goodcrypto.utils.log_file import LogFile
+
+log = LogFile()
 
 
-def get_mail_server_address():
-    '''
-       Get the IP address or domain for the MTA.
-    
-       >>> get_mail_server_address() is not None
-       True
-    '''
-
-    mail_server_address = get_options().mail_server_address
-    if not mail_server_address:
-        mail_server_address = ''
-
-    return mail_server_address
-    
-
-def set_mail_server_address(new_mail_server_address):
-    '''
-       Set the IP address or domain for the MTA.
-    
-       >>> current_mail_server_address = get_mail_server_address()
-       >>> set_mail_server_address('123.12.12.124')
-       >>> get_mail_server_address()
-       u'123.12.12.124'
-       >>> set_mail_server_address(current_mail_server_address)
-    '''
-
-    record = get_options()
-    record.mail_server_address = new_mail_server_address
-    save_options(record)
-
-
-def get_goodcrypto_listen_port():
-    '''
-       Get the port where the goodcrypto mail server listens for messages FROM the MTA.
-       The MTA sends messages TO this port on the goodcrypto mail server.
-    
-       >>> get_goodcrypto_listen_port()
-       10025
-    '''
-
-    goodcrypto_listen_port = get_options().goodcrypto_listen_port
-    if goodcrypto_listen_port is None:
-        from goodcrypto.mail.models import Options
-
-        goodcrypto_listen_port = Options.DEFAULT_GOODCRYPTO_LISTEN_PORT
-
-    return goodcrypto_listen_port
-    
-
-def set_goodcrypto_listen_port(new_goodcrypto_listen_port):
-    '''
-       Set the port where the goodcrypto mail server listens for messages FROM the MTA.
-    
-       >>> current_goodcrypto_listen_port = get_goodcrypto_listen_port()
-       >>> set_goodcrypto_listen_port(10027)
-       >>> get_goodcrypto_listen_port()
-       10027
-       >>> set_goodcrypto_listen_port(current_goodcrypto_listen_port)
-    '''
-
-    record = get_options()
-    record.goodcrypto_listen_port = new_goodcrypto_listen_port
-    save_options(record)
-
-
-def get_mta_listen_port():
-    '''
-       Get the port where the MTA listens for messages FROM the the goodcrypto mail server.
-       The goodcrypto mail server sends "crypted" messages TO this port on the MTA.
-       
-       >>> get_mta_listen_port()
-       10026
-    '''
-
-    mta_listen_port = get_options().mta_listen_port
-    if mta_listen_port is None:
-        from goodcrypto.mail.models import Options
-
-        mta_listen_port = Options.DEFAULT_MTA_LISTEN_PORT
-
-    return mta_listen_port
-    
-
-def set_mta_listen_port(new_mta_listen_port):
-    '''
-       Set the port where the MTA listens for messages FROM the the goodcrypto mail server.
-    
-       >>> current_mta_listen_port = get_mta_listen_port()
-       >>> set_mta_listen_port(10028)
-       >>> get_mta_listen_port()
-       10028
-       >>> set_mta_listen_port(current_mta_listen_port)
-    '''
-
-    record = get_options()
-    record.mta_listen_port = new_mta_listen_port
-    save_options(record)
-
-
-def get_goodcrypto_server_url():
-    '''
-       Get the url for the goodcrypto server.
-
-       >>> goodcrypto_server_url = get_goodcrypto_server_url()
-       >>> set_goodcrypto_server_url('http://goodcrypto.server:8080')
-       >>> get_goodcrypto_server_url() is not None
-       True
-       >>> set_goodcrypto_server_url('goodcrypto.server:8080')
-       >>> get_goodcrypto_server_url().startswith('http://')
-       True
-       >>> set_goodcrypto_server_url('goodcrypto.server:8443')
-       >>> get_goodcrypto_server_url().startswith('https://')
-       True
-       >>> set_goodcrypto_server_url(goodcrypto_server_url)
-    '''
+def goodcrypto_server_url():
+    ''' Get the url for the goodcrypto server. '''
 
     goodcrypto_server_url = get_options().goodcrypto_server_url
     if goodcrypto_server_url and len(goodcrypto_server_url.strip()) > 0:
@@ -140,266 +31,195 @@ def get_goodcrypto_server_url():
 
 
 def set_goodcrypto_server_url(new_goodcrypto_server_url):
-    '''
-       Set the url for the goodcrypto server.
-    
-       >>> goodcrypto_server_url = get_goodcrypto_server_url()
-       >>> set_goodcrypto_server_url('http://goodcrypto.server:8080')
-       >>> get_goodcrypto_server_url() is not None
-       True
-       >>> set_goodcrypto_server_url(goodcrypto_server_url)
-    '''
+    ''' Set the url for the goodcrypto server. '''
 
     record = get_options()
     record.goodcrypto_server_url = new_goodcrypto_server_url
     save_options(record)
 
-def auto_exchange_keys():
-    '''
-       Get whether to auto exchange keys.
+def mail_server_address():
+    ''' Get the IP address or domain for the MTA. '''
+
+    mail_server_address = get_options().mail_server_address
+    if not mail_server_address:
+        mail_server_address = ''
+
+    return mail_server_address
     
-       >>> current_setting = auto_exchange_keys()
-       >>> set_auto_exchange_keys(True)
-       >>> auto_exchange_keys()
-       True
-       >>> set_auto_exchange_keys(current_setting)
+
+def set_mail_server_address(new_mail_server_address):
+    ''' Set the IP address or domain for the MTA. '''
+
+    record = get_options()
+    record.mail_server_address = new_mail_server_address
+    save_options(record)
+
+
+def goodcrypto_listen_port():
     '''
+       Get the port where the goodcrypto mail server listens for messages FROM the MTA.
+       The MTA sends messages TO this port on the goodcrypto mail server.
+    '''
+
+    goodcrypto_listen_port = get_options().goodcrypto_listen_port
+    if goodcrypto_listen_port is None:
+        from goodcrypto.mail.models import Options
+
+        goodcrypto_listen_port = Options.DEFAULT_GOODCRYPTO_LISTEN_PORT
+
+    return goodcrypto_listen_port
+    
+
+def set_goodcrypto_listen_port(new_goodcrypto_listen_port):
+    ''' Set the port where the goodcrypto mail server listens for messages FROM the MTA. '''
+
+    record = get_options()
+    record.goodcrypto_listen_port = new_goodcrypto_listen_port
+    save_options(record)
+
+
+def mta_listen_port():
+    '''
+       Get the port where the MTA listens for messages FROM the the goodcrypto mail server.
+       The goodcrypto mail server sends "crypted" messages TO this port on the MTA.
+    '''
+
+    mta_listen_port = get_options().mta_listen_port
+    if mta_listen_port is None:
+        from goodcrypto.mail.models import Options
+
+        mta_listen_port = Options.DEFAULT_MTA_LISTEN_PORT
+
+    return mta_listen_port
+    
+
+def set_mta_listen_port(new_mta_listen_port):
+    ''' Set the port where the MTA listens for messages FROM the the goodcrypto mail server. '''
+
+    record = get_options()
+    record.mta_listen_port = new_mta_listen_port
+    save_options(record)
+
+
+def auto_exchange_keys():
+    ''' Get whether to auto exchange keys. '''
 
     return get_options().auto_exchange
 
 
 def set_auto_exchange_keys(auto):
-    '''
-       Set the user's preference to exchange keys automatically.
-    
-       >>> current_setting = auto_exchange_keys()
-       >>> set_auto_exchange_keys(True)
-       >>> auto_exchange_keys()
-       True
-       >>> set_auto_exchange_keys(False)
-       >>> auto_exchange_keys()
-       False
-       >>> set_auto_exchange_keys(current_setting)
-    '''
+    ''' Set the user's preference to exchange keys automatically. '''
 
     record = get_options()
     record.auto_exchange = auto
     save_options(record)
 
 def create_private_keys():
-    '''
-       Get whether to automatically create private keys.
-   
-       >>> current_setting = create_private_keys()
-       >>> set_create_private_keys(True)
-       >>> create_private_keys()
-       True
-       >>> set_create_private_keys(False)
-       >>> create_private_keys()
-       False
-       >>> set_create_private_keys(current_setting)
-    '''
+    ''' Get whether to automatically create private keys. '''
 
     return get_options().create_private_keys
 
 
 def set_create_private_keys(auto):
-    '''
-       Set the user's preference to create private keys automatically.
-    
-       >>> current_setting = create_private_keys()
-       >>> set_create_private_keys(True)
-       >>> create_private_keys()
-       True
-       >>> set_create_private_keys(current_setting)
-    '''
+    ''' Set the user's preference to create private keys automatically. '''
 
     record = get_options()
     record.create_private_keys = auto
     save_options(record)
 
-def get_domain():
-    '''
-       Get the domain that GoodCrypto is managing.
-    
-       >>> get_domain() is not None
-       True
-    '''
-
-    domain = get_options().domain
-    if not domain:
-        domain = ''
-
-    return domain
-    
-
-def set_domain(new_domain):
-    '''
-       Set the domain for local crypto users.
-    
-       >>> current_domain = get_domain()
-       >>> set_domain('new_domain.com')
-       >>> get_domain()
-       u'new_domain.com'
-       >>> set_domain(current_domain)
-    '''
-
-    record = get_options()
-    record.domain = new_domain
-    save_options(record)
-
-
 def clear_sign_email():
-    '''
-       Get whether to clear sign outbound encrypted mail.
-  
-       >>> current_setting = clear_sign_email()
-       >>> set_clear_sign_email(True)
-       >>> clear_sign_email()
-       True
-       >>> set_clear_sign_email(current_setting)
-    '''
+    ''' Get whether to clear sign outbound encrypted mail. '''
 
     return get_options().clear_sign
 
-
 def set_clear_sign_email(sign):
-    '''
-       Set the user's preference to clear sign encrypted outbound mail.
-    
-       >>> current_setting = clear_sign_email()
-       >>> set_clear_sign_email(True)
-       >>> clear_sign_email()
-       True
-       >>> set_clear_sign_email(False)
-       >>> clear_sign_email()
-       False
-       >>> set_clear_sign_email(current_setting)
-    '''
+    ''' Set the user's preference to clear sign encrypted outbound mail. '''
 
     record = get_options()
     record.clear_sign = sign
     save_options(record)
 
 def filter_html():
-    '''
-       Get whether to filter html from inbound email messages.
-  
-       >>> current_setting = filter_html()
-       >>> set_filter_html(True)
-       >>> filter_html()
-       True
-       >>> set_filter_html(current_setting)
-    '''
+    ''' Get whether to filter html from inbound email messages. '''
 
     return get_options().filter_html
 
 
 def set_filter_html(preference):
-    '''
-       Set the user's preference to filter html in inbound email messages.
-    
-       >>> current_setting = filter_html()
-       >>> set_filter_html(True)
-       >>> filter_html()
-       True
-       >>> set_filter_html(False)
-       >>> filter_html()
-       False
-       >>> set_filter_html(current_setting)
-    '''
+    ''' Set the user's preference to filter html in inbound email messages. '''
 
     record = get_options()
     record.filter_html = preference
     save_options(record)
 
-def max_message_length():
-    '''
-       Get the maximum message length, including attachments that are accepted.
-  
-       >>> current_setting = max_message_length()
-       >>> set_max_message_length(10)
-       >>> max_message_length()
-       10
-       >>> set_max_message_length(current_setting)
-    '''
+def encrypt_metadata():
+    ''' Get whether to encrypt metadata. '''
 
-    return get_options().max_message_length
+    return get_options().encrypt_metadata
 
-
-def set_max_message_length(max_length):
-    '''
-       Set the user's preference for the subject of entire encrypted messages.
-    
-       >>> current_setting = max_message_length()
-       >>> set_max_message_length(20)
-       >>> max_message_length()
-       20
-       >>> set_max_message_length(current_setting)
-    '''
+def set_encrypt_metadata(encrypt):
+    ''' Set the user's preference to encrypt metadata. '''
 
     record = get_options()
-    record.max_message_length = max_length
+    record.encrypt_metadata = encrypt
     save_options(record)
 
-def debug_logs_enabled():
-    '''
-       Get whether to enable debug logs.
-    
-       >>> enabled = debug_logs_enabled()
-       >>> set_debug_logs_enabled(False)
-       >>> debug_logs_enabled()
-       False
-       >>> set_debug_logs_enabled(enabled)
-    '''
+def bundle_and_pad():
+    ''' Get whether to bundle and pad messages. '''
 
-    return get_options().debugging_enabled
+    return get_options().bundle_and_pad
 
-def set_debug_logs_enabled(enable):
-    '''
-       Set the user's preference to enable debug logs.
-    
-       >>> enabled = debug_logs_enabled()
-       >>> set_debug_logs_enabled(False)
-       >>> debug_logs_enabled()
-       False
-       >>> set_debug_logs_enabled(enabled)
-    '''
+
+def set_bundle_and_pad(bundle):
+    ''' Set the user's preference to bundle and pad messages. '''
 
     record = get_options()
-    record.debugging_enabled = enable
+    record.bundle_and_pad = bundle
+    save_options(record)
+
+def bundle_frequency():
+    ''' Get how frequently to send bundled messages. '''
+
+    return get_options().bundle_frequency
+
+def set_bundle_frequency(frequency):
+    ''' Set the user's preference to send bundled messages. '''
+
+    record = get_options()
+    record.bundle_frequency = frequency
+    save_options(record)
+
+def bundled_message_max_size():
+    ''' Get the max size for bundled messages. '''
+
+    return bundle_message_kb() * 1024
+
+def bundle_message_kb():
+    ''' Get the kb for bundled messages. '''
+
+    bundle_message_kb = get_options().bundle_message_kb
+    if bundle_message_kb is None:
+        bundle_message_kb = 0
+
+    return bundle_message_kb
+
+def set_bundle_message_kb(kb):
+    ''' Set the kb for bundled messages. '''
+
+    record = get_options()
+    record.bundle_message_kb = kb
     save_options(record)
 
 def login_to_view_fingerprints():
-    '''
-       Get whether to require logging in before viewing fingerprints.
-  
-       >>> current_setting = login_to_view_fingerprints()
-       >>> set_login_to_view_fingerprints(False)
-       >>> login_to_view_fingerprints()
-       False
-       >>> set_login_to_view_fingerprints(current_setting)
-    '''
+    ''' Get whether to require logging in before viewing fingerprints. '''
 
     try:
         return get_options().login_to_view_fingerprints
     except:
         return False
 
-
 def set_login_to_view_fingerprints(require):
-    '''
-       Set the user's preference to require logging in before viewing fingerprints.
-    
-       >>> current_setting = login_to_view_fingerprints()
-       >>> set_login_to_view_fingerprints(True)
-       >>> login_to_view_fingerprints()
-       True
-       >>> set_login_to_view_fingerprints(False)
-       >>> login_to_view_fingerprints()
-       False
-       >>> set_login_to_view_fingerprints(current_setting)
-    '''
+    ''' Set the user's preference to require logging in before viewing fingerprints. '''
 
     record = get_options()
     try:
@@ -409,35 +229,15 @@ def set_login_to_view_fingerprints(require):
         pass
 
 def login_to_export_keys():
-    '''
-       Get whether to require logging in before exporting keys.
-  
-       >>> current_setting = login_to_export_keys()
-       >>> set_login_to_export_keys(False)
-       >>> login_to_export_keys()
-       False
-       >>> set_login_to_export_keys(current_setting)
-    '''
+    ''' Get whether to require logging in before exporting keys. '''
 
     try:
         return get_options().login_to_export_keys
     except:
         return False
 
-
 def set_login_to_export_keys(require):
-    '''
-       Set the user's preference to require logging in before exporting keys.
-    
-       >>> current_setting = login_to_export_keys()
-       >>> set_login_to_export_keys(True)
-       >>> login_to_export_keys()
-       True
-       >>> set_login_to_export_keys(False)
-       >>> login_to_export_keys()
-       False
-       >>> set_login_to_export_keys(current_setting)
-    '''
+    ''' Set the user's preference to require logging in before exporting keys. '''
 
     record = get_options()
     try:
@@ -447,15 +247,7 @@ def set_login_to_export_keys(require):
         pass
 
 def require_key_verified():
-    '''
-       Get whether to require key verified before using a new key.
-  
-       >>> current_setting = require_key_verified()
-       >>> set_require_key_verified(False)
-       >>> require_key_verified()
-       False
-       >>> set_require_key_verified(current_setting)
-    '''
+    ''' Get whether to require key verified before using a new key. '''
 
     try:
         return get_options().require_key_verified
@@ -464,18 +256,7 @@ def require_key_verified():
 
 
 def set_require_key_verified(require):
-    '''
-       Set the user's preference to require key verified before using a new key.
-    
-       >>> current_setting = require_key_verified()
-       >>> set_require_key_verified(True)
-       >>> require_key_verified()
-       True
-       >>> set_require_key_verified(False)
-       >>> require_key_verified()
-       False
-       >>> set_require_key_verified(current_setting)
-    '''
+    ''' Set the user's preference to require key verified before using a new key. '''
 
     record = get_options()
     try:
@@ -484,82 +265,33 @@ def set_require_key_verified(require):
     except:
         pass
 
-def add_keys_to_keyservers():
-    '''
-       Get whether to add generated keys to keyservers.
-  
-       >>> current_setting = add_keys_to_keyservers()
-       >>> set_add_keys_to_keyservers(False)
-       >>> add_keys_to_keyservers()
-       False
-       >>> set_add_keys_to_keyservers(current_setting)
-    '''
+def debug_logs_enabled():
+    ''' Get whether to enable debug logs. '''
 
-    try:
-        return get_options().add_keys_to_keyservers
-    except:
-        return False
+    return get_options().debugging_enabled
 
-
-def set_add_keys_to_keyservers(add):
-    '''
-       Set the user's preference to add generated keys to keyservers.
-    
-       >>> current_setting = add_keys_to_keyservers()
-       >>> set_add_keys_to_keyservers(True)
-       >>> add_keys_to_keyservers()
-       True
-       >>> set_add_keys_to_keyservers(False)
-       >>> add_keys_to_keyservers()
-       False
-       >>> set_add_keys_to_keyservers(current_setting)
-    '''
+def set_debug_logs_enabled(enable):
+    ''' Set the user's preference to enable debug logs.'''
 
     record = get_options()
-    try:
-        record.add_keys_to_keyservers = add
-        save_options(record)
-    except:
-        pass
+    record.debugging_enabled = enable
+    save_options(record)
 
-def verify_new_keys_with_keyservers():
-    '''
-       Get whether to verify new keys with keyservers.
-  
-       >>> current_setting = verify_new_keys_with_keyservers()
-       >>> set_verify_new_keys_with_keyservers(False)
-       >>> verify_new_keys_with_keyservers()
-       False
-       >>> set_verify_new_keys_with_keyservers(current_setting)
-    '''
+def bundle_hourly():
+    ''' Return the code for bundling and padding messages hourly. '''
 
-    try:
-        return get_options().verify_new_keys_with_keyservers
-    except:
-        return False
-
-
-def set_verify_new_keys_with_keyservers(verify):
-    '''
-       Set the user's preference to verify new keys with keyservers.
+    return HOURS_CODE
     
-       >>> current_setting = verify_new_keys_with_keyservers()
-       >>> set_verify_new_keys_with_keyservers(True)
-       >>> verify_new_keys_with_keyservers()
-       True
-       >>> set_verify_new_keys_with_keyservers(False)
-       >>> verify_new_keys_with_keyservers()
-       False
-       >>> set_verify_new_keys_with_keyservers(current_setting)
-    '''
+def bundle_daily():
+    ''' Return the code for bundling and padding messages daily. '''
 
-    record = get_options()
-    try:
-        record.verify_new_keys_with_keyservers = verify
-        save_options(record)
-    except:
-        pass
+    return DAYS_CODE
+    
+def bundle_weekly():
+    ''' Return the code for bundling and padding messages weekly. '''
 
+    return WEEKS_CODE
+    
 def get_options():
     '''
         Get the mail options.
@@ -580,7 +312,6 @@ def get_options():
     
     if record is None:
         record = Options.objects.create(
-            domain=None, 
             goodcrypto_listen_port=Options.DEFAULT_GOODCRYPTO_LISTEN_PORT,
             mta_listen_port=Options.DEFAULT_MTA_LISTEN_PORT)
 
@@ -596,10 +327,28 @@ def save_options(record):
     try:
         record.save()
     except:
-        from syr.log import get_log
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+def log_message(message):
+    '''
+        Log a message to the local log.
         
-        log = get_log()
-        log(format_exc())
-        
+        >>> import os.path
+        >>> from syr.log import BASE_LOG_DIR
+        >>> from syr.user import whoami
+        >>> log_message('test')
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.options.log'))
+        True
+    '''
+
+    global log
+    
+    if log is None:
+        log = LogFile()
+
+    log.write_and_flush(message)
+
+
 
 

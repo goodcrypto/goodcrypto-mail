@@ -1,12 +1,11 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-16
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 
 import json, os
-from traceback import format_exc
 
 from django.shortcuts import render_to_response
 from django.template import RequestContext
@@ -16,6 +15,7 @@ from goodcrypto import api_constants
 from goodcrypto.mail import contacts, options
 from goodcrypto.mail.forms import APIForm
 from goodcrypto.mail.utils import get_mail_status, create_superuser
+from goodcrypto.utils.exception import record_exception
 from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils.log_file import LogFile
 from syr.utils import get_remote_ip, strip_input
@@ -100,8 +100,9 @@ class MailAPI(object):
                     result = self.format_bad_result('Unknown error')
                     self.log_attempted_access(result)
 
-                    self.log_message(format_exc())
+                    record_exception()
                     self.log_message('unexpected error while parsing input')
+                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             else:
                 self.log_attempted_access('Attempted GET connection')
                 
@@ -112,7 +113,8 @@ class MailAPI(object):
                 response = self.get_api_response(request, result)
                 
         except:
-            self.log_message(format_exc())
+            record_exception()
+            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             response = HttpResponsePermanentRedirect('/')
     
         return response
@@ -133,11 +135,14 @@ class MailAPI(object):
                 self.log_message('configure result: {}'.format(result))
 
             elif self.action == api_constants.CREATE_SUPERUSER:
-                password, error_message = create_superuser(self.sysadmin)
-                if password is None:
-                    result = self.format_bad_result(error_message)
+                user, password, error_message = create_superuser(self.sysadmin)
+                if error_message is None:
+                    if password is None:
+                        result = self.format_bad_result(error_message)
+                    else:
+                        result = self.format_message_result(api_constants.CREATE_SUPERUSER, ok, password)
                 else:
-                    result = self.format_message_result(api_constants.CREATE_SUPERUSER, ok, password)
+                    result = self.format_bad_result(error_message)
                 self.log_message('create user result: {}'.format(result))
 
             elif self.action == api_constants.STATUS:
@@ -168,11 +173,11 @@ class MailAPI(object):
                 fingerprint, verified, active = contacts.get_fingerprint(self.email, self.encryption_name)
                 if fingerprint is None:
                     ok = False
-                    error_message = 'No {} fingerprint for {}'.format(self.encryption_name, self.email)
+                    error_message = 'No {} key ID for {}'.format(self.encryption_name, self.email)
                     result = self.format_bad_result(error_message)
                     self.log_message('bad result: {}'.format(result))
                 else:
-                    message = 'Fingerprint {} verified: {}'.format(format_fingerprint(fingerprint), verified)
+                    message = 'Key ID: {} verified: {}'.format(format_fingerprint(fingerprint), verified)
                     result = self.format_message_result(api_constants.GET_FINGERPRINT, True, message)
                     self.log_message(message)
 
@@ -252,7 +257,8 @@ class MailAPI(object):
                 ok = True
         except:
             ok = False
-            self.log_message(format_exc())
+            record_exception()
+            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             
         return ok
             

@@ -1,467 +1,39 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-04-11
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os
-from email.message import Message
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.parser import Parser
-from hashlib import sha224
-from traceback import format_exc
+import os, time
+from random import choice
+from django.contrib.auth.models import User
 
-from goodcrypto.utils.log_file import LogFile
-from goodcrypto.mail import crypto_software, options
-from goodcrypto.mail.contacts_passcodes import create_passcode
-from goodcrypto.mail.message.constants import DEFAULT_CHAR_SET, PUBLIC_KEY_HEADER, TAGLINE_DELIMITER
+from goodcrypto.mail import contacts, crypto_software, options, user_keys
+from goodcrypto.mail.contacts import get_contacts_crypto, get_fingerprint
+from goodcrypto.mail.internal_settings import get_domain
+from goodcrypto.mail.message import constants 
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.utils import email_in_domain
-from goodcrypto.mail.utils.dirs import get_test_directory
-from goodcrypto.mail.utils.exception_log import ExceptionLog
+from goodcrypto.mail.model_signals import start_setting_fingerprint
+from goodcrypto.mail.user_keys import create_user_key, get_passcode
+from goodcrypto.mail.utils import email_in_domain, get_metadata_address
+from goodcrypto.mail.utils.dirs import get_packet_directory, SafeDirPermissions
+from goodcrypto.mail.utils.notices import notify_user
+from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
-from goodcrypto.oce.utils import parse_address
+from goodcrypto.oce.key.key_factory import KeyFactory
+from goodcrypto.utils import get_email, i18n, parse_domain
+from goodcrypto.utils.exception import record_exception
+from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.fs import get_unique_filename
+from syr.message import send_mime_message
 
 DEBUGGING = False
+USE_SMTP_PROXY = False
 
-_last_error = None
 _log = None
+_tagline_delimiter = constants.TAGLINE_DELIMITER
 
-_tagline_delimiter = TAGLINE_DELIMITER
-
-
-def get_message_id(email_message):
-    '''
-        Gets the message id or None from an email_message.
-        
-        >>> # Test extreme case
-        >>> get_message_id(None)
-    '''
-
-    message_id = None
-    try:
-        if email_message is not None:
-            message_id = email_message.get_header(mime_constants.MESSAGE_ID_KEYWORD)
-        if message_id is not None:
-            message_id = message_id.strip().strip('<').strip('>')
-    except:
-        log_message(format_exc())
-
-    return message_id
-
-def get_hashcode(message):
-    '''
-        Gets a hashcode for a message.
-        
-        >>> from goodcrypto_tests.mail import message_utils
-        >>> filename = message_utils.get_plain_message_name('basic.txt')
-        >>> with open(filename) as input_file:
-        ...     get_hashcode(input_file) is not None
-        True
-    '''
-
-    hash_code = None
-    try:
-        from goodcrypto.mail.message.email_message import EmailMessage
-
-        message_string = EmailMessage(message).to_string()
-        if message_string == None:
-            if isinstance(get_last_error(), Exception):
-                raise MessageException("Invalid message")
-            else:
-                raise MessageException("Invalid message: {}".format(get_last_error()))
-        else:
-            hash_code = sha224(message_string).hexdigest().upper()
-    except Exception as hash_exception:
-        set_last_error(hash_exception)
-        log_message(format_exc())
-        message_string = None
-
-    return hash_code
-
-def add_multientry_header(message, header_name, multiline_value):
-    '''
-        Add a multiline header value as one line per header entry.
-
-        Each line of the header value is added as a separate entry in
-        the message header. This makes it less likely a message system will
-        unexpectedly split a long string. The header name plus a dash and line
-        number is used for each line's header entry. Although messages can have
-        more than one header with the same name, this assures that the line
-        order is significant.
-
-        Example:
-        <verbatim>
-          Header-Name-1: first line of header value
-          Header-Name-2: second line of header value
-          Header-Name-3: third line of header value
-          ...
-        </verbatim>
-
-        A trailing newline may be stripped.
-         
-        >>> # Test extreme case
-        >>> add_multientry_header(None, None, 'Header-Name')
-        1
-        >>> # Test extreme case
-        >>> add_multientry_header(None, None, None)
-        0
-    '''
-
-    count = 0
-    try:
-        if multiline_value:
-            for value in multiline_value.split('\n'):
-                count += 1
-                message.add_header('{}-{}'.format(header_name, count), value)
-    except:
-        log_message(format_exc())
-
-    return count
-
-def get_multientry_header(message, header_name):
-    '''
-        Gets a multientry header value.
-        
-        A trailing newline may be stripped.
-        
-        >>> # Test extreme case
-        >>> get_multientry_header(None, None)
-        ''
-    '''
-
-    value = None
-    
-    try:
-        lines = []
-        count = 1
-    
-        line = get_first_header(message, '{}-{}'.format(header_name, count))
-        while line != None:
-            lines.append(line)
-    
-            count = count + 1
-            line = get_first_header(message, '{}-{}'.format(header_name, count))
-    
-        value = '\n'.join(lines)
-        log_message("{} header: {}".format(header_name, value))
-    except:
-        log_message(format_exc())
-
-    return value.strip()
-
-def get_first_header(message, header_name):
-    '''
-        Gets the first, usually the only, matching header value.
-        
-        Python's email.message.get_all() returns an array of header values.
-        Almost always there is only one element in the array.
-        This method returns the first element of the header array.
-        Extra values are logged.
-        
-        >>> # Test extreme case
-        >>> get_first_header(None, None)
-    '''
-
-    value = None
-    try:
-        lines = message.get_all(header_name)
-        if lines is not None and len(lines) > 0:
-            value = lines[0]
-            if len(lines) > 1:
-                for line in lines:
-                    log_message("For header {} got an unexpected line: {}".format(header_name, line))
-    
-        if value != None:
-            value = value.strip()
-    except:
-        log_message(format_exc())
-
-    return value
-
-def is_multipart_message(message):
-    '''
-        Returns whether message is a multipart MIME message.
-        
-        Messages with a text/plain MIME type are considered plain text.
-
-        >>> # Test extreme case
-        >>> is_multipart_message(None)
-        False
-    '''
-
-    from goodcrypto.mail.message.email_message import EmailMessage
-
-    if message is None:
-        multipart = False
-    elif type(message) == EmailMessage:
-        multipart = message.get_message().is_multipart()
-    else:
-        multipart = message.is_multipart()
-        
-    return multipart
-
-def is_open_pgp_mime(message):
-    '''
-        Returns true if this is an OpenPGP MIME message.
-
-        >>> from goodcrypto.mail.message.email_message import EmailMessage
-        >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
-        >>> with open(get_encrypted_message_name('open-pgp-mime.txt')) as input_file:
-        ...     mime_message = EmailMessage(input_file)
-        ...     is_open_pgp_mime(mime_message.get_message())
-        True
-    '''
-
-    is_mime_and_pgp = False
-
-    try:
-        from goodcrypto.mail.message.email_message import EmailMessage
-
-        if isinstance(message, EmailMessage):
-            message = message.get_message()
-
-        # the content type is always lower case and always has a value
-        content_type = message.get_content_type()
-        log_message("main content type: {}".format(content_type))
-        
-        #  if the main type is multipart/encrypted
-        if content_type == mime_constants.MULTIPART_ENCRYPTED_TYPE:
-            protocol = message.get_param(mime_constants.PROTOCOL_KEYWORD)
-            if protocol == None:
-                log_message("multipart encrypted, protocol missing")
-            else:
-                log_message("multipart encrypted protocol: {}".format(protocol))
-                is_mime_and_pgp = str(protocol).lower() == mime_constants.PGP_TYPE.lower()
-
-    except MessageException as message_exception:
-        log_exception(message_exception)
-        log_message(format_exc())
-    except Exception:
-        log_message(format_exc())
-
-    return is_mime_and_pgp
-
-def alt_to_text_message(original_message):
-    ''' 
-        Change a MIME message into a plain text Message. 
-        
-        >>> # Test extreme cases
-        >>> alt_to_text_message(None) == None
-        True
-    '''
-
-    text_message = None
-    
-    try:
-        if original_message:
-            content_type = original_message.get_content_type()
-            charset, __ = get_charset(original_message)
-            log_message("message content type is {}".format(content_type))
-    
-            if content_type == mime_constants.MULTIPART_ALT_TYPE:
-                plain_text = ''
-                for part in original_message.walk():
-                    if part.get_content_type() == mime_constants.TEXT_PLAIN_TYPE:
-                        if len(plain_text) > 0:
-                            plain_text += '\n\n'
-                        plain_text += part.get_payload()
-                        content_type = part.get_content_type()
-                        charset, __ = get_charset(part)
-                        log_message("part content type is {}".format(content_type))
-                        log_message("part charset is {}".format(charset))
-    
-                if len(plain_text) > 0:
-                    try:
-                        # create a fresh message with the same headers
-                        # we'll change some headers and all of the body
-                        text_message = MIMEText(plain_text, mime_constants.PLAIN_SUB_TYPE, charset)
-                        for key in original_message.keys():
-                            if key != mime_constants.CONTENT_TYPE_KEYWORD:
-                                text_message.__setitem__(key, original_message.get(key))
-                        text_message.set_payload(plain_text, charset)
-                    except MessageException as message_exception:
-                        log_exception(message_exception)
-        
-                if type(text_message) == Message and DEBUGGING:
-                    log_message("New plain text message:\n" + text_message.as_string())
-    except IOError as io_exception:
-        log_exception(io_exception)
-    except MessageException as message_exception:
-        log_exception(message_exception)
-
-    return text_message
-
-def plaintext_to_message(old_message, plaintext):
-    ''' 
-        Create a new Message with only the plain text.
-        
-        
-        >>> # Test extreme cases
-        >>> plaintext_to_message(None, None) == None
-        True
-     '''
-    new_message = None
-
-    try:
-        if old_message and plaintext:
-            parser = Parser()
-            plain_message = parser.parsestr(plaintext)
-            payloads = plain_message.get_payload()
-            if isinstance(payloads, list):
-                new_message = MIMEMultipart(old_message.get_content_subtype(), old_message.get_boundary())
-            else:
-                new_message = MIMEText(plain_message.get_payload())
-        
-            # save all the headers
-            for key, value in old_message.items():
-                new_message.add_header(key, value)
-        
-            if type(payloads) == list:
-                for payload in payloads:
-                    new_message.attach(payload)
-            
-            # add the content type and encoding from the plain text
-            for key, value in plain_message.items():
-                if key.lower() == mime_constants.CONTENT_TYPE_KEYWORD.lower():
-                    new_message.__delitem__(key)
-                    new_message.add_header(key, value)
-        
-                elif key.lower() == mime_constants.CONTENT_XFER_ENCODING_KEYWORD.lower():
-                    new_message.__delitem__(key)
-                    new_message.add_header(key, value)
-            
-            if type(new_message) == Message and DEBUGGING:
-                log_message('new message:\n{}'.format(new_message.as_string()))
-
-    except IOError as io_exception:
-        log_exception(io_exception)
-    except MessageException as message_exception:
-        log_exception(message_exception)
-        
-    return new_message
-
-def is_content_type_mime(message):
-    '''
-        Get if content type is mime multipart.
-        
-        >>> from email.mime.multipart import MIMEMultipart
-        >>> message = MIMEMultipart(mime_constants.ENCRYPTED_SUB_TYPE, '==bound')
-        >>> is_content_type_mime(message)
-        True
-    '''
-
-    is_mime = False
-    try:
-        content_type = message.get_content_type()
-        if content_type is not None:
-            is_mime = content_type.lower().startswith(mime_constants.MULTIPART_PRIMARY_TYPE)
-    except Exception:
-        log_message(format_exc())
-
-    return is_mime
-
-def is_content_type_text(message):
-    '''
-        Get if content type is text or html.
-
-        >>> message = MIMEText('Text', mime_constants.PLAIN_SUB_TYPE)
-        >>> is_content_type_text(message)
-        True
-    '''
-
-    is_text = False
-    try:
-        content_type = message.get_content_type()
-        if content_type is not None:
-            is_text = content_type.lower().startswith(mime_constants.TEXT_PRIMARY_TYPE)
-    except Exception:
-        log_message(format_exc())
-
-    return is_text
-
-def get_charset(part, last_charset=DEFAULT_CHAR_SET):
-    '''
-        Gets the charset.
-
-        >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
-        >>> email_message = get_basic_email_message()
-        >>> get_charset(email_message.get_message())
-        ('utf-8', 'utf-8')
-    '''
-
-    def find_char_set(part):
-
-        charset = None
-        try:
-            if part.find(mime_constants.CONTENT_TYPE_KEYWORD) >= 0:
-                index = part.find(mime_constants.CONTENT_TYPE_KEYWORD)
-                line = part[index + len(mime_constants.CONTENT_TYPE_KEYWORD):]
-                log_message('index: {}'.format(index))
-                log_message('line: {}'.format(line))
-                
-                index = line.lower().find('charset=')
-                if index > 0:
-                    charset = line[index + len('charset='):]
-                if charset.find('\r'):
-                    charset = charset[:charset.find('\r')]
-                elif charset.find('\n'):
-                    charset = charset[:charset.find('\n')]
-                log_message('charset: {}'.format(charset))
-        except Exception as char_exception:
-            log_message(char_exception)
-            log_message(format_exc())
-
-        if charset is None:
-            charset = DEFAULT_CHAR_SET
-            log_message('using default charset: {}'.format(charset))
-
-        return charset
-
-
-    try:
-        charset = None
-        last_character_set = last_charset
-
-        if isinstance(part, str):
-            log_message('looking for charset in string: {}'.format(len(part)))
-            charset = find_char_set(part)
-        else:
-            from goodcrypto.mail.message.email_message import EmailMessage
-
-            if isinstance(part, EmailMessage):
-                part = part.get_message()
-            log_message('looking for charset in Message')
-            charset = part.get_charset()
-            if charset is None:
-                log_message('looking for charset in param')
-                charset = part.get_param('charset')
-
-        # if unknown than use the last charset
-        if charset is None:
-            charset = last_character_set
-            log_message('using last charset')
-
-        # if still unknown than use the default
-        if charset is None:
-            charset = DEFAULT_CHAR_SET
-            log_message('using default charset')
-        
-        # the charset should be string
-        charset = str(charset)
-        
-        # remember the last char set used
-        last_character_set = charset
-
-    except MessageException as message_exception:
-        charset = DEFAULT_CHAR_SET
-        log_message(message_exception)
-    
-    log_message('{} charset / {} last char set'.format(charset, last_character_set))
-    
-    return charset, last_character_set
 
 def get_address_string(addresses):
     '''
@@ -512,7 +84,8 @@ def get_user_id_matching_email(address, user_ids):
                 if DEBUGGING: log_message("{} matches {}".format(address, matching_id))
                 break
     except Exception:
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
         
     return matching_id
 
@@ -538,23 +111,6 @@ def emails_equal(address1, address2):
 
     return match
 
-def get_email(address):
-    ''' 
-        Get just the email address.
-        
-        >>> # In honor of First Sergeant Nadav, who publicly denounced and refused to serve in 
-        >>> # operations involving the occupied Palestinian territories because of the widespread 
-        >>> # surveillance of innocent residents.
-        >>> get_email('Nadav <nadav@goodcrypto.remote>')
-        'nadav@goodcrypto.remote'
-    '''
-    try:
-        __, email = parse_address(address)
-    except Exception:
-        email = address
-
-    return email
-
 def map_line_endings(text):
     '''
         Map lines endings to a common format, \n.
@@ -565,38 +121,6 @@ def map_line_endings(text):
     '''
 
     return text.replace('\r\n', '\n')
-
-def write_message(directory, message):
-    '''
-        Write message to an unique file in the specified directory.
-        The message may be EmailMessage or python Message.
-
-        >>> filename = write_message(get_test_directory(), Message())
-        >>> filename is not None
-        True
-        >>> filename = write_message(None, None)
-        >>> filename is None
-        True
-    '''
-
-    full_filename = None
-    try:
-        filename = '{}.txt'.format(get_hashcode(message))
-        full_filename = os.path.join(directory, filename)
-        
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-        with open(full_filename, 'w') as out:
-            log_message('saving {}'.format(full_filename))
-
-            from goodcrypto.mail.message.email_message import EmailMessage
-            
-            EmailMessage(message).write_to(out)
-    except Exception:
-        log_message(format_exc())
-
-    return full_filename
 
 def get_encryption_software(email):
     ''' 
@@ -615,7 +139,7 @@ def get_encryption_software(email):
     encryption_software_list = []
     
     #  start with the encryption software for this email
-    __, address = parse_address(email)
+    address = get_email(email)
 
     from goodcrypto.mail.contacts import get_encryption_names
     encryption_names = get_encryption_names(address)
@@ -672,11 +196,52 @@ def get_public_key_header_name(encryption_name):
 
     if (is_multiple_encryption_active() and 
         encryption_name != CryptoFactory.get_default_encryption_name()):
-        header_name = '{}-{}'.format(PUBLIC_KEY_HEADER, encryption_name)
+        header_name = '{}-{}'.format(constants.PUBLIC_KEY_HEADER, encryption_name)
     else:
-        header_name = PUBLIC_KEY_HEADER
+        header_name = constants.PUBLIC_KEY_HEADER
         
     return header_name
+
+def make_public_key_block(from_user, encryption_software=None):
+    ''' 
+        Make a public key block for the user.
+        
+        >>> make_public_key_block(None, None)
+        []
+    '''
+
+    key_block = []
+    if from_user is None:
+        log_message('missing from user so cannot create key block')
+    else:
+        pub_key = None
+        if encryption_software is None or len(encryption_software) <= 0:
+            encryption_software = CryptoFactory.DEFAULT_ENCRYPTION_NAME
+
+        try:
+            key_ok, __, __ = contacts.is_key_ok(from_user, encryption_software)
+            if key_ok:
+                key_crypto = KeyFactory.get_crypto(encryption_software)
+                pub_key = key_crypto.export_public(from_user)
+            else:
+                log_message('{} key is not valid for {}'.format(encryption_software, from_user))
+        except CryptoException as crypto_exception:
+            log_message(crypto_exception.value)
+
+        if pub_key is None:
+            log_message('no {} public key for {}'.format(encryption_software, from_user))
+        else:
+            # if there is a public key, then prepare if for the header
+            header_name = get_public_key_header_name(encryption_software)
+            log_message("getting {} public key header block for {} using header {}".format(
+                encryption_software, from_user, header_name))
+
+            count = 0
+            for value in pub_key.split('\n'):
+                count += 1
+                key_block.append('{}-{}{}{}'.format(header_name, count, ': ', value))
+
+    return key_block
 
 def add_private_key(email, encryption_software=None):
     '''
@@ -691,22 +256,26 @@ def add_private_key(email, encryption_software=None):
         # only add private keys for members of the domain
         if email_in_domain(email):
             if options.create_private_keys():
-                if encryption_software is None:
+                if encryption_software is None or len(encryption_software) <= 0:
                     encryption_software = CryptoFactory.DEFAULT_ENCRYPTION_NAME
-                encryption_software_list = get_encryption_software(email)
-                # if no crypto for a member and we're creating keys, then do so now
-                if encryption_software_list is None or len(encryption_software_list) <= 0:
+
+                user_key = user_keys.get(email, encryption_software)
+                if user_key is None or user_key.passcode is None:
                     log_message('creating private {} key for {}'.format(encryption_software, email))
-                    create_passcode(email, encryption_software)
+                    create_user_key(email, encryption_software)
+                elif user_key.contacts_encryption.fingerprint is None:
+                    log_message('setting private {} key fingerprint for {}'.format(encryption_software, email))
+                    start_setting_fingerprint(user_key.contacts_encryption)
                 else:
-                    log_message('{} already has {} crypto software defined'.format(email, len(encryption_software_list)))
+                    log_message('{} already has crypto software defined'.format(email))
             else:
                 log_message('creating private key disabled so no key created for {}'.format(email))
         else:
-            log_message('{} not a member of {}'.format(email, options.get_domain()))
+            log_message('{} not a member of {}'.format(email, get_domain()))
 
     except Exception:
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
 def set_tagline_delimiter(delimiter):
     '''
@@ -727,8 +296,8 @@ def get_tagline_delimiter():
         Get the delimiter between tags.
         
         >>> tag_delimiter = get_tagline_delimiter()
-        >>> set_tagline_delimiter(TAGLINE_DELIMITER)
-        >>> get_tagline_delimiter() == TAGLINE_DELIMITER
+        >>> set_tagline_delimiter(constants.TAGLINE_DELIMITER)
+        >>> get_tagline_delimiter() == constants.TAGLINE_DELIMITER
         True
         >>> set_tagline_delimiter(tag_delimiter)
     '''
@@ -736,81 +305,325 @@ def get_tagline_delimiter():
 
     return _tagline_delimiter
 
-def get_last_error():
+def get_metadata_user_details(email, encryption_name):
     '''
-        Get the last error.
+        Get the metadata address and key for the encryption program.
         
-        >>> set_last_error('test')
-        >>> get_last_error()
-        'test'
+        >>> get_metadata_user_details(None, None)
+        (False, None, None)
     '''
 
-    global _last_error
-    
-    return _last_error
+    metadata_address = None
+    ok = False
 
-def set_last_error(new_error):
+    try:
+        metadata_address = get_metadata_address(email=email)
+        fingerprint, verified, active = get_fingerprint(metadata_address, encryption_name)
+        if fingerprint is None:
+            ok = False
+            log_message('no fingerprint for {}'.format(metadata_address))
+            # queue up to get the fingerprint
+            start_setting_fingerprint(get_contacts_crypto(email, encryption_name=encryption_name))
+        elif not active:
+            ok = False
+            log_message('{}  is not active'.format(metadata_address))
+        elif options.require_key_verified() and not verified:
+            ok = False
+            log_message('{}  is not verified and verification required'.format(metadata_address))
+        else:
+            ok = True
+    except:
+        ok = False
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    if not ok:
+        metadata_address = None
+
+    return ok, metadata_address, fingerprint
+
+def get_from_metadata_user_details(email, encryption_name):
     '''
-        Set the last error.
+        Get the metadata address and key for the encryption program.
         
-        >>> set_last_error('test')
-        >>> get_last_error()
-        'test'
+        >>> get_from_metadata_user_details(None, None)
+        (False, None, None)
     '''
 
-    global _last_error
+    metadata_address = passcode = None
+    ok = False
+
+    try:
+        ok, metadata_address, fingerprint = get_metadata_user_details(email, encryption_name)
+        if ok:
+            passcode = get_passcode(metadata_address, encryption_name)
+            if passcode is None:
+                ok = False
+                log_message('no user key for {}'.format(metadata_address))
+            else:
+                ok = True
+                log_message('ready to protect metadata using {}'.format(encryption_name))
+
+        elif fingerprint is None:
+            log_message('creating private {} key for {}'.format(encryption_name, email))
+            create_user_key(email, encryption_name)
+    except:
+        ok = False
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    if not ok:
+        metadata_address = passcode = None
+
+    return ok, metadata_address, passcode
+
+def packetize(crypto_message, encrypted_with, verification_code):
+    ''' Packetize for later delivery. '''
+
+    try:
+        message_name = None
+        domain = parse_domain(crypto_message.smtp_recipient())
+        dirname = os.path.join(get_packet_directory(), '.{}'.format(domain))
+        if not os.path.exists(dirname):
+            os.mkdir(dirname, SafeDirPermissions)
+            log_message('created packet queue for {}'.format(domain))
+        crypto_message.set_processed(True)
+        
+        encrypted_names = ''
+        if crypto_message.is_crypted():
+            for encrypted_name in encrypted_with:
+                if len(encrypted_names) > 0:
+                    encrypted_names += ', '
+                encrypted_names += encrypted_name
+            log_message('queued message encrypted with: {}'.format(encrypted_names))
+        message_name = get_unique_filename(dirname, constants.MESSAGE_PREFIX, constants.MESSAGE_SUFFIX)
+        with open(message_name, 'wt') as f:
+            f.write(crypto_message.get_email_message().to_string())
+            f.write(constants.START_ADDENDUM)
+            f.write('{}: {}\n'.format(mime_constants.FROM_KEYWORD, crypto_message.smtp_sender()))
+            f.write('{}: {}\n'.format(mime_constants.TO_KEYWORD, crypto_message.smtp_recipient()))
+            f.write('{}: {}\n'.format(constants.CRYPTED_KEYWORD, crypto_message.is_crypted()))
+            f.write('{}: {}\n'.format(constants.CRYPTED_WITH_KEYWORD, encrypted_names))
+            f.write('{}: {}\n'.format(constants.VERIFICATION_KEYWORD, verification_code))
+            f.write(constants.END_ADDENDUM)
+        log_message('packetized message filename: {}'.format(os.path.basename(message_name)))
+    except:
+        message_name = None
+        crypto_message.set_processed(False)
+        error_message = i18n('Unable to packetize message due to an unexpected error.')
+        log_message(error_message)
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        record_exception()
+        raise MessageException(value=error_message)
+
+    return message_name
+
+def parse_bundled_message(bundled_message):
+    ''' 
+        Parse a message that was bundled. 
+        
+        Test extreme cases.
+        >>> message, addendum = parse_bundled_message(None)
+        >>> message is None
+        True
+        >>> addendum[mime_constants.FROM_KEYWORD] is None
+        True
+    '''    
+    addendum = {
+       mime_constants.FROM_KEYWORD: None,
+       mime_constants.TO_KEYWORD: None,
+       constants.CRYPTED_KEYWORD: False,
+       constants.CRYPTED_WITH_KEYWORD: [],
+       constants.VERIFICATION_KEYWORD: None,
+    }
+    original_message = sender = recipient = crypted_with = None
+    crypted = False
+    try:
+        # separate the original message from the addendum
+        i = bundled_message.find(constants.START_ADDENDUM)
+        if i > 0:
+            msg = bundled_message[i:]
+            original_message = bundled_message[:i]
+        
+        # get the sender
+        i = msg.find(mime_constants.FROM_KEYWORD)
+        if i > 0:
+            sender = msg[i + len(mime_constants.FROM_KEYWORD + ': '):]
+            i = sender.find('\n')
+            addendum[mime_constants.FROM_KEYWORD] = sender[:i]
+        
+        # get the recipient
+        i = msg.find(mime_constants.TO_KEYWORD)
+        if i > 0:
+            recipient = msg[i + len(mime_constants.TO_KEYWORD + ': '):]
+            i = recipient.find('\n')
+            addendum[mime_constants.TO_KEYWORD] = recipient[:i]
+        
+        # get the crypted status
+        i = msg.find(constants.CRYPTED_KEYWORD)
+        if i > 0:
+            crypted = msg[i + len(constants.CRYPTED_KEYWORD + ': '):]
+            i = crypted.find('\n')
+            addendum[constants.CRYPTED_KEYWORD] = bool(crypted[:i])
+        
+        # get the programs the message was encrypted
+        i = msg.find(constants.CRYPTED_WITH_KEYWORD)
+        if i > 0:
+            crypted_with = msg[i + len(constants.CRYPTED_WITH_KEYWORD + ': '):]
+            i = crypted_with.find('\n')
+            addendum[constants.CRYPTED_WITH_KEYWORD] = crypted_with[:i].split(', ')
+        
+        # get the verification code that was added to the message if it was encrypted
+        i = msg.find(constants.VERIFICATION_KEYWORD)
+        if i > 0:
+            verification_code = msg[i + len(constants.VERIFICATION_KEYWORD + ': '):]
+            i = verification_code.find('\n')
+            addendum[constants.VERIFICATION_KEYWORD] = verification_code[:i].split(', ')
+    except AttributeError as attribute_exception:
+        # common error for "padding" parts of a bundled message
+        log_message(attribute_exception)
+    except UnboundLocalError as unbound_exception:
+        # common error for "padding" parts of a bundled message
+        log_message(unbound_exception)
+    except:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return original_message, addendum
+
+def send_message(sender, recipient, message):
+    ''' 
+        Send a message. 
+
+        The message can be a Message in string format or a "Message" class.
+    '''
+
+    try:
+        log_message('starting to send message')
+        if USE_SMTP_PROXY:
+            result_ok, msg = send_mime_message(sender, recipient, message, use_smtp_proxy=USE_SMTP_PROXY,
+              mta_address=options.mail_server_address(), mta_port=options.mta_listen_port())
+        else:
+            result_ok, msg = send_mime_message(sender, recipient, message)
+
+        if DEBUGGING and result_ok:
+            log_message('=================')
+            log_message(msg)
+            log_message('=================')
+        log_message('finished sending message')
+    except Exception as exception:
+        result_ok = False
+        log_message('error while sending message')
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        record_exception()
+
+    return result_ok
+
+def bounce_message(original_message, sender, subject, error_message):
+    ''' 
+        Bounce a message that a local user who originated it.
+        
+        Test extreme case
+        >>> bounce_message(None, None, None, None)
+        False
+    '''
+
+    notified_user = False
+
+    try:
+        log_message(error_message)
+
+        if sender is None:
+            log_message('unable to bounce message without a sender')
+        elif email_in_domain(sender):
+            message = '{}\n\n===================\n{}'.format(
+              error_message, original_message)
+            notified_user = notify_user(sender, subject, message)
+            log_message('sent note to {} about error.'.format(sender))
+        else:
+            log_message('unable to send note to {} about error.'.format(sender))
+    except:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return notified_user
+
+def drop_message(original_message, recipient, subject, error_message):
+    ''' 
+        Drop a message that we shouldn't process from a remote user. 
+        
+        Test extreme case
+        >>> drop_message(None, None, None, None)
+        False
+    '''
+
+    notified_user = False
+
+    try:
+        log_message(error_message)
+
+        if recipient is None:
+            log_message('unable to notify recipient about dropped message')
+        elif email_in_domain(recipient):
+            message = '{}\n\n===================\n{}'.format(
+              error_message, original_message)
+            notified_user = notify_user(recipient, subject, message)
+            log_message('sent note to {} about error.'.format(recipient))
+        else:
+            log_message('unable to send note to {} about error.'.format(recipient))
+    except:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return notified_user
+
+def get_message_id():
+    ''' Get a unique message id. '''
     
-    _last_error = new_error
+    Chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
+    
+    random_chars = ''
+    for i in range(10):
+        random_chars += choice(Chars)
 
-def log_message_exception(exception_error, message, log_msg):
+    timestamp = time.strftime('%Y%m%d%H%M%S', time.gmtime())
+    message_id = '{}{}@{}'.format(random_chars, timestamp, get_domain())
+    
+    return message_id
+
+def log_message_headers(original_message, tag='message headers'):
     '''
-        Log an exception.
-
-        >>> from syr.log import BASE_LOG_DIR
-        >>> from syr.user import whoami
-        >>> log_message_exception(Exception, 'message', 'log message')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
-        True
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
-        True
+        Log the headers of a message.
     '''
+    from goodcrypto.mail.message.crypto_message import CryptoMessage
+    from goodcrypto.mail.message.email_message import EmailMessage
 
-    log_exception(log_msg, exception_error=exception_error)
+    if type(original_message) is CryptoMessage:
+        message = original_message.get_email_message().get_message()
+    elif type(original_message) is EmailMessage:
+        message = original_message.get_message()
+    else:
+        message = original_message
+    
+    log_message(tag)
+    for key in message.keys():
+        log_message('{}: {}'.format(key, message.get(key)))
+
+def log_crypto_exception(exception, message=None):
+    '''
+        Log the message to the local and Exception logs.
+        
+        >>> log_crypto_exception(Exception)
+        
+        >>> log_crypto_exception(Exception, 'exception message')
+    '''
     if message is not None:
-        try:
-            log_message("message:\n{}".format(message.to_string()))
-            log_message(format_exc())
-        except Exception as exception_error2:
-            log_message("unable to log message: {}".format(str(exception_error2)))
-            log_message(format_exc())
-
-def log_exception(log_msg, exception_error=None):
-    '''
-        Log an exception.
-
-        >>> from syr.log import BASE_LOG_DIR
-        >>> from syr.user import whoami
-        >>> log_exception('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
-        True
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
-        True
-        >>> log_exception('test', exception_error=Exception)
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.utils.log'))
-        True
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.utils.exception_log.log'))
-        True
-    '''
-        
-    log_message(format_exc())
-    ExceptionLog.log_message(format_exc())
+        log_message(message)
     
-    log_message(log_msg)
-    ExceptionLog.log_message(log_msg)
-    
-    if exception_error is not None:
-        log_message(str(exception_error))
-        ExceptionLog.log_message(str(exception_error))
+    if exception is not None:
+        log_message("Crypto error: {}".format(exception))
+        log_message(str(exception))
+        record_exception(message=str(exception))
 
 def log_message(message):
     '''

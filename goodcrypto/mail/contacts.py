@@ -1,7 +1,6 @@
-#!/usr/bin/env python
 '''
     Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-03-16
+    Last modified: 2015-07-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -31,16 +30,14 @@
         email = contact.email
     </pre>
 '''
-from traceback import format_exc
-from django.db.models.query import QuerySet
-
 from goodcrypto.mail import crypto_software
 from goodcrypto.mail.i18n_constants import PUBLIC_KEY_INVALID
 from goodcrypto.mail.models import Contact, ContactsCrypto
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
-from goodcrypto.oce.utils import parse_address, strip_fingerprint
-from goodcrypto.utils import i18n
+from goodcrypto.oce.utils import strip_fingerprint
+from goodcrypto.utils import i18n, parse_address, get_email
+from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 
 NO_FINGERPRINT_IN_DB = 'There is no {encryption} fingerprint in the database for {email}.'
@@ -70,7 +67,8 @@ def is_ok():
                     break
     except Exception:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return result_ok
 
@@ -119,13 +117,14 @@ def get(email):
 
     try:
         if email is not None:
-            __, address = parse_address(email)
+            address = get_email(email)
             contact = Contact.objects.get(email=address)
     except Contact.DoesNotExist:
         contact = None
     except Exception:
         contact = None
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     log_message("got {}: {}".format(address, contact != None))
 
@@ -176,7 +175,8 @@ def add(email, encryption_program, fingerprint=None):
                 log_message('creating a contact for {}'.format(email_address))
                 contact = Contact.objects.create(email=email_address, user_name=user_name)
             except Exception:
-                log_message(format_exc())
+                record_exception()
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
                 contact = None
 
         if encryption_program is None:
@@ -201,11 +201,13 @@ def add(email, encryption_program, fingerprint=None):
                     log_message("created {} crypto record for {} with {} fingerprint".format(
                         encryption_software, email, fingerprint))
                 except:
-                    log_message(format_exc())
+                    record_exception()
+                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     except Exception:
         contact = None
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return contact
 
@@ -242,10 +244,12 @@ def delete(email_or_address):
         else:
             contact = email_or_address
             contact.delete()
+            log_message("deleted {}".format(contact.email))
             
     except Exception:
         result_ok = False
-        log_message(format_exc())
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return result_ok
 
@@ -261,7 +265,7 @@ def get_contacts_crypto(email, encryption_name=None):
 
     query_results = None
     try:
-        __, address = parse_address(email)
+        address = get_email(email)
         if email and len(address) > 0:
             if encryption_name is None:
                 query_results = ContactsCrypto.objects.filter(contact__email=address)
@@ -276,6 +280,8 @@ def get_contacts_crypto(email, encryption_name=None):
             if query_results is None:
                 log_message("{} does not have any encryption software defined".format(address))
             else:
+                from django.db.models.query import QuerySet
+
                 if isinstance(query_results, QuerySet):
                     log_message("{} has {} encryption software defined".format(email, len(query_results)))
                 else:
@@ -287,8 +293,9 @@ def get_contacts_crypto(email, encryption_name=None):
     except Contact.DoesNotExist:
         log_message('{} does not use the exist in the contacts table'.format(email))
     except Exception:
-        log_message(format_exc())
-        
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
     log_message("query results: {}".format(query_results))
 
     return query_results
@@ -311,7 +318,8 @@ def delete_contacts_crypto(email, encryption_name):
             result_ok = True
         except Exception:
             result_ok = False
-            log_message(format_exc())
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     log_message("deleted {} crypto for {}: {}".format(encryption_name, email, result_ok))
 
@@ -341,6 +349,8 @@ def get_fingerprint(email, encryption_name):
             verified = active = False
             log_message("unable to get contact's {} record".format(encryption_name))
         else:
+            from django.db.models.query import QuerySet
+
             if isinstance(contacts_crypto, QuerySet):
                 fingerprint = contacts_crypto[0].fingerprint
                 verified = contacts_crypto[0].verified
@@ -399,7 +409,8 @@ def update_fingerprint(email, encryption_name, new_fingerprint, verified=False):
 
                 result_ok = True
             except:
-                log_message(format_exc())
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                record_exception()
                 result_ok = False
 
     return result_ok
@@ -543,7 +554,7 @@ def import_public_key(email, encryption_software, public_key):
         # make sure the email address is in the key
         for (user_id, fingerprint) in id_fingerprint_pairs:
             user_name, email_address = parse_address(email)
-            __, key_address = parse_address(user_id)
+            key_address = get_email(user_id)
             if email_address.lower() == key_address.lower():
                 result_ok = True
                 break
@@ -553,7 +564,7 @@ def import_public_key(email, encryption_software, public_key):
             for (user_id, fingerprint) in id_fingerprint_pairs:
                 result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
                 if result_ok:
-                    status += '{}\n'.format(i18n('Imported key successfully. Fingerprint: {fingerprint}'.format(
+                    status += '{}\n'.format(i18n('Imported key successfully. Key ID: {fingerprint}'.format(
                         fingerprint=fingerprint)))
                 else:
                     status += '{}\n'.format(i18n('Unable to import key'))
@@ -631,7 +642,8 @@ def update_accepted_crypto(email, encryption_software_list):
                         ContactsCrypto.objects.create(
                             contact=contact, encryption_software=encryption_software)
             except Exception:
-                log_message(format_exc())
+                record_exception()
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
     
 def get_encryption_names(email):
     '''
@@ -644,7 +656,7 @@ def get_encryption_names(email):
 
     encryption_names = []
 
-    __, address = parse_address(email)
+    address = get_email(email)
     if address and len(address) > 0:
         query_results = get_contacts_crypto(address)
         if query_results:
@@ -686,7 +698,8 @@ def get_contact_list(encryption_name=None):
         except Contact.DoesNotExist:
             log_message('no contact')
         except Exception:
-            log_message(format_exc())
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     else:
         try:
@@ -701,7 +714,8 @@ def get_contact_list(encryption_name=None):
         except ContactsCrypto.DoesNotExist:
             log_message('no contacts with crypto')
         except Exception:
-            log_message(format_exc())
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return contact_list
 

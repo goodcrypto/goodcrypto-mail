@@ -1,17 +1,17 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-01-04
+    Last modified: 2015-08-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from __future__ import print_function
 
 import os, re, sh, sys, time
-from syr.log import get_log
+
+from goodcrypto.utils.exception import record_exception
+from syr.log import get_log, get_log_path, _debug
 from syr.python import caller_module_name
-from traceback import format_exc
 #from syr.sync_function import synchronized
 
 # delete in python 3
@@ -48,8 +48,7 @@ class LogFile(object):
             from goodcrypto.utils import debug_logs_enabled
             self.logging_enabled = debug_logs_enabled()
         except Exception, IOError:
-            from syr.log import _debug
-            _debug(format_exc(), force=True)
+            record_exception()
             self.logging_enabled = True
 
         try:
@@ -70,7 +69,8 @@ class LogFile(object):
         if not filename.endswith('.log'):
             filename = '{}.log'.format(filename)
 
-        self.log = get_log(filename)
+        self.log = get_log(filename=filename)
+        self.pathname = get_log_path(filename=filename)
 
     #@synchronized
     def write(self, message):
@@ -117,16 +117,10 @@ class LogFile(object):
         '''
 
         if self.logging_enabled:
-            m = re.match('^.*(\.log)', self.log.pathname)
-            if m:
-                filename = self.log.pathname.replace(m.group(1), '.log')
-            else:
-                filename = '{}.x'.format(self.log.pathname)
-            with open(filename, 'at') as f:
-                t = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-                f.write('{} {}\n'.format(t, repr(message)))
-            #from syr.log import _debug, _DEFAULT_PERMS
-            #_debug(message, force=True, filename=filename, mode=_DEFAULT_PERMS)
+            try:
+                _debug(message, force=True, filename=self.pathname)
+            except:
+                _debug(message, force=True)
 
     def flush(self):
         '''
@@ -138,5 +132,4 @@ class LogFile(object):
         '''
 
         self.log.flush()
-
 

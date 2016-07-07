@@ -1,20 +1,21 @@
 '''
     Constants for GoodCrypto app.
 
-    Copyright 2014-2015 Good Crypto
-    Last modified: 2015-04-16
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-08-02
 '''
 
 import os, os.path
 
 # set this to False to ship, True to test
-# consider changing this to something easier to understand 
+# consider changing this to something easier to understand
 WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP = False
 if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
     WARNING = 'WARNING! WARNING! WARNING! TESTING ONLY! DO NOT SHIP!'
-    
+
 PROJECT = 'GoodCrypto'
-GOODCRYPTO_VERSION = '1.0'
+FULL_PROJECT_NAME = '{} Private Server'.format(PROJECT)
+ISO_NAME = '{}.iso'.format(FULL_PROJECT_NAME.lower().replace(' ', '_'))
 
 BASE_PROJECT_DIR = '/var/local/projects'
 SHORT_NAME = PROJECT.lower()
@@ -49,7 +50,7 @@ if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
     FORWARDED_APP_SSH_PORT = 8022
     FORWARDED_HOST_SSH_PORT = 8122
     FORWARDED_MAILSERVER_SSH_PORT = 8222
-    
+
 HTTP_PORT = 8080
 HTTPS_PORT = 8443
 
@@ -63,4 +64,14 @@ STATUS_YELLOW = 'yellow'
 # tor status file
 TOR_STATUS_FILE = '/tmp/goodcrypto.tor.status'
 
+# name for the databases
+DEFAULT_DB = 'default'
+MAIL_DB = DEFAULT_DB #'mail'
+SYSTEM_DB = 'system'
+WEB_DB = 'web'
+
+# timestamp when ISO was created
+TIMESTAMP_DIR = '/var/lib/goodcrypto'
+TIMESTAMP_FILENAME = '{}.timestamp'.format(ISO_NAME)
+TIMESTAMP_PATH = os.path.join(TIMESTAMP_DIR, TIMESTAMP_FILENAME)
 
