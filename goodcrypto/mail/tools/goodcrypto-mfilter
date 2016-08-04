@@ -1,0 +1,3 @@
+cd /var/local/projects/goodcrypto/server/src/mail
+python __main__.py "$@"
+

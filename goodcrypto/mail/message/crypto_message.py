@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-11-13
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@ from goodcrypto.mail.message import constants, inspect_utils, utils
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import add_private_key
-from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.mail.utils import email_in_domain, get_encryption_software
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.utils import format_fingerprint
@@ -175,7 +175,7 @@ class CryptoMessage(object):
 
         header_lines = []
         if options.auto_exchange_keys():
-            encryption_software_list = utils.get_encryption_software(from_user)
+            encryption_software_list = get_encryption_software(from_user)
 
             # if no crypto and we're creating keys, then do so now
             if ((encryption_software_list is None or len(encryption_software_list) <= 0) and
@@ -184,7 +184,7 @@ class CryptoMessage(object):
 
                 add_private_key(from_user)
                 self.log_message("started to create a new key for {}".format(from_user))
-                encryption_software_list = utils.get_encryption_software(from_user)
+                encryption_software_list = get_encryption_software(from_user)
 
             if encryption_software_list is not None and len(encryption_software_list) > 0:
                 self.log_message("getting header with public keys for {}: {}".format(
@@ -293,7 +293,7 @@ class CryptoMessage(object):
         if len(existing_crypto_software) > 0:
             self.log_message("attempted to add accepted encryption software to email_message that already has them")
         else:
-            encryption_software_list = utils.get_encryption_software(from_user)
+            encryption_software_list = get_encryption_software(from_user)
             if encryption_software_list == None or len(encryption_software_list) <= 0:
                 self.log_message("No encryption software for {}".format(from_user))
             else:
@@ -325,7 +325,7 @@ class CryptoMessage(object):
         '''
 
         try:
-            encryption_software_list = utils.get_encryption_software(from_user)
+            encryption_software_list = get_encryption_software(from_user)
             if encryption_software_list == None or len(encryption_software_list) <= 0:
                 self.log_message("Not adding fingerprint for {} because no crypto software".format(from_user))
             else:
@@ -603,7 +603,7 @@ class CryptoMessage(object):
             ''' Add the tag to the text content. '''
 
             text_content = content
-            text_content = '{}\n\n\n{}'.format(text_content, str(tags))
+            text_content = '{}\n\n\n{}\n'.format(text_content, str(tags))
             self.log_message('added tags to text content')
 
             return text_content
@@ -620,9 +620,9 @@ class CryptoMessage(object):
             if index < 0:
                 index = html_content.lower().find('</html>')
             if index < 0:
-                html_content = '{}<div><hr>\n{}</div>'.format(html_content, str(tags))
+                html_content = '{}<div><hr>\n{}<br/></div>'.format(html_content, str(tags))
             else:
-                html_content = '{}<div><hr>\n{}</div>\n{}'.format(html_content[0:index], str(tags), html_content[:index])
+                html_content = '{}<div><hr>\n{}<br/></div>\n{}'.format(html_content[0:index], str(tags), html_content[:index])
             self.log_message('added tags to html content')
 
             return html_content

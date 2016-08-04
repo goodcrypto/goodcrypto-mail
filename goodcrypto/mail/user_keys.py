@@ -1,7 +1,7 @@
 '''
     Manage passcodes for local users that use GoodCrypto on this mail server.
-    
-    For example, if you want to get a list of email addresses used by GoodCrypto, then 
+
+    For example, if you want to get a list of email addresses used by GoodCrypto, then
     you could use the following code:
     <pre>
        user_keys = UserKey();
@@ -26,19 +26,20 @@
     </pre>
 
     Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-07-27
+    Last modified: 2015-11-22
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+import os
 from datetime import datetime, timedelta
-import django
-if not django.apps.registry.apps.app_configs:
-    django.setup()
+
+# set up django early
+from goodcrypto.utils import gc_django
+gc_django.setup()
 
 from goodcrypto.mail import contacts
 from goodcrypto.mail.crypto_software import get_key_classname
 from goodcrypto.mail.models import Contact, ContactsCrypto, EncryptionSoftware, UserKey
-from goodcrypto.mail.model_signals import start_adding_private_key
 from goodcrypto.mail.utils import email_in_domain, gen_user_passcode
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import parse_address, get_email
@@ -58,7 +59,7 @@ def is_ok():
     '''
 
     def passcode_ok(crypto_passcode):
-        result_ok = (crypto_passcode.contacts_encryption is not None and 
+        result_ok = (crypto_passcode.contacts_encryption is not None and
                      crypto_passcode.passcode is not None and
                      len(crypto_passcode.passcode) > 0)
 
@@ -78,7 +79,7 @@ def is_ok():
         else:
             result_ok = False
             log_message('none defined')
-                
+
     except Exception:
         result_ok = False
         record_exception()
@@ -92,7 +93,7 @@ def exists(email):
 
         Test an unknown email address so we're sure of the result.
         See the unittest to understand how to really use this function.
-        
+
         >>> # In honor of Juan Gonzalez,who frequently co-hosts Democracy Now!
         >>> exists('jaun@goodcrypto.local')
         False
@@ -101,17 +102,17 @@ def exists(email):
     address = get_email(email)
     query_set = get_all_user_keys(address)
     found = query_set is not None and len(query_set) > 0
-    log_message("{} private key exist: {}".format(address, found))
+    log_message("{} private key exists: {}".format(address, found))
 
     return found
 
 def get(email, encryption_name):
-    ''' 
+    '''
         Get the contact's passcode record for the encryption software.
 
         Test an unknown email address so we're sure of the result.
         See the unittest to understand how to really use this function.
-        
+
         >>> # In honor of Jeremy Scahill, who wrote "Dirty Wars" among many other books.
         >>> get('jeremy@goodcrypto.local', 'GPG') is None
         True
@@ -139,8 +140,11 @@ def get(email, encryption_name):
                 except:
                     record_exception()
                     log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+            fingerprint = contacts_encryption.fingerprint or 'no'
             log_message("getting {} private key record for {} ({} fingerprint)".format(
-                encryption_name, email, contacts_encryption.fingerprint))
+                encryption_name, email, fingerprint))
+
             user_key = UserKey.objects.get(contacts_encryption=contacts_encryption)
             log_message("found {} private key record for {}".format(encryption_name, email))
     except UserKey.DoesNotExist:
@@ -148,11 +152,93 @@ def get(email, encryption_name):
     except Exception:
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-        
+
     return user_key
 
+def add(email, encryption_software, passcode=None):
+    '''
+        Add a user key to the database, but do not add a key the crypto keyring.
+
+        >>> # In honor of David Goulet, lead developer of Torsocks 2.0.
+        >>> email = 'David <david@goodcrypto.local'
+        >>> encryption_name = 'GPG'
+        >>> user_key = add(email, encryption_name)
+        >>> user_key is None
+        True
+    '''
+
+    try:
+        user_key = None
+
+        contacts_encryption = contacts.get_contacts_crypto(email, encryption_software)
+        if contacts_encryption is None:
+            log_message("unable to add user {} key record for {} because no matching contact's crypto record".format(
+                encryption_software, email))
+        else:
+            email = contacts_encryption.contact.email
+            encryption_name = contacts_encryption.encryption_software
+            if passcode is None:
+                user_passcode = gen_user_passcode(email)
+            else:
+                user_passcode = passcode
+
+            user_key = get(email, encryption_name)
+            if user_key is None:
+                user_key = UserKey.objects.create(
+                  contacts_encryption=contacts_encryption, passcode=user_passcode)
+                result_ok = user_key is not None
+                log_message("added private {} user key for {} result ok: {}".format(
+                    encryption_name, email, result_ok))
+            else:
+                result_ok = True
+                log_message("found private {} key for {}".format(encryption_name, email))
+
+                if user_key.passcode is None:
+                    user_key.passcode = user_passcode
+                    user_key.save()
+                    log_message("saved private {} key's record for {}".format(encryption_name, email))
+                elif passcode is not None and passcode != user_key.passcode:
+                    log_message('database passcode does not match passcode passed to "add()"')
+
+    except Exception:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return user_key
+
+def delete(email, encryption_name, passcode):
+    '''
+        Delete the contact's user key record. Any associate key in the
+        crypto's keyring is *not* removed. Use contacts.delete() to remove
+        both the database records and the matching keyring keys.
+
+        >>> # In honor of Bruce Leidl, lead developer of Orchid.
+        >>> email = 'bruce@goodcrypto.local'
+        >>> delete(email, 'GPG', 'secret')
+        False
+    '''
+
+    try:
+        user_key = get(email, encryption_name)
+        if user_key:
+            if user_key.passcode == passcode:
+                user_key.delete()
+                result_ok = True
+            else:
+                result_ok = False
+                log_message("{} passcodes don't match so not deleting {}".format(encryption_name, email))
+        else:
+            result_ok = False
+            log_message("no contact's {} user key record to delete for {}".format(encryption_name, email))
+    except Exception:
+        result_ok = False
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return result_ok
+
 def get_passcode(email, encryption_name):
-    ''' 
+    '''
         Get the passcode for the encryption program for the contact.
         The email can be an RFC address or just the email address.
 
@@ -184,141 +270,8 @@ def get_passcode(email, encryption_name):
 
     return passcode
 
-def create_user_key(email, encryption_name):
-    ''' 
-        Create a key for the internet address' encryption program.
-        If there's no matching contact, add it. Return True if successful.
-        
-        The email can be an RFC address or just the email address.
-
-        >>> # In honor of David Goulet, lead developer of Torsocks 2.0.
-        >>> email = 'David <david@goodcrypto.local'
-        >>> create_user_key(email, 'GPG')
-        True
-        >>> user_key = get(email, 'GPG')
-        >>> user_key is not None
-        True
-        >>> contacts.delete(email)
-        True
-    '''
-    
-    def get_or_make_contact(email):
-        contact = None
-        try:
-            name, address = parse_address(email)
-            contact = Contact.objects.get(email=address)
-        except Contact.DoesNotExist:
-            contact = Contact.objects.create(email=address, user_name=name)
-
-        return contact
-
-    def get_contacts_encryption(encryption_name, contact):
-        contacts_encryption = None
-        new_record = False
-        try:
-            encryption_software = EncryptionSoftware.objects.get(name=encryption_name)
-            contacts_encryption = ContactsCrypto.objects.get(
-                contact=contact, encryption_software=encryption_software)
-        except ContactsCrypto.DoesNotExist:
-            contacts_encryption = ContactsCrypto.objects.create(
-                contact=contact, encryption_software=encryption_software)
-            new_record = True
-        except EncryptionSoftware.DoesNotExist:
-            log_message("unable to add {} passcode for {}; no matching encryption program".format(encryption_name, email))
-        log_message('contacts_encryption: {}'.format(contacts_encryption))
-
-        return contacts_encryption, new_record
-
-    def create_key(email, encryption_name):
-        result_ok = False
-        try:
-            contact = get_or_make_contact(email)
-            
-            contacts_encryption, new_record = get_contacts_encryption(encryption_name, contact)
-            result_ok = contacts_encryption is not None
-            if result_ok:
-                if contacts_encryption.encryption_software.active:
-                    user_key = UserKey.objects.get(contacts_encryption=contacts_encryption)
-                    if user_key is not None:
-                        result_ok = True
-                        log_message("found private {} key for {}".format(encryption_software, email))
-                else:
-                    result_ok = False
-                    log_message("unable to create a key for {} because {} is inactive".format(email, encryption_name))
-            else:
-                result_ok = False
-                log_message("unable to get contact's {} record for {}".format(encryption_name, email))
-        except Contact.DoesNotExist:
-            log_message("unable to add {} key for {}; no matching contact".format(encryption_name, email))
-        except ContactsCrypto.DoesNotExist:
-            log_message("unable to add {} key for {}; no matching crypto accepted".format(encryption_name, email))
-        except UserKey.DoesNotExist:
-            user_key = UserKey.objects.create(
-              contacts_encryption=contacts_encryption, passcode=gen_user_passcode(email))
-            log_message("started to add private {} key for {}".format(encryption_name, email))
-            result_ok = start_adding_private_key(contacts_encryption)
-            log_message("added private key result ok: {}".format(result_ok))
-        except Exception:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-        log_message('contacts encryption ok: {}'.format(result_ok))
-
-        return result_ok
-
-    if encryption_name is None or len(encryption_name) <= 0:
-        encryption_name = CryptoFactory.DEFAULT_ENCRYPTION_NAME
-
-    if email_in_domain(email):
-        user_key = get(email, encryption_name)
-        if user_key is None:
-            log_message('creating user key for {}'.format(email))
-            result_ok = create_key(email, encryption_name)
-    
-        else:
-            log_message("{} already has a user key".format(email))
-            result_ok = False
-    else:
-        result_ok = False
-        log_message("cannot create a user key for {}".format(email))
-
-    return result_ok
-
-def delete_user_key(email, encryption_name, passcode):
-    ''' 
-        Delete the contact's passcode and key.
-        
-        >>> # In honor of Bruce Leidl, lead developer of Orchid.
-        >>> email = 'bruce@goodcrypto.local'
-        >>> create_user_key(email, 'GPG')
-        True
-        >>> passcode = get_passcode(email, 'GPG')
-        >>> delete_user_key(email, 'GPG', passcode)
-        True
-        >>> contacts.delete(email)
-        True
-    '''
-        
-    try:
-        user_key = get(email, encryption_name)
-        if user_key:
-            if user_key.passcode == passcode:
-                user_key.delete()
-                result_ok = True
-            else:
-                result_ok = False
-                log_message("{} passcodes don't match so not deleting {}".format(encryption_name, email))
-        else:
-            result_ok = False
-            log_message("no contact's {} passcode to delete for {}".format(encryption_name, email))
-    except Exception:
-        result_ok = False
-        record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    return result_ok
-
 def get_all_user_keys(email):
-    ''' 
+    '''
         Get the query set for all the user keys for all the encryption software.
 
         The email can be an RFC address or just the email address.
@@ -326,22 +279,22 @@ def get_all_user_keys(email):
         >>> # In honor of Nick Mathewson, one of the three original designers of Tor.
         >>> from time import sleep
         >>> from django.db.models.query import QuerySet
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQUEUE, GPG_REDIS_PORT
-        >>> from goodcrypto.utils.manage_rqueue import wait_until_queue_empty
+        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQ, GPG_REDIS_PORT
+        >>> from goodcrypto.utils.manage_rq import wait_until_queue_empty
         >>> email = 'nick@goodcrypto.local'
         >>> contact = Contact.objects.create(user_name='Nick', email=email)
         >>> encryption_software = EncryptionSoftware.objects.get(name='GPG')
         >>> contacts_encryption = ContactsCrypto.objects.create(
         ...    contact=contact, encryption_software=encryption_software)
         >>> sleep(150)
-        >>> wait_until_queue_empty(GPG_RQUEUE, GPG_REDIS_PORT)
+        >>> wait_until_queue_empty(GPG_RQ, GPG_REDIS_PORT)
         >>> len(get_all_user_keys(contact.email)) == 1
         True
         >>> isinstance(get_all_user_keys(contact.email), QuerySet)
         True
         >>> contacts.delete(email)
         True
-        >>> wait_until_queue_empty(GPG_RQUEUE, GPG_REDIS_PORT)
+        >>> wait_until_queue_empty(GPG_RQ, GPG_REDIS_PORT)
     '''
 
     query_set = None
@@ -369,9 +322,10 @@ def get_encryption_names(email):
 
         The email can be an RFC address or just the email address.
 
+        In honor of Brandon Bryant, a whistleblower about the US drone program.
         >>> len(get_encryption_names('edward@goodcrypto.local')) > 0
         True
-        >>> len(get_encryption_names('test4@goodcrypto.remote')) > 0
+        >>> len(get_encryption_names('brandon@goodcrypto.remote')) > 0
         False
     '''
 
@@ -391,7 +345,7 @@ def get_encryption_names(email):
 
 def get_contact_list(encryption_name=None):
     '''
-        Get a list of all the email addresses or 
+        Get a list of all the email addresses or
         a list of all email addresses that use the encryption program.
 
         >>> len(get_contact_list()) >= 2
@@ -422,34 +376,34 @@ def get_contact_list(encryption_name=None):
             if not email in contacts:
                 contacts.append(email)
                 log_message("email address: {}".format(email))
-                
+
     return contacts
 
 def get_default_expiration_time():
     '''
         Get the default expiration time for a key.
-        
+
         >> get_default_expiration_time()
         1
     '''
-    
+
     return UserKey.DEFAULT_EXPIRATION_TIME
-    
+
 def get_default_expiration_period():
     '''
         Get the default expiration period for a key.
-        
+
         >> get_default_expiration_period()
         'Years'
     '''
-    
+
     return UserKey.DEFAULT_EXPIRATION_PERIOD
-    
+
 
 def log_message(message):
     '''
         Log a message to the local log.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
@@ -459,7 +413,7 @@ def log_message(message):
     '''
 
     global log
-    
+
     if log is None:
         log = LogFile()
 

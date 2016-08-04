@@ -2,77 +2,127 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-07-28
+    Last modified: 2015-12-01
 
 {% endcomment %}
 {% load i18n custom %}
 
   {% block meta_keywords %}
-  <meta name="Keywords" content="privacy, encryption, email">
+  <meta name="Keywords" content="mail security options">
   {% endblock meta_keywords %}
   {% block meta_description %}
-  <meta name="Description" content="Options for your GoodCrypto private server.">
+  <meta name="Description" content="Security options for your messages.">
   {% endblock meta_description %}
 
-  {% block titlevar %}Mail Options{% endblock %}
+  {% block titlevar %}Mail Security Options{% endblock %}
 
 {% block contentpane %}
 
     {% include "snippets/secure_button.html" %}
 
     <div class="row">
-        <h3>Mail Options</h3>
+        <h3>Mail Security Options</h3>
     </div>
 
     <div class="col-md-12 col-xm-6">
         <div class="row">&nbsp;</div>
-        <div class="table-responsive btn-group">
+        <div class="table-responsive">
             <table class="table table-responsive">
                 <tr>
-                    <th>
+                    <th colspan="3">
                         <p>&nbsp;</p>
-                        {% trans 'Options' %}
+                        {% trans 'Metadata & Traffic Analysis Protection' %}
                         <p>&nbsp;</p>
                     </th>
+                </tr>
+                <tr>
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Protect metadata' %} </td>
                     <td>
-                        <p>&nbsp;</p>
-                        <a href="/admin/mail/mailoptions/" title="{% trans 'Manage options for encrypting/decrypting mail' %}">
-                            <button type="button" class="btn btn-primary btn-block">{% trans 'General' %}</button>
-                        </a>
-                        <p>&nbsp;</p>
-                    </td>
-                    <td>
-                        <p>&nbsp;</p>
-                        <a href="/admin/mail/metadataoptions/" title="{% trans 'Show the contacts who have keys. Manually create private keys for users' %}">
-                            <button type="button" class="btn btn-primary btn-block">{% trans 'Metadata' %}</button>
-                        </a>
-                        <p>&nbsp;</p>
-                    </td>
-                    <td>
-                        <p>&nbsp;</p>
-                        <a href="/admin/mail/mailserveroptions/" title="{% trans 'Manage users who can check on which messages were exchanged privately' %}">
-                            <button type="button" class="btn btn-primary btn-block">{% trans 'Mail server' %}</button>
-                        </a>
-                        <p>&nbsp;</p>
+                        {% if encrypt_metadata %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
                     </td>
                 </tr>
-                {# blank row to get all the buttons to line up #}
                 <tr>
-                    <th>
-                        &nbsp;
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Stop traffic analysis' %} </td>
+                    <td>
+                        {% if bundle_and_pad %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <tr>
+                    <th colspan="3">
+                        <p>&nbsp;</p>
+                        {% trans 'Tighter security' %}
+                        <p>&nbsp;</p>
                     </th>
+                </tr>
+                <tr>
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Require verify keys' %} </td>
                     <td>
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                        {% if require_key_verified %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
                     </td>
+                </tr>
+                <tr>
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Filter html' %} </td>
                     <td>
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                        {% if filter_html %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
                     </td>
+                </tr>
+
+                <tr>
+                    <th colspan="3">
+                        <p>&nbsp;</p>
+                        {% trans 'Signatures' %}
+                        <p>&nbsp;</p>
+                    </th>
+                </tr>
+                <tr>
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Clear sign messages' %} </td>
                     <td>
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                        {% if clear_sign %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td width="10%"> &nbsp; </td>
+                    <td width="25%"> {% trans 'Add DKIM signature' %} </td>
+                    <td>
+                        {% if add_dkim_sig %}
+                            <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                        {% else %}
+                            <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                        {% endif %}
                     </td>
                 </tr>
             </table>
         </div>
+        <p class="dropcap">
+        Contact your mail administrator about these options. If you are the mail administrator,
+        then you can <a href="/admin/mail/options/">change the options</a> after signing in.
+        </p>
     </div>
 {% endblock contentpane %}
 

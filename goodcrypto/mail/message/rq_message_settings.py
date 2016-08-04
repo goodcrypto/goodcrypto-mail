@@ -2,7 +2,7 @@
     Message RQ worker settings.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2015-06-08
+    Last modified: 2015-09-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -21,8 +21,8 @@ MESSAGE_REDIS_PORT = REDIS_PORT
 # REDIS_DB = 3
 
 # Queues to listen on
-MESSAGE_RQUEUE = 'message'
-QUEUES = [MESSAGE_RQUEUE]
+MESSAGE_RQ = 'message'
+QUEUES = [MESSAGE_RQ]
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step

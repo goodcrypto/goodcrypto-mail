@@ -1,23 +1,26 @@
 #! /usr/bin/python
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-11-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+import os, sh, sys
 from traceback import format_exc
-import django, sh, sys
+
+# set up django early
+from goodcrypto.utils import gc_django
+gc_django.setup()
+
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 
-django.setup()
-
 from goodcrypto.mail.constants import TAG_ERROR
-from goodcrypto.mail.message.pipe import Pipe
+from goodcrypto.mail.message.filters import Filters
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.rqueue import rqueue_message
+from goodcrypto.mail.message.message_rq import rq_message
 from goodcrypto.mail.utils import email_in_domain, get_sysadmin_email
-from goodcrypto.mail.utils.notices import notify_user
+from goodcrypto.mail.utils.notices import report_unexpected_ioerror, report_unexpected_named_error
 from goodcrypto.utils import i18n, get_email
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
@@ -59,25 +62,25 @@ class Main(object):
             rqueued = False
 
             if self.is_valid(sender, recipients):
-                
+
                 self.read_message_from_stdin()
 
-                # queue message to encrypt/decrypt it 
+                # queue message to encrypt/decrypt it
 
                 # syr.lock.locked() is only a per-process lock
                 # syr.lock has a system wide lock, but it is not well tested
                 with locked():
                     self.log_message(
                        'rqueueing message from {} to {}'.format (self.sender, self.recipients))
-                    rqueued = rqueue_message(self.sender, self.recipients, self.in_message)
+                    rqueued = rq_message(self.sender, self.recipients, self.in_message)
                     self.log_message(
                        'message rqueued from {} to {}: {}'.format (self.sender, self.recipients, rqueued))
 
                 # if we couldn't queue the message
                 if not rqueued:
-                    # we're not calling Pipe.process(), just reinjecting the message
-                    pipe = Pipe(self.sender, self.recipients, self.in_message)
-                    if not pipe.reinject_message(message=self.in_message):
+                    # we're not calling Filters.process(), just reinjecting the message
+                    filters = Filters(self.sender, self.recipients, self.in_message)
+                    if not filters.reinject_message(message=self.in_message):
                         exit_result = self.ERROR_EXIT
 
             else:
@@ -93,8 +96,8 @@ class Main(object):
                 to_address = self.recipients[0]
             else:
                 to_address = get_sysadmin_email()
-            pipe = Pipe(self.sender, to_address, self.in_message)
-            pipe.reject_message(str(exception), message=self.in_message)
+            filters = Filters(self.sender, to_address, self.in_message)
+            filters.reject_message(str(exception), message=self.in_message)
         except IOError as io_error:
             # don't set the exit code because we don't want to reveal too much to the sender
             record_exception()
@@ -103,8 +106,8 @@ class Main(object):
                 to_address = self.recipients[0]
             else:
                 to_address = get_sysadmin_email()
-            pipe = Pipe(self.sender, to_address, self.in_message)
-            pipe.reject_message(str(io_error), message=self.in_message)
+            filters = Filters(self.sender, to_address, self.in_message)
+            filters.reject_message(str(io_error), message=self.in_message)
 
         self.log_message('finished goodcrypto mail filter')
 
@@ -241,16 +244,22 @@ if __name__ == "__main__":
 
     except NameError:
         # hopefully our testing prevents this from ever occuring, but if not, we'd definitely like to know about it
+        """
         subject = '{} - Serious unexpected NameError'.format(TAG_ERROR)
         body = 'A serious, unexpected NameError was detected while processing mail. Please send the Traceback to support@goodcrypto.com\n{}'.format(format_exc())
         notify_user(get_sysadmin_email(), subject, body)
         record_exception()
+        """
+        report_unexpected_named_error()
 
     except Exception, IOError:
+        """
         subject = '{} - Serious unexpected exception'.format(TAG_ERROR)
         body = 'A serious, unexpected exception was detected while processing mail. If you contact support@goodcrypto.com, please include the Traceback.\n{}'.format(format_exc())
         notify_user(get_sysadmin_email(), subject, body)
         record_exception()
+        """
+        report_unexpected_ioerror()
 
     if report_usage:
         print('GoodCrypto Mail')

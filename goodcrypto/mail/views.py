@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-12-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,6 +17,7 @@ from goodcrypto.mail.api import MailAPI
 from goodcrypto.mail.i18n_constants import ERROR_PREFIX, PUBLIC_KEY_INVALID
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import history
+from goodcrypto.mail.message.metadata import get_metadata_user
 from goodcrypto.mail.models import MessageHistory
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
@@ -44,35 +45,42 @@ def home(request):
     '''Show the home page.'''
 
     domain = get_domain()
-    mta = options.mail_server_address()
-    if (domain is None or len(domain.strip()) <= 0 or
-        mta is None or len(mta.strip()) <= 0):
-        log_message('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
+    if domain is None or len(domain.strip()) <= 0:
+        log_message('redirecting to system configuration')
         response = HttpResponseRedirect('/system/customize/')
     else:
         is_secure = is_secure_connection(request)
+        params = {'domain': domain, 'secure': is_secure}
+        mta = options.mail_server_address()
+        if mta is not None and len(mta.strip()) > 0:
+            params['mta'] = mta
+
         template = 'mail/home.html'
-        response = render_to_response(
-            template, 
-            {'domain': domain, 'mta': mta, 'secure': is_secure}, 
-            context_instance=RequestContext(request))
+        response = render_to_response(template, params, context_instance=RequestContext(request))
 
     return response
 
 def show_options(request):
     '''Show the options page.'''
 
-    domain = get_domain()
-    mta = options.mail_server_address()
-    if (domain is None or len(domain.strip()) <= 0 or
-        mta is None or len(mta.strip()) <= 0):
-        log_message('redirecting to system configuration; domain: {}; mta: {}'.format(domain, mta))
-        response = HttpResponseRedirect('/system/customize/')
+    if not request.user.is_authenticated():
+        context = {}
+        context.update(csrf(request))
+        response = redirect('/login/?next={}'.format(request.path), context)
     else:
         is_secure = is_secure_connection(request)
         template = 'mail/options.html'
+        params = {
+            'secure': is_secure,
+            'encrypt_metadata': options.encrypt_metadata(),
+            'bundle_and_pad': options.bundle_and_pad(),
+            'require_key_verified': options.require_key_verified(),
+            'filter_html': options.filter_html(),
+            'clear_sign': options.clear_sign_email(),
+            'add_dkim_sig': options.add_dkim_sig(),
+        }
         response = render_to_response(
-            template, {'secure': is_secure}, context_instance=RequestContext(request))
+            template, params, context_instance=RequestContext(request))
 
     return response
 
@@ -87,17 +95,17 @@ def view_fingerprint(request):
         response = None
         form = forms.GetFingerprintForm()
         if request.method == 'POST':
-            
+
             email = None
             encryption_software = None
-            
+
             form = forms.GetFingerprintForm(request.POST)
             if form.is_valid():
                 try:
                     email = form.cleaned_data['email']
                     encryption_software = form.cleaned_data['encryption_software']
 
-                    page_title = i18n('{encryption_software} Key ID for {email}'.format(
+                    page_title = i18n('{encryption_software} fingerprint for {email}'.format(
                         encryption_software=encryption_software, email=email))
 
                     fingerprint, verified, active = contacts.get_fingerprint(email, encryption_software.name)
@@ -111,13 +119,13 @@ def view_fingerprint(request):
                             checked = None
                         form_template = 'mail/verify_fingerprint.html'
                         response = render_to_response(
-                            form_template, {'form': form, 
+                            form_template, {'form': form,
                                             'page_title': page_title,
-                                            'email': email, 
+                                            'email': email,
                                             'encryption_name': encryption_software.name,
                                             'fingerprint': format_fingerprint(fingerprint),
                                             'checked': checked,
-                                            'active': active}, 
+                                            'active': active},
                                             context_instance=RequestContext(request))
 
                     if response is None:
@@ -125,10 +133,10 @@ def view_fingerprint(request):
                 except Exception:
                     record_exception()
                     log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-    
+
             if response is None:
                 log_message('view fingerprint post: {}'.format(request.POST))
-    
+
         if response is None:
             form_template = 'mail/get_fingerprint.html'
             response = render_to_response(
@@ -170,17 +178,17 @@ def verify_fingerprint(request):
                     email = contacts_crypto.contact.email
                     encryption_software = contacts_crypto.encryption_software
                     key_id = contacts_crypto.fingerprint
-                    page_title = i18n('{encryption_software} Key ID for {email}'.format(
+                    page_title = i18n('{encryption_software} fingerprint for {email}'.format(
                         encryption_software=encryption_software, email=email))
 
                     response = show_fingerprint(request, email, key_id, verified, active, page_title)
                 except Exception:
                     record_exception()
                     log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-    
+
             if response is None:
                 log_message('verify key_id post: {}'.format(request.POST))
-    
+
         if response is None:
             form_template = 'mail/get_fingerprint.html'
             response = render_to_response(
@@ -224,10 +232,11 @@ def verify_crypted(request):
 
             if response is None:
                 log_message('post: {}'.format(request.POST))
-    
+
         if response is None:
             log_message('no response for verifying message crypted so redisplaying main page')
-            params = {'form': form, 
+            params = {'form': form,
+                      'main_headline': 'Verify Message',
                       'url': 'verify_crypted'}
             response = render_to_response(
                 form_template, params, context_instance=RequestContext(request))
@@ -264,7 +273,7 @@ def msg_encrypted(request, verification_code):
                 main_headline = i18n('Verified')
                 subheadline = i18n('Message sent privately')
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id, 
+                    results.append((record.sender, record.message_date, record.message_id,
                                     history.get_status(record.status),))
             else:
                 main_headline = i18n('<font color="red">Not</font> Verified')
@@ -305,7 +314,7 @@ def show_encrypted_history(request):
             if records:
                 for record in records:
                     results.append(
-                     (record.recipient, record.message_date, record.subject, 
+                     (record.recipient, record.message_date, record.subject,
                      history.get_status(record.status), record.message_id,))
 
             params = {'email': request.user.email,
@@ -344,8 +353,8 @@ def msg_decrypted(request, verification_code):
                 main_headline = i18n('Verified')
                 subheadline = i18n('Message received privately')
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id, 
-                                    history.get_status(record.status), 
+                    results.append((record.sender, record.message_date, record.message_id,
+                                    history.get_status(record.status),
                                     record.verification_code,))
             else:
                 main_headline = i18n('<font color="red">Not</font> Verified')
@@ -388,7 +397,7 @@ def show_decrypted_history(request):
                 for record in records:
                     verification = get_formatted_verification_code(record.verification_code, 'msg-decrypted')
                     results.append(
-                     (record.sender, record.message_date, record.subject, 
+                     (record.sender, record.message_date, record.subject,
                      history.get_status(record.status), verification,))
             params = {'email': request.user.email,
                       'results': results,
@@ -417,7 +426,7 @@ def export_key(request):
             name = email
             record_exception()
             log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            
+
         return name
 
     if options.login_to_export_keys() and not request.user.is_authenticated():
@@ -435,7 +444,7 @@ def export_key(request):
                 try:
                     email = form.cleaned_data['email']
                     encryption_software = form.cleaned_data['encryption_software']
-    
+
                     public_key = contacts.get_public_key(email, encryption_software)
                     if public_key is None or len(public_key) <= 0:
                         data = {'title': i18n("Export {encryption_software} Key Error".format(
@@ -453,10 +462,10 @@ def export_key(request):
                 except Exception:
                     record_exception()
                     log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-    
+
             if response is None:
                 log_message('post: {}'.format(request.POST))
-    
+
         if response is None:
             response = render_to_response(
                 form_template, {'form': form}, context_instance=RequestContext(request))
@@ -477,15 +486,15 @@ def import_key(request):
         if request.method == 'POST':
             try:
                 form = forms.ImportKeyForm(request.POST, request.FILES)
-                if form.is_valid(): 
+                if form.is_valid():
                     response = import_public_key(request, form)
             except Exception:
                 record_exception()
                 log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-    
+
             if response is None:
                 log_message('post: {}'.format(request.POST))
-    
+
         if response is None:
             response = render_to_response(
                 form_template, {'form': form}, context_instance=RequestContext(request))
@@ -537,7 +546,7 @@ def import_public_key(request, form):
             log_message('error importing public {} key:\n{}'.format(encryption_software, public_key))
 
     response = render_to_response(template, data, context_instance=RequestContext(request))
-        
+
     return response
 
 
@@ -604,16 +613,16 @@ def import_key_now(encryption_name, public_key, user_name, possible_fingerprint)
     log_message("    Status: {}".format(status))
 
     return result_ok, status, fingerprint_ok, id_fingerprint_pairs
-    
+
 def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fingerprint_pairs, plugin):
     '''
         Import public keys and create associated contact records.
-        
+
     '''
     def update_contact(contact, crypto_name, fingerprint):
         fingerprint_ok = True
         try:
-            if (user_name is not None and 
+            if (user_name is not None and
                 (contact.user_name is None or len(contact.user_name.strip()) <= 0)):
                 contact.user_name = user_name.strip()
                 contact.save()
@@ -632,14 +641,14 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
         except:
             record_exception()
             log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            
+
         return  fingerprint_ok
-        
-        
+
+
     result_ok = True
     fingerprint_ok = True
     status = i18n('Imported public key:')
-    
+
     result_ok = plugin.import_public(public_key, id_fingerprint_pairs)
     log_message('imported key: {}'.format(result_ok))
     if result_ok:
@@ -656,14 +665,14 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
     else:
         result_ok = False
         status = PUBLIC_KEY_INVALID
-        
+
     log_message(status)
 
     return result_ok, status, fingerprint_ok
-    
+
 def configure(request):
     ''' Show how to configure mta. '''
-    
+
     template = 'mail/configure.html'
     return render_to_response(
         template, {'domain': get_domain()}, context_instance=RequestContext(request))
@@ -671,7 +680,7 @@ def configure(request):
 def api(request):
     '''
         Interface with the client through the API.
-    
+
         All requests must be via a POST.
     '''
 
@@ -694,7 +703,7 @@ def api(request):
 
 def show_fingerprint(request, email, fingerprint, verified, active, page_title):
     ''' Show the fingerprint. '''
-    
+
     if verified:
         verified_msg = i18n('Yes')
     else:
@@ -705,7 +714,7 @@ def show_fingerprint(request, email, fingerprint, verified, active, page_title):
         active_msg = i18n('No')
 
     log_message('showing {} fingerprint verified: {}'.format(email, verified))
-    
+
     template = 'mail/show_fingerprint.html'
     data = {'page_title': page_title,
             'fingerprint': format_fingerprint(fingerprint),
@@ -730,23 +739,23 @@ def get_crypted_params(email, verification_code):
                     main_headline = i18n('Verified')
                     subheadline = i18n('Message sent privately')
                     for record in records:
-                        results.append((record.sender, record.message_date, record.message_id, 
+                        results.append((record.sender, record.message_date, record.message_id,
                                         history.get_status(record.status),))
                     status = ENCRYPTED_STATUS
                 else:
                     main_headline = i18n('Verified')
                     subheadline = i18n('Message received privately')
                     for record in records:
-                        results.append((record.sender, record.message_date, record.message_id, 
-                                        history.get_status(record.status), 
+                        results.append((record.sender, record.message_date, record.message_id,
+                                        history.get_status(record.status),
                                         record.verification_code,))
                     status = DECRYPTED_STATUS
             else:
                 main_headline = i18n('Verified')
                 subheadline = i18n('Exchanged the messages privately')
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id, 
-                                    history.get_status(record.status), 
+                    results.append((record.sender, record.message_date, record.message_id,
+                                    history.get_status(record.status),
                                     record.verification_code,))
         else:
             main_headline = i18n('<font color="red">Not</font> Verified')
@@ -780,10 +789,37 @@ def get_formatted_verification_code(verification_code, partial_link):
 
     return verification
 
+def show_metadata_domains(request):
+    '''Show domains that have metadata keys.'''
+
+    if not request.user.is_authenticated():
+        context = {}
+        context.update(csrf(request))
+        response = redirect('/login/?next={}'.format(request.path), context)
+    else:
+        try:
+            metadata_list = contacts.get_metadata_domains()
+            if len(metadata_list) > 0:
+                error_message = None
+            else:
+                error_message = i18n("There aren't any domains ready to protect metadata, yet.")
+
+            template = 'mail/metadata_domains.html'
+            params = {'metadata_list': metadata_list,
+                      'error_message': error_message}
+            response = render_to_response(
+                template, params, context_instance=RequestContext(request))
+        except Exception:
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            response = HttpResponseRedirect('/mail/show_metadata_domains/')
+
+    return response
+
 def log_message(message):
     '''
         Log a message to the local log.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
@@ -793,7 +829,7 @@ def log_message(message):
     '''
 
     global log
-    
+
     if log is None:
         log = LogFile()
 

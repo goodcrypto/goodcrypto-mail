@@ -2,8 +2,8 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-07-19
-    
+    Last modified: 2015-12-01
+
 {% endcomment %}
 {% load i18n custom %}
 
@@ -16,6 +16,8 @@
   {{ block.super }}
     <script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
 {% endblock extrascript %}
+
+{% block titlevar %}Verification Status{% endblock %}
 
 {% block contentpane %}
 
@@ -56,7 +58,7 @@
         {% elif error_message %}
             <p>&nbsp;</p>
             <p class="dropcap">
-            Please be sure that you entered the correct verification code. 
+            Please be sure that you entered the correct verification code.
             </p>
             <p>
             {{ error_message|safe }}

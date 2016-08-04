@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2015 GoodCrypto
+    Last modified: 2015-12-01
+
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="metadata">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="A list of domains ready to protect metadata.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}Domains Ready to Protect Metadata{% endblock %}
+
+{% block contentpane %}
+
+    {% include "snippets/secure_button.html" %}
+
+    <div class="row">
+        <h3>Domains Ready to Protect Metadata</h3>
+    </div>
+
+    <div class="col-md-12 col-xm-6">
+        <div class="row">&nbsp;</div>
+        <div class="table-responsive">
+            <table class="table table-responsive">
+                <tr>
+                    <th>
+                        {% trans 'Domain' %}
+                    </th>
+                    <th>
+                        {% trans 'Fingerprint' %}
+                    </th>
+                    <th>
+                        {% trans 'Verified' %}
+                    </th>
+                </tr>
+                
+                {% for domain, fingerprint, verified in metadata_list %}
+                    <tr>
+                        <td> {{ domain }} </td>
+                        <td> {{ fingerprint }} </td>
+                        <td>
+                            {% if verified %}
+                                <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                            {% else %}
+                                <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+{% endblock contentpane %}
+

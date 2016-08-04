@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2015 GoodCrypto
-    Last modified: 2015-06-17
+    Last modified: 2015-11-01
 {% endcomment %}
 {% load i18n custom %}
 
@@ -9,22 +9,22 @@
   <meta name="Keywords" content="fingerprint, key id">
   {% endblock meta_keywords %}
   {% block meta_description %}
-  <meta name="Description" content="View the key ID for a user's key.">
+  <meta name="Description" content="View the fingerprint for a user's key.">
   {% endblock meta_description %}
-  
+
   {% block titlevar %}{{ page_title }}{% endblock %}
 
 {% block contentpane %}
 
     <div class="row">
-        <h2>{{ page_title }}</h2> 
+        <h2>{{ page_title }}</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <div class="row">
         <div class="form-group">
-            <label class="control-label col-sm-2 col-lg-2 " for="fingerprint_label">{% trans 'Key ID' %}</label>
+            <label class="control-label col-sm-2 col-lg-2 " for="fingerprint_label">{% trans 'Fingerprint' %}</label>
             <div class=" col-sm-10 col-lg-10 ">
                 {{ fingerprint }}
             </div>

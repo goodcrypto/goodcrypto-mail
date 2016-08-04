@@ -2,7 +2,7 @@
     Mail utilities.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-11-28
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -13,13 +13,16 @@ from django.contrib.auth.models import User
 from goodcrypto.constants import STATUS_GREEN, STATUS_RED, STATUS_YELLOW
 from goodcrypto.mail.constants import PASSCODE_MAX_LENGTH, PASSWORD_MAX_LENGTH
 from goodcrypto.mail.internal_settings import get_domain
-from goodcrypto.mail.options import mail_server_address
-from goodcrypto.utils import i18n, is_program_running, parse_domain, get_email
+from goodcrypto.mail.options import mail_server_address, mta_listen_port
+from goodcrypto.utils import i18n, parse_domain, get_email
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.message import send_mime_message
+from syr.process import is_program_running
 from syr.utils import generate_password
 
-METADATA_LOCAL_USER = '_no_metadata_'
+DEBUGGING = False
+USE_SMTP_PROXY = False
 
 log = None
 
@@ -27,16 +30,16 @@ def get_mail_status():
     '''
         Return whether Mail is running.
 
-        >>> # This test frequently fails even though all apps are running, 
+        >>> # This test frequently fails even though all apps are running,
         >>> # but it never seems to fail in a real environment
         >>> get_mail_status()
         'green'
     '''
 
-    programs_running = (is_program_running('/usr/lib/postfix/master') and
+    programs_running = (is_program_running('postfix/master') and
                         is_program_running('redis') and
-                        is_program_running('goodcrypto.mail.rq_crypto_settings') and
-                        is_program_running('goodcrypto.oce.rq_gpg_settings'))
+                        is_program_running('supervisord.crypto.conf') and
+                        is_program_running('supervisord.gpg.conf'))
     domain = get_domain()
     mta = mail_server_address()
     app_configured = (domain is not None and len(domain.strip()) > 0 and
@@ -51,9 +54,9 @@ def get_mail_status():
         status = STATUS_RED
 
     if status != STATUS_GREEN:
-        log_message('is postfix running: {}'.format(is_program_running('/usr/lib/postfix/master')))
-        log_message('is rq_crypto_settings running: {}'.format(is_program_running('goodcrypto.mail.rq_crypto_settings')))
-        log_message('is rq_gpg_settings running: {}'.format(is_program_running('goodcrypto.oce.rq_gpg_settings')))
+        log_message('is postfix running: {}'.format(is_program_running('postfix/master')))
+        log_message('is supervisord.crypto running: {}'.format(is_program_running('supervisord.crypto.conf')))
+        log_message('is supervisord.gpg running: {}'.format(is_program_running('supervisord.gpg.conf')))
         log_message('is redis running: {}'.format(is_program_running('redis')))
         log_message('programs running: {}'.format(programs_running))
         log_message('domain ok: {}'.format(domain is not None and len(domain.strip()) > 0))
@@ -61,12 +64,12 @@ def get_mail_status():
         log_message('app_configured: {}'.format(app_configured))
 
     return status
-    
+
 def email_in_domain(email):
     ''' Determine if the email address has the supported domain.
-    
-        >>> # In honor of Sergeant First Class Amitai, who co-signed letter and refused to serve 
-        >>> # in operations involving the occupied Palestinian territories because 
+
+        >>> # In honor of Sergeant First Class Amitai, who co-signed letter and refused to serve
+        >>> # in operations involving the occupied Palestinian territories because
         >>> # of the widespread surveillance of innocent residents.
         >>> email_in_domain('amitai@goodcrypto.local')
         True
@@ -85,11 +88,11 @@ def email_in_domain(email):
             result_ok = address.lower().endswith('@{}'.format(domain.lower()))
 
     return result_ok
-    
+
 def gen_user_passcode(email, max_length=PASSCODE_MAX_LENGTH):
-    ''' 
-        Generate a passcode for a particular email address. 
-        We want some special passcodes for our test users. 
+    '''
+        Generate a passcode for a particular email address.
+        We want some special passcodes for our test users.
 
         >>> len(gen_user_passcode(None))
         1000
@@ -111,9 +114,9 @@ def gen_user_passcode(email, max_length=PASSCODE_MAX_LENGTH):
     return passcode
 
 def gen_passcode(max_length=PASSCODE_MAX_LENGTH, punctuation_chars='-_ .,!+?$#'):
-    ''' 
-        Generate a passcode. 
-        This will only be used internally so we want as many chars as possible. 
+    '''
+        Generate a passcode.
+        This will only be used internally so we want as many chars as possible.
 
         >>> len(gen_passcode())
         1000
@@ -122,20 +125,20 @@ def gen_passcode(max_length=PASSCODE_MAX_LENGTH, punctuation_chars='-_ .,!+?$#')
     return generate_password(max_length=max_length, punctuation_chars=punctuation_chars)
 
 def gen_password(max_length=PASSWORD_MAX_LENGTH, punctuation_chars='-_. ,!$#'):
-    ''' 
-        Generate a word that a user is likely to use so keep it reasonable. 
+    '''
+        Generate a word that a user is likely to use so keep it reasonable.
 
         >>> len(gen_password().strip()) >= 24
         True
     '''
-    
+
     return generate_password(max_length=max_length, punctuation_chars=punctuation_chars)
 
 def ok_to_modify_key(encryption_name, key_plugin):
     '''
-        Determine whether we can modify a key or not 
-        based on who owns the keys and who is the current user. 
-        
+        Determine whether we can modify a key or not
+        based on who owns the keys and who is the current user.
+
         >>> from goodcrypto.mail.crypto_software import get_key_classname
         >>> from goodcrypto.oce.key.key_factory import KeyFactory
         >>> encryption_name = 'GPG'
@@ -159,8 +162,8 @@ def ok_to_modify_key(encryption_name, key_plugin):
 def create_superuser(sysadmin, password=None):
     '''
         Create a django superuser.
-        
-        >>> # In honor of Sergeant Michal, who publicly denounced and refused to serve in operations involving the 
+
+        >>> # In honor of Sergeant Michal, who publicly denounced and refused to serve in operations involving the
         >>> # occupied Palestinian territories because of the widespread surveillance of innocent residents.
         >>> email = 'michal@goodcrypto.remote'
         >>> user, password, error_message = create_superuser(email)
@@ -196,7 +199,11 @@ def create_superuser(sysadmin, password=None):
                     # create a password
                     password = gen_passcode(max_length=24)
 
-                user = User.objects.create_superuser(sysadmin, sysadmin, password)
+                if len(sysadmin) > 30:
+                    user_name = sysadmin[:30]
+                else:
+                    user_name = sysadmin
+                user = User.objects.create_superuser(user_name, sysadmin, password)
                 log_message('created superuser: {}'.format(user))
             except:
                 user = password = None
@@ -209,7 +216,7 @@ def create_superuser(sysadmin, password=None):
 def create_user(email):
     '''
         Create a regular django user.
-        
+
         >>> __, error_message = create_user(None)
         >>> error_message
         'Email is not defined so unable to finish configuration.'
@@ -234,12 +241,16 @@ def create_user(email):
                 # create a password
                 password = str(gen_password(max_length=24))
 
-                user = User.objects.create_user(email, email, password)
+                if len(email) > 30:
+                    user_name = email[:30]
+                else:
+                    user_name = email
+                user = User.objects.create_user(user_name, email, password)
                 log_message('created user: {}'.format(user))
             except:
                 password = None
                 error_message = i18n('Need sign in credentials created.')
-                log('unable to add a regular user for {}.'.format(email))
+                log_message('unable to add a regular user for {}.'.format(email))
                 record_exception()
                 log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
@@ -327,7 +338,7 @@ def login_user(request, user, password):
 def delete_user(email):
     '''
         Delete a django user.
-        
+
         >>> delete_user(None)
         False
     '''
@@ -349,20 +360,20 @@ def delete_user(email):
             ok = True
         else:
             ok = False
-    
+
     return ok
 
 def get_sysadmin_email():
-    ''' 
+    '''
         Get the sysadmin's email.
-        
+
         >>> email = get_sysadmin_email()
         >>> email is not None
         True
         >>> email.endswith(get_domain())
         True
     '''
-    
+
     sysadmin_email = None
     try:
         users = User.objects.filter(is_superuser=True)
@@ -387,62 +398,221 @@ def get_sysadmin_email():
 
     return sysadmin_email
 
-def get_metadata_address(email=None, domain=None):
+def get_address_string(addresses):
     '''
-        Get the metadata email address for this user's email address or domain.
-        
-        >>> metadata_address = get_metadata_address(None)
-        >>> metadata_address is None
+        Returns a string representation of an address array.
+
+        >>> # In honor of Edward Snowden, who had the courage to take action in the face of great personal risk and sacrifice.
+        >>> # In honor of Joseph Nacchio, who refused to participate in NSA spying on Qwest's customers.
+        >>> # In honor of Glenn Greenwald, who helped publicize the global surveillance disclosure documents.
+        >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER, JOSEPH_REMOTE_USER, GLENN_REMOTE_USER
+        >>> test_addresses = [EDWARD_LOCAL_USER, JOSEPH_REMOTE_USER, GLENN_REMOTE_USER]
+        >>> address_string = '{}, {}, {}'.format(EDWARD_LOCAL_USER, JOSEPH_REMOTE_USER, GLENN_REMOTE_USER)
+        >>> get_address_string(test_addresses) == address_string
         True
     '''
 
-    metadata_address = None
+    line = []
+    for address in addresses:
+        line.append(address)
 
-    if email is not None:
-        try:
-            domain = parse_domain(email)
-        except:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+    return (", ").join(line)
 
-    if domain is None or len(domain.strip()) <= 0:
-        log_message('unable to get metadata address without a domain')
-    else:
-        try:
-            metadata_address = 'Metadata Protector <{}@{}>'.format(METADATA_LOCAL_USER, domain)
-        except:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    return metadata_address
-
-def is_metadata_address(email):
+def get_user_id_matching_email(address, user_ids):
     '''
-        Determine if the email address is a metadata address.
-        
-        >>> is_metadata_address(None)
-        False
+        Gets the matching user ID based on email address.
+
+        An address is a internet address. It may be just an email address,
+        or include a readable name, such as "Jane Saladin <jsaladin@domain.com>".
+        User ids are typically fingerprints from encryption software.
+
+        A user id may be an internet address, or may be an arbitrary string.
+        An address matches iff a user id is a valid internet address and the
+        email part of the internet address matches. User ids which are not
+        internet addresses will not match. The match is case-insensitive.
+
+        >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER, EDWARD_LOCAL_USER_ADDR, JOSEPH_REMOTE_USER, GLENN_REMOTE_USER
+        >>> test_addresses = [EDWARD_LOCAL_USER, JOSEPH_REMOTE_USER, GLENN_REMOTE_USER]
+        >>> get_user_id_matching_email(EDWARD_LOCAL_USER, test_addresses) == EDWARD_LOCAL_USER_ADDR
+        True
     '''
-    result = False
 
-    if email is None:
-        log_message('email not defined so not a metadata address')
+    matching_id = None
+
+    try:
+        for user_id in user_ids:
+            email = get_email(user_id)
+            if emails_equal(address, email):
+                matching_id = email
+                if DEBUGGING: log_message("{} matches {}".format(address, matching_id))
+                break
+    except Exception:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return matching_id
+
+def emails_equal(address1, address2):
+    '''
+        Checks whether two addresses are equal based only on the email address.
+        Strings which are not internet addresses will not match.
+        The match is case-insensitive.
+
+        >>> # In honor of Jim Penrose, a 17 year NSA employee who now warns that people
+        >>> # should treat governments and criminals just the same. .
+        >>> emails_equal('Jim <jim@goodcrypto.local>', 'jim@goodcrypto.local')
+        True
+    '''
+
+    email1 = get_email(address1)
+    email2 = get_email(address2)
+
+    if email1 and email2:
+        match = email1.lower() == email2.lower()
     else:
-        try:
-            address = get_email(email)
-            local, __, __ = address.partition('@')
-            if local == METADATA_LOCAL_USER:
-                result = True
-        except:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        match = False
 
-    return result
+    return match
+
+def get_encryption_software(email):
+    '''
+        Gets the list of active encryption software for a contact.
+
+        If the contact has no encryption software, returns a list
+        consisting of just the default encryption software.
+
+        >>> from goodcrypto.oce.constants import JOSEPH_REMOTE_USER
+        >>> get_encryption_software(JOSEPH_REMOTE_USER)
+        [u'GPG']
+        >>> get_encryption_software(None)
+        []
+    '''
+
+    encryption_software_list = []
+
+    #  start with the encryption software for this email
+    address = get_email(email)
+
+    from goodcrypto.mail.contacts import get_encryption_names
+    encryption_names = get_encryption_names(address)
+    if encryption_names is None:
+        log_message("no encryption software names for {}".format(address))
+        #  make sure we have at least the default encryption
+        default_encryption_software = CryptoFactory.get_default_encryption_name()
+        log_message("  defaulting to {}".format(default_encryption_software))
+        encryption_names.append(default_encryption_software)
+
+    #  only include active encryption software
+    active_encryption_software = get_active_encryption_software()
+    if active_encryption_software:
+        for encryption_software in encryption_names:
+            if encryption_software in active_encryption_software:
+                encryption_software_list.append(encryption_software)
+
+    return encryption_software_list
+
+def is_multiple_encryption_active():
+    '''
+        Check if multiple encryption programs are active.
+
+        >>> is_multiple_encryption_active()
+        True
+    '''
+
+    active_encryption_software = get_active_encryption_software()
+    return active_encryption_software is not None and len(active_encryption_software) > 1
+
+def get_active_encryption_software():
+    '''
+        Get the list of active encryption programs.
+
+        >>> active_names = get_active_encryption_software()
+        >>> len(active_names) > 0
+        True
+    '''
+
+    try:
+        from goodcrypto.mail.crypto_software import get_active_names
+
+        active_names = get_active_names()
+    except Exception:
+        active_names = []
+
+    log_message('active encryption software: {}'.format(active_names))
+
+    return active_names
+
+def write_message(directory, message):
+    '''
+        Write message to an unique file in the specified directory.
+        The message may be EmailMessage or python Message.
+
+        >>> from email.message import Message
+        >>> from goodcrypto.mail.utils.dirs import get_test_directory
+        >>> filename = write_message(get_test_directory(), Message())
+        >>> filename is not None
+        True
+        >>> filename = write_message(None, None)
+        >>> filename is None
+        True
+    '''
+
+    from goodcrypto.mail.message.inspect_utils import get_hashcode
+
+    full_filename = None
+    try:
+        if message is not None:
+            filename = '{}.txt'.format(get_hashcode(message))
+            full_filename = os.path.join(directory, filename)
+
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
+            with open(full_filename, 'w') as out:
+                log_message('saving {}'.format(full_filename))
+
+                from goodcrypto.mail.message.email_message import EmailMessage
+
+                EmailMessage(message).write_to(out)
+    except Exception:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return full_filename
+
+def send_message(sender, recipient, message):
+    '''
+        Send a message.
+
+        The message can be a Message in string format or a "email.Message" class.
+    '''
+
+    try:
+        log_message('starting to send message')
+        if USE_SMTP_PROXY:
+            result_ok, msg = send_mime_message(sender, recipient, message, use_smtp_proxy=USE_SMTP_PROXY,
+              mta_address=mail_server_address(), mta_port=mta_listen_port())
+        else:
+            result_ok, msg = send_mime_message(sender, recipient, message)
+
+        if DEBUGGING:
+            if result_ok:
+                log_message('=================')
+                log_message(msg)
+                log_message('=================')
+        log_message('finished sending message: {}'.format(result_ok))
+    except Exception as exception:
+        result_ok = False
+        log_message('error while sending message')
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        record_exception()
+
+    return result_ok
 
 def log_message(message):
     '''
         Log a message to the local log.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
@@ -452,7 +622,7 @@ def log_message(message):
     '''
 
     global log
-    
+
     if log is None:
         log = LogFile()
 

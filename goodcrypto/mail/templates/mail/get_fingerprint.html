@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-06-16
+    Last modified: 2015-11-04
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -9,19 +9,19 @@
   <meta name="Keywords" content="fingerprint">
   {% endblock meta_keywords %}
   {% block meta_description %}
-  <meta name="Description" content="View the key ID, also known as the fingerprint, for a user key.">
+  <meta name="Description" content="View the key's fingerprint for a user key.">
   {% endblock meta_description %}
 
-  {% block titlevar %}{% trans 'View Key ID' %}{% endblock %}
-  
+  {% block titlevar %}{% trans 'View Fingerprint' %}{% endblock %}
+
 {% block contentpane %}
 
     <div class="row">
-        <h2>{% trans 'View Key ID' %}</h2> 
+        <h2>{% trans 'View Fingerprint' %}</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <form method="POST" action="/mail/view_fingerprint/" class="form-horizontal" role="form">{% csrf_token %}
         {{ form|bootstrap_horizontal }}
         <div class="form-group">

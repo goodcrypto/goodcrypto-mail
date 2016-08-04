@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-31
+    Last modified: 2015-11-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,10 +16,10 @@ from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline
 
 
 class ContactsCryptoInline(CustomStackedInline):
-    
+
     extra = 0
     readonly_fields = ('fingerprint',)
-            
+
     staff_fieldsets = (
         (None, {
             'classes': ('wide',),
@@ -29,10 +29,10 @@ class ContactsCryptoInline(CustomStackedInline):
         }),
     )
     superuser_fieldsets = staff_fieldsets
-    
+
     model = models.ContactsCrypto
     formset = forms.ContactsCryptoInlineFormSet
-    
+
     verbose_name = i18n('encryption software used by this contact')
     verbose_name_plural = verbose_name
 
@@ -40,14 +40,14 @@ class Contact(CustomModelAdmin):
     form = forms.ContactAdminForm
     inlines = [ContactsCryptoInline]
     search_fields = ['email', 'user_name']
-    
+
     save_on_top = True
 
     list_display = ('email', 'user_name',)
     staff_list_display = list_display
     superuser_list_display = list_display
     list_display_links = ('email',)
-    
+
     staff_fieldsets = (
         (None, {
             'classes': ('wide',),
@@ -60,23 +60,14 @@ admin.site.register(models.Contact, Contact)
 
 class Options(SingletonAdmin):
     # indent the labels
-    metadata_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Metadata Protection')))
-    traffic_analysis_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Traffic Analysis Protection (Experimental)')))
+    metadata_protection_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Metadata & Traffic Analysis Protection')))
     tighter_security_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Tighter security')))
+    sig_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Signatures')))
     misc_label = mark_safe('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{}'.format(i18n('Other')))
 
     save_on_top = True
+    readonly_fields = ('dkim_public_key',)
 
-    """
-    DISABLE metadata and traffic analysis
-        (metadata_label, {
-            'fields': ('encrypt_metadata',)
-        }),
-        DISABLE metadata and traffic analysis
-        (traffic_analysis_label, {
-            'fields': ('bundle_and_pad', 'bundle_message_kb', 'bundle_frequency',)
-        }),
-    """
     form = forms.OptionsAdminForm
     fieldsets = (
         (None, {
@@ -87,6 +78,9 @@ class Options(SingletonAdmin):
                        'create_private_keys',
                       )
         }),
+        (metadata_protection_label, {
+            'fields': ('encrypt_metadata', 'bundle_and_pad', 'bundle_message_kb', 'bundle_frequency',)
+        }),
         (tighter_security_label, {
             'fields': (
                        'require_key_verified',
@@ -95,9 +89,17 @@ class Options(SingletonAdmin):
                        'filter_html',
                       )
         }),
-        (misc_label, {
+        (sig_label, {
             'fields': (
                        'clear_sign',
+                       'add_dkim_sig',
+                       'verify_dkim_sig',
+                       'dkim_delivery_policy',
+                       'dkim_public_key',
+                      )
+        }),
+        (misc_label, {
+            'fields': (
                        'debugging_enabled',
                       )
         }),

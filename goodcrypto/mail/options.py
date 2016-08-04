@@ -1,14 +1,18 @@
 '''
     Manage Mail options.
-    
+
+    Mail options are in a singleton Django Admin record.
+
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-11-20
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from goodcrypto.mail.constants import HOURS_CODE, DAYS_CODE, WEEKS_CODE
+from goodcrypto.mail.constants import HOURS_CODE, DAYS_CODE, WEEKS_CODE, DEFAULT_DKIM_POLICY
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from reinhardt.singleton import get_singleton, save_singleton
+from syr.lock import locked
 
 log = LogFile()
 
@@ -26,7 +30,7 @@ def goodcrypto_server_url():
                 goodcrypto_server_url = 'http://{}'.format(goodcrypto_server_url)
         if not goodcrypto_server_url.endswith('/'):
             goodcrypto_server_url += '/'
-            
+
     return goodcrypto_server_url
 
 
@@ -45,7 +49,7 @@ def mail_server_address():
         mail_server_address = ''
 
     return mail_server_address
-    
+
 
 def set_mail_server_address(new_mail_server_address):
     ''' Set the IP address or domain for the MTA. '''
@@ -68,7 +72,7 @@ def goodcrypto_listen_port():
         goodcrypto_listen_port = Options.DEFAULT_GOODCRYPTO_LISTEN_PORT
 
     return goodcrypto_listen_port
-    
+
 
 def set_goodcrypto_listen_port(new_goodcrypto_listen_port):
     ''' Set the port where the goodcrypto mail server listens for messages FROM the MTA. '''
@@ -91,7 +95,7 @@ def mta_listen_port():
         mta_listen_port = Options.DEFAULT_MTA_LISTEN_PORT
 
     return mta_listen_port
-    
+
 
 def set_mta_listen_port(new_mta_listen_port):
     ''' Set the port where the MTA listens for messages FROM the the goodcrypto mail server. '''
@@ -254,13 +258,84 @@ def require_key_verified():
     except:
         return False
 
-
 def set_require_key_verified(require):
     ''' Set the user's preference to require key verified before using a new key. '''
 
     record = get_options()
     try:
         record.require_key_verified = require
+        save_options(record)
+    except:
+        pass
+
+def add_dkim_sig():
+    ''' Get whether to add the domain's DKIM signature to outbound messages. '''
+
+    try:
+        return get_options().add_dkim_sig
+    except:
+        return False
+
+def set_add_dkim_sig(add):
+    ''' Set the user's preference to add the domain's DKIM signature to outbound messages. '''
+
+    record = get_options()
+    try:
+        record.add_dkim_sig = add
+        save_options(record)
+    except:
+        pass
+
+def verify_dkim_sig():
+    ''' Get whether to verify DKIM signatures on inbound messages. '''
+
+    try:
+        return get_options().verify_dkim_sig
+    except:
+        return False
+
+def set_verify_dkim_sig(verify):
+    ''' Set the user's preference to verify DKIM signatures on inbound messages. '''
+
+    record = get_options()
+    try:
+        record.verify_dkim_sig = verify
+        save_options(record)
+    except:
+        pass
+
+def dkim_delivery_policy():
+    ''' Get the delivery policy if DKIM verification fails. '''
+
+    try:
+        return get_options().dkim_delivery_policy
+    except:
+        return DEFAULT_DKIM_POLICY
+
+def set_dkim_delivery_policy(policy):
+    ''' Set the domain's DKIM signature. '''
+
+    record = get_options()
+    try:
+        record.dkim_delivery_policy = policy
+        save_options(record)
+    except:
+        pass
+
+def dkim_public_key():
+    ''' Get the domain's DKIM signature. '''
+
+    try:
+        return get_options().dkim_public_key
+    except:
+        return False
+
+def set_dkim_public_key(key):
+    ''' Set the domain's DKIM signature. '''
+
+    record = get_options()
+    try:
+        record.dkim_public_key = key
         save_options(record)
     except:
         pass
@@ -281,59 +356,53 @@ def bundle_hourly():
     ''' Return the code for bundling and padding messages hourly. '''
 
     return HOURS_CODE
-    
+
 def bundle_daily():
     ''' Return the code for bundling and padding messages daily. '''
 
     return DAYS_CODE
-    
+
 def bundle_weekly():
     ''' Return the code for bundling and padding messages weekly. '''
 
     return WEEKS_CODE
-    
+
 def get_options():
     '''
         Get the mail options.
-        
+
         >>> get_options() is not None
         True
     '''
-    
+
     from goodcrypto.mail.models import Options
+
     try:
-        records = Options.objects.all()
-        if records and len(records) > 0:
-            record = records[0]
-        else:
-            record = None
-    except Exception:
-        record = None
-    
-    if record is None:
-        record = Options.objects.create(
-            goodcrypto_listen_port=Options.DEFAULT_GOODCRYPTO_LISTEN_PORT,
-            mta_listen_port=Options.DEFAULT_MTA_LISTEN_PORT)
+        record = get_singleton(Options)
+    except Options.DoesNotExist:
+        with locked():
+            record = Options.objects.create(
+                goodcrypto_listen_port=Options.DEFAULT_GOODCRYPTO_LISTEN_PORT,
+                mta_listen_port=Options.DEFAULT_MTA_LISTEN_PORT)
+            record.save()
 
     return record
-    
+
 
 def save_options(record):
     '''
         Save the mail options.
-        
+
         >>> save_options(get_options())
     '''
-    try:
-        record.save()
-    except:
-        record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+    from goodcrypto.mail.models import Options
+
+    save_singleton(Options, record)
 
 def log_message(message):
     '''
         Log a message to the local log.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
@@ -343,7 +412,7 @@ def log_message(message):
     '''
 
     global log
-    
+
     if log is None:
         log = LogFile()
 

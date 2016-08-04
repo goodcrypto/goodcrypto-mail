@@ -1,8 +1,8 @@
 '''
-    Postfix RQ worker settings.
+    Special RQ worker settings.
 
-    Copyright 2014 GoodCrypto
-    Last modified: 2014-10-24
+    Copyright 2014-2015 GoodCrypto
+    Last modified: 2015-09-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@
 
 REDIS_PORT = 6387
 #REDIS_URL = 'http://{}:{}'.format(REDIS_HOST, REDIS_PORT)
-POSTFIX_REDIS_PORT = REDIS_PORT
+SPECIAL_REDIS_PORT = REDIS_PORT
 
 # Probably don't need a password since the port should be blocked plus
 # see the warnings in /etc/redis about the downsides of using a password
@@ -21,8 +21,8 @@ POSTFIX_REDIS_PORT = REDIS_PORT
 # REDIS_DB = 3
 
 # Queues to listen on
-POSTFIX_RQUEUE = 'postfix'
-QUEUES = [POSTFIX_RQUEUE]
+SPECIAL_RQ = 'special'
+QUEUES = [SPECIAL_RQ]
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step

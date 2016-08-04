@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Last modified: 2015-11-28
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.parser import Parser
 
-from goodcrypto.mail.message.inspect_utils import get_charset, get_hashcode, get_multientry_header
+from goodcrypto.mail.message.inspect_utils import get_charset, get_multientry_header
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
@@ -41,7 +41,7 @@ def add_multientry_header(message, header_name, multiline_value):
         </verbatim>
 
         A trailing newline may be stripped.
-         
+
         >>> # Test extreme case
         >>> add_multientry_header(None, None, 'Header-Name')
         1
@@ -64,22 +64,22 @@ def add_multientry_header(message, header_name, multiline_value):
     return count
 
 def alt_to_text_message(original_message):
-    ''' 
-        Change a MIME message into a plain text Message. 
-        
+    '''
+        Change a MIME message into a plain text Message.
+
         >>> # Test extreme cases
         >>> alt_to_text_message(None) == None
         True
     '''
 
     text_message = None
-    
+
     try:
         if original_message:
             content_type = original_message.get_content_type()
             charset, __ = get_charset(original_message)
             log_message("message content type is {}".format(content_type))
-    
+
             if content_type == mime_constants.MULTIPART_ALT_TYPE:
                 plain_text = ''
                 for part in original_message.walk():
@@ -91,7 +91,7 @@ def alt_to_text_message(original_message):
                         charset, __ = get_charset(part)
                         log_message("part content type is {}".format(content_type))
                         log_message("part charset is {}".format(charset))
-    
+
                 if len(plain_text) > 0:
                     try:
                         # create a fresh message with the same headers
@@ -103,7 +103,7 @@ def alt_to_text_message(original_message):
                         text_message.set_payload(plain_text, charset)
                     except MessageException as message_exception:
                         record_exception(message=message_exception)
-        
+
                 if type(text_message) == Message and DEBUGGING:
                     log_message("New plain text message:\n" + text_message.as_string())
     except IOError as io_exception:
@@ -114,10 +114,10 @@ def alt_to_text_message(original_message):
     return text_message
 
 def plaintext_to_message(old_message, plaintext):
-    ''' 
+    '''
         Create a new Message with only the plain text.
-        
-        
+
+
         >>> # Test extreme cases
         >>> plaintext_to_message(None, None) == None
         True
@@ -133,25 +133,25 @@ def plaintext_to_message(old_message, plaintext):
                 new_message = MIMEMultipart(old_message.get_content_subtype(), old_message.get_boundary())
             else:
                 new_message = MIMEText(plain_message.get_payload())
-        
+
             # save all the headers
             for key, value in old_message.items():
                 new_message.add_header(key, value)
-        
+
             if type(payloads) == list:
                 for payload in payloads:
                     new_message.attach(payload)
-            
+
             # add the content type and encoding from the plain text
             for key, value in plain_message.items():
                 if key.lower() == mime_constants.CONTENT_TYPE_KEYWORD.lower():
                     new_message.__delitem__(key)
                     new_message.add_header(key, value)
-        
+
                 elif key.lower() == mime_constants.CONTENT_XFER_ENCODING_KEYWORD.lower():
                     new_message.__delitem__(key)
                     new_message.add_header(key, value)
-            
+
             if type(new_message) == Message and DEBUGGING:
                 log_message('new message:\n{}'.format(new_message.as_string()))
 
@@ -159,43 +159,8 @@ def plaintext_to_message(old_message, plaintext):
         record_exception(message=io_exception)
     except MessageException as message_exception:
         record_exception(message=message_exception)
-        
+
     return new_message
-
-def write_message(directory, message):
-    '''
-        Write message to an unique file in the specified directory.
-        The message may be EmailMessage or python Message.
-
-        >>> from goodcrypto.mail.utils.dirs import get_test_directory
-        >>> filename = write_message(get_test_directory(), Message())
-        >>> filename is not None
-        True
-        >>> filename = write_message(None, None)
-        >>> filename is None
-        True
-    '''
-
-    full_filename = None
-    try:
-        if message is not None:
-            filename = '{}.txt'.format(get_hashcode(message))
-            full_filename = os.path.join(directory, filename)
-            
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-    
-            with open(full_filename, 'w') as out:
-                log_message('saving {}'.format(full_filename))
-    
-                from goodcrypto.mail.message.email_message import EmailMessage
-                
-                EmailMessage(message).write_to(out)
-    except Exception:
-        record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    return full_filename
 
 def log_message(message):
     '''
@@ -208,7 +173,7 @@ def log_message(message):
         True
     '''
     global _log
-    
+
     if _log is None:
         _log = LogFile()
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2015 GoodCrypto
-    Last modified: 2015-06-25
+    Last modified: 2015-12-01
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -12,16 +12,16 @@
   <meta name="Description" content="Verify message processed by your GoodCrypto private server.">
   {% endblock meta_description %}
 
-  {% block titlevar %}{{ header }}{% endblock %}
-  
+  {% block titlevar %}{{ main_headline }}{% endblock %}
+
 {% block contentpane %}
 
     <div class="row">
-        <h2>Verify Message Protected by GoodCrypto</h2> 
+        <h2>Verify Message Protected by GoodCrypto</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <form method="POST" action="/mail/{{ url }}/" class="form-horizontal" role="form">{% csrf_token %}
         {{ form|bootstrap_horizontal }}
         <div class="form-group">

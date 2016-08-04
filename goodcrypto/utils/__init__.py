@@ -1,8 +1,8 @@
 '''
     GoodCrypto utilities.
-    
+
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-19
+    Last modified: 2015-10-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -22,30 +22,30 @@ log = get_log()
 
 def show_template(request, original_url, prefix='', params={}):
     '''Render a plain html file and cache the results.'''
-    
+
     def show_url(base_url, suffix=''):
-        
+
         template = base_url + suffix
         if template.endswith('.log') or template.endswith('.java'):
             return wrap_raw(request, template)
         else:
             return render(request, template, params)
-    
+
     def try_home_index(base_url):
         try:
             response = show_url(os.path.join(base_url, 'home.html'))
         except TemplateDoesNotExist:
             response = show_url(os.path.join(base_url, 'index.html'))
         return response
-        
-    # import late so apps that don't require django, don't require 
+
+    # import late so apps that don't require django, don't require
     # DJANGO_SETTINGS_MODULE just because this class is imported
     from django.http import Http404
     from django.shortcuts import render
     from django.template import TemplateDoesNotExist
 
     response = None
-    
+
     try:
         # some browsers add a slash, even to .html files
         if original_url.endswith('.html/'):
@@ -59,14 +59,14 @@ def show_template(request, original_url, prefix='', params={}):
             base_url = prefix + base_url
         if base_url.startswith('/'):
             base_url = original_url[1:]
-    
+
         if base_url.endswith('/'):
             try:
                 response = try_home_index(base_url)
             except TemplateDoesNotExist:
                 url = base_url[:-1]
                 response = show_url(url, '.html')
-    
+
         else:
             try:
                 response = show_url(base_url)
@@ -86,19 +86,19 @@ def show_template(request, original_url, prefix='', params={}):
         raise Http404, original_url
 
     return response
-    
-    
+
+
 def debug_logs_enabled():
     '''
        Get whether to enable mail debug logs.
        This routine is used in OCE which might not have access to the mail app
        so the function is in the package instead of mail.
-    
+
        >>> debug_logs_enabled()
        True
     '''
 
-    
+
     try:
         from goodcrypto.mail import options
 
@@ -108,63 +108,10 @@ def debug_logs_enabled():
 
     return debugging_enabled
 
-def is_program_running(search_string):
-    '''
-        Return whether a program is running.
-        
-        WARNING: Unreliable, apparently dependent on characters in search_string
-
-        >>> is_program_running('nginx')
-        True
-        >>> is_program_running('not.running')
-        False
-    '''
-
-    log('is_program_running() searchstring: {}'.format(search_string))
-        
-    try:
-        psgrep_result = sh.psgrep(search_string)
-    except sh.ErrorReturnCode as err:
-        running = False
-        log('psgrep unable to find {}'.format(search_string))
-        log('err: {}'.format(err))
-        log('err.stdout: {}'.format(err.stdout))
-        log('err.stderr: {}'.format(err.stderr))
-    except:
-        running = False
-        record_exception()
-    else:
-        log('psgrep found {}'.format(search_string))
-        log('psgrep_result: {}'.format(psgrep_result))
-        log('exit code: {}'.format(psgrep_result.exit_code))
-        log('stdout: {}'.format(psgrep_result.stdout))
-        log('stderr: {}'.format(psgrep_result.stderr))
-        running = (
-            (psgrep_result.exit_code == 0) and 
-            (psgrep_result.stdout != '') and 
-            (search_string in psgrep_result.stdout))
-        
-    if not running:
-        try:
-            ps_result = sh.ps('-eo', 'pid,args')
-        except Exception as exc:
-            record_exception()
-            log('ps error stdout: {}'.format(exc.stdout))
-            log('ps error stderr: {}'.format(exc.stderr))
-        else:
-            log('ps_result: {}'.format(ps_result))
-            log('exit code: {}'.format(ps_result.exit_code))
-            log('stdout: {}'.format(ps_result.stdout))
-            log('stderr: {}'.format(ps_result.stderr))
-        
-    log('{} is running: {}'.format(search_string, running))
-
-    return running
-
 def is_mta_ok(mail_server_address):
     '''
         Verify the MTA is ok.
-        
+
         Test extreme cases
         >>> is_mta_ok(None)
         False
@@ -176,7 +123,7 @@ def is_mta_ok(mail_server_address):
         '''
             Try to connect to the MTA via SMTP and SMTP_SSL.
         '''
-        
+
         connection_ok = False
         try:
             smtp = SMTP(host=mta)
@@ -192,27 +139,27 @@ def is_mta_ok(mail_server_address):
                 connection_ok = True
             except:
                 connection_ok = False
-            
+
         return connection_ok
     """
 
     ok = False
-    
+
     # the mail_server_address should either be an ip address or a domain
     if mail_server_address is not None:
         mail_server_address = mail_server_address.strip()
-        try: 
-            inet_pton(AF_INET, mail_server_address) 
-            ok = True 
+        try:
+            inet_pton(AF_INET, mail_server_address)
+            ok = True
             log('mail server address IP4 compliant: {}'.format(ok))
-        except: 
+        except:
             ok = False
             record_exception()
 
         if not ok:
-            try: 
-                inet_pton(AF_INET6, mail_server_address) 
-                ok = True 
+            try:
+                inet_pton(AF_INET6, mail_server_address)
+                ok = True
                 log('mail server address IP6 compliant: {}'.format(ok))
             except:
                 match = re.search("^[\u00c0-\u01ffa-zA-Z0-9'\-\.]+$", mail_server_address)
@@ -228,9 +175,9 @@ def get_ip_address(request=None):
     ip_address = None
     try:
         ip_address = hostaddress()
-        if (ip_address is None or 
-            ip_address == '127.0.0.1' or 
-            ip_address == '10.0.2.2' or 
+        if (ip_address is None or
+            ip_address == '127.0.0.1' or
+            ip_address == '10.0.2.2' or
             ip_address == '10.0.2.15'):
             if request and 'HTTP_X_REAL_IP' in request.META:
                 ip_address = request.META['HTTP_X_REAL_IP']
@@ -260,13 +207,13 @@ def get_ip_address(request=None):
 def parse_address(email, charset=None):
     '''
         Parse an email address into its name and address.
-        
-        >>> # In honor of Lieutenant Yonatan, who publicly denounced and refused to serve in operations involving 
+
+        >>> # In honor of Lieutenant Yonatan, who publicly denounced and refused to serve in operations involving
         >>> # the occupied Palestinian territories because of the widespread surveillance of innocent residents.
         >>> parse_address('Lieutenant <lieutenant@goodcrypto.local>')
         ('Lieutenant', 'lieutenant@goodcrypto.local')
     '''
-    
+
     try:
         if email is None:
             name = None
@@ -288,7 +235,7 @@ def parse_address(email, charset=None):
 def parse_domain(email):
     '''
         Get the domain from the email address.
-        
+
         >>> domain = parse_domain(None)
         >>> domain is None
         True
@@ -308,11 +255,11 @@ def parse_domain(email):
     return domain
 
 def get_email(address):
-    ''' 
+    '''
         Get just the email address.
-        
-        >>> # In honor of First Sergeant Nadav, who publicly denounced and refused to serve in 
-        >>> # operations involving the occupied Palestinian territories because of the widespread 
+
+        >>> # In honor of First Sergeant Nadav, who publicly denounced and refused to serve in
+        >>> # operations involving the occupied Palestinian territories because of the widespread
         >>> # surveillance of innocent residents.
         >>> get_email('Nadav <nadav@goodcrypto.remote>')
         'nadav@goodcrypto.remote'
@@ -325,9 +272,9 @@ def get_email(address):
     return email
 
 def i18n(raw_message):
-    ''' 
+    '''
         Convert a raw message to an internationalized string.
-        
+
         >>> i18n('Test message')
         'Test message'
         >>> i18n('Test with variable: {variable}'.format(variable='test variable'))
@@ -335,11 +282,11 @@ def i18n(raw_message):
         >>> i18n(u'Test with variable: {variable}'.format(variable='test variable'))
         u'Test with variable: test variable'
     '''
-    
+
     """
     try:
         from django.utils.translation import ugettext_lazy
-        
+
         unicode_message = ugettext_lazy(raw_message)
         try:
             message = '{}'.format(unicode_message)
@@ -353,13 +300,13 @@ def i18n(raw_message):
         log('trying to internationalize: {}'.format(raw_message))
     """
     message = raw_message
-        
+
     return message
 
 def get_iso_timestamp():
-    ''' 
-        Get the timestamp ISO was created. 
-        
+    '''
+        Get the timestamp ISO was created.
+
         >>> get_iso_timestamp() is not None
         True
     '''

@@ -2,8 +2,8 @@
 {% comment %}
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-19
-    
+    Last modified: 2015-12-01
+
 {% endcomment %}
 {% load i18n custom %}
 
@@ -15,7 +15,7 @@
   {% endblock meta_description %}
 
   {% block titlevar %}Mail{% endblock %}
-  
+
 {% block contentpane %}
 
     {% include "snippets/secure_button.html" %}
@@ -25,17 +25,30 @@
         {% if domain %}
         for {{ domain }}
         {% endif %}
-        </h3> 
+        </h3>
     </div>
-    
+
     <div class="col-md-12 col-xm-6">
+        {% if not mta %}
+            <div class="row">
+                <div class="row">&nbsp;</div>
+                <div class="row">
+                    {% blocktrans %}
+                    <font color="red">IMPORTANT:</font> You must set the MTA address in the
+                    <a href="/admin/mail/options/">Mail server options</a>
+                    before mail for {{ domain }} can be protected.
+                    {% endblocktrans %}
+                </div>
+            </div>
+        {% endif %}
+
         <div class="row">&nbsp;</div>
         <div class="table-responsive btn-group">
             <table class="table table-responsive">
                 <tr>
                     <th>
                         <p>&nbsp;</p>
-                        {% trans 'Private messages' %} 
+                        {% trans 'Private messages' %}
                         <p>&nbsp;</p>
                     </th>
                     <td>
@@ -63,12 +76,12 @@
                 <tr>
                     <th>
                         <p>&nbsp;</p>
-                        {% trans 'Keys' %} 
+                        {% trans 'Keys' %}
                         <p>&nbsp;</p>
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/view_fingerprint/" title="{% trans 'View the key ID, also known as the fingerprint, of a contact.' %}">
+                        <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint for the key of a contact.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'View ID' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -91,7 +104,7 @@
                 <tr>
                     <th>
                         <p>&nbsp;</p>
-                        {% trans 'Sysadmin' %} 
+                        {% trans 'Sysadmin' %}
                         <p>&nbsp;</p>
                     </th>
                     <td>
@@ -141,14 +154,14 @@
                 <div class="row">&nbsp;</div>
                 <div class="row">
                     {% blocktrans %}
-                    Warning: Your MTA is configured for the local machine at ({{ mta }}). 
-                    We strongly recommend that you use a different computer for your MTA and your GoodCrypto private server.
-                    You can change the MTA address in the  <a href="/admin/mail/mailserveroptions/">Mail server options</a>.
+                    Warning: Your MTA is configured for the local machine at ({{ mta }}).
+                    We strongly recommend that you use a different computer for your MTA
+                    and your GoodCrypto private server.
+                    You can change the MTA address in the  <a href="/admin/mail/options/">Mail server options</a>.
                     {% endblocktrans %}
                 </div>
             {% endif %}
         {% endif %}
-
     </div>
 {% endblock contentpane %}
 
