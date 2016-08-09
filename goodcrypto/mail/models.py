@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-25
+    Last modified: 2015-12-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -399,9 +399,13 @@ class Options(models.Model):
     require_key_verified = models.BooleanField(i18n('Require verify new keys'), default=False,
        help_text=i18n("Do not use a new public key until it is flagged as verified in the database."))
 
+    # we default to false to make it easier for the user to verify fingerprints, but for security
+    # it's much better to restrict access to logged in users so if a non-authorized user accesses
+    # the site, they can't determine whether someone in the company is communicating with someone else
     login_to_view_fingerprints = models.BooleanField(i18n('Require login to view fingerprints'), default=False,
        help_text=i18n("Require that a user login to view any fingerprints."))
 
+    # see comment above about login_to_view_fingerprints
     login_to_export_keys = models.BooleanField(i18n('Require login to export keys'), default=False,
        help_text=i18n("Require that a user login to export any public keys."))
 

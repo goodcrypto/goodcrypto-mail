@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-07
 
 {% endcomment %}
 {% load i18n custom %}
@@ -53,22 +53,29 @@
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/verify_crypted/" title="{% trans 'Verify a message was encrypted or decrypted by your GoodCrypto private server.' %}">
+                        <a href="/mail/verify_crypted/" title="{% trans 'Verify a message was encrypted or decrypted by your GoodCrypto private server. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Verify' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/show_decrypted_history/" title="{% trans 'Show summary of decrypted messages you received.' %}">
+                        <a href="/mail/show_decrypted_history/" title="{% trans 'Show summary of decrypted messages you received. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Received' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/show_encrypted_history/" title="{% trans 'Show summary of encrypted messages you sent.' %}">
+                        <a href="/mail/show_encrypted_history/" title="{% trans 'Show summary of encrypted messages you sent. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Sent' %}</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/mail/show_protection/" title="{% trans 'Show options that protect your messages. You must be signed in.' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'Protection' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
@@ -81,30 +88,46 @@
                     </th>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint for the key of a contact.' %}">
+                        {% if fingerprint_login_req %}
+                            <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint for the key of a contact. You must be signed in.' %}">
+                        {% else %}
+                            <a href="/mail/view_fingerprint/" title="{% trans 'View the fingerprint for the key of a contact.' %}">
+                        {% endif %}
                             <button type="button" class="btn btn-primary btn-block">{% trans 'View ID' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/export_key/" title="{% trans 'Get the public key for a user.' %}">
+                        {% if fingerprint_login_req %}
+                            <a href="/mail/export_key/" title="{% trans 'Get the public key for a user. You must be signed in.' %}">
+                        {% else %}
+                            <a href="/mail/export_key/" title="{% trans 'Get the public key for a user.' %}">
+                        {% endif %}
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Export' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact.' %}">
+                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Import' %}</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/mail/show_metadata_domains/" title="{% trans 'Show which domains are ready to protect metadata. You must be signed in.' %}">
+                            <button type="button" class="btn btn-primary btn-block">{% trans 'Metadata' %}</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
                 </tr>
+                {% if user.is_authenticated and user.is_superuser %}
                 <tr>
                     <th>
                         <p>&nbsp;</p>
-                        {% trans 'Sysadmin' %}
+                        {% trans 'Administrator' %}
                         <p>&nbsp;</p>
                     </th>
                     <td>
@@ -128,12 +151,20 @@
                         </a>
                         <p>&nbsp;</p>
                     </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <p>&nbsp;</p>
+                    </td>
                 </tr>
+                {% endif %}
                 {# blank row to get all the buttons to line up #}
                 <tr>
                     <th>
                         &nbsp;
                     </th>
+                    <td>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </td>
                     <td>
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </td>

@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-18
+    Last modified: 2015-12-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -132,7 +132,7 @@ def verify_dkim_sig(crypto_message):
 
             if verified_sig:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
-                crypto_message.add_tag_once(i18n('DKIM signature verified.'))
+                crypto_message.add_tag_once(i18n('DKIM signature ok.'))
             elif options.dkim_delivery_policy() == DKIM_WARN_POLICY:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
                 crypto_message.add_tag_once(i18n('WARNING: Unable to verify DKIM signature.'))

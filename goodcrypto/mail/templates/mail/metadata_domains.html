@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-07
 
 {% endcomment %}
 {% load i18n custom %}
@@ -33,17 +33,16 @@
                         {% trans 'Domain' %}
                     </th>
                     <th>
-                        {% trans 'Fingerprint' %}
-                    </th>
-                    <th>
                         {% trans 'Verified' %}
                     </th>
+                    <th>
+                        {% trans 'Fingerprint' %}
+                    </th>
                 </tr>
-                
+
                 {% for domain, fingerprint, verified in metadata_list %}
                     <tr>
                         <td> {{ domain }} </td>
-                        <td> {{ fingerprint }} </td>
                         <td>
                             {% if verified %}
                                 <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
@@ -51,6 +50,7 @@
                                 <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
                             {% endif %}
                         </td>
+                        <td> {{ fingerprint }} </td>
                     </tr>
                 {% endfor %}
             </table>

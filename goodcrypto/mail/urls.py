@@ -2,7 +2,7 @@
     Urls for Mail
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -28,7 +28,7 @@ urlpatterns = patterns('',
     url(r'msg-decrypted/(.*)/?$', views.msg_decrypted, name='msg_decrypted'),
     url(r'show_decrypted_history/?', views.show_decrypted_history, name='show_decrypted_history'),
 
-    url(r'^show_options/?', views.show_options, name='mail_show_options'),
+    url(r'^show_protection/?', views.show_protection, name='mail_show_protection'),
     url(r'^show_metadata_domains/?', views.show_metadata_domains, name='mail_show_metadata_domains'),
 
     url(r'^configure/?', views.configure, name='mail_configure'),

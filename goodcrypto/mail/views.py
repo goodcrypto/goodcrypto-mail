@@ -50,7 +50,12 @@ def home(request):
         response = HttpResponseRedirect('/system/customize/')
     else:
         is_secure = is_secure_connection(request)
-        params = {'domain': domain, 'secure': is_secure}
+        params = {
+            'domain': domain, 
+            'secure': is_secure,
+            'fingerprint_login_req': options.login_to_view_fingerprints(),
+            'export_login_req': options.login_to_export_keys()
+        }
         mta = options.mail_server_address()
         if mta is not None and len(mta.strip()) > 0:
             params['mta'] = mta
@@ -60,8 +65,8 @@ def home(request):
 
     return response
 
-def show_options(request):
-    '''Show the options page.'''
+def show_protection(request):
+    '''Show the protection for messages.'''
 
     if not request.user.is_authenticated():
         context = {}
@@ -69,7 +74,7 @@ def show_options(request):
         response = redirect('/login/?next={}'.format(request.path), context)
     else:
         is_secure = is_secure_connection(request)
-        template = 'mail/options.html'
+        template = 'mail/protection.html'
         params = {
             'secure': is_secure,
             'encrypt_metadata': options.encrypt_metadata(),

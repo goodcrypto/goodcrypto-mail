@@ -2,29 +2,30 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-07
 
 {% endcomment %}
 {% load i18n custom %}
 
   {% block meta_keywords %}
-  <meta name="Keywords" content="mail security options">
+  <meta name="Keywords" content="mail protection options">
   {% endblock meta_keywords %}
   {% block meta_description %}
-  <meta name="Description" content="Security options for your messages.">
+  <meta name="Description" content="Protection options for your messages.">
   {% endblock meta_description %}
 
-  {% block titlevar %}Mail Security Options{% endblock %}
+  {% block titlevar %}Mail Protection{% endblock %}
 
 {% block contentpane %}
 
     {% include "snippets/secure_button.html" %}
 
     <div class="row">
-        <h3>Mail Security Options</h3>
+        <h3>Mail Protection</h3>
     </div>
 
     <div class="col-md-12 col-xm-6">
+        <div class="row"><p>These options are set by your administrator.</p></div>
         <div class="row">&nbsp;</div>
         <div class="table-responsive">
             <table class="table table-responsive">
@@ -119,9 +120,9 @@
                 </tr>
             </table>
         </div>
-        <p class="dropcap">
-        Contact your mail administrator about these options. If you are the mail administrator,
-        then you can <a href="/admin/mail/options/">change the options</a> after signing in.
+        <p>
+        If you are the administrator, then you can
+        <a href="/admin/mail/options/">change the options</a> after signing in.
         </p>
     </div>
 {% endblock contentpane %}
