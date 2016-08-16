@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-07
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -14,7 +14,7 @@ from goodcrypto.mail.message import history, tags, utils
 from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, CRLF, LF
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.tags import add_verification_tag
-from goodcrypto.mail.utils import get_email, get_sysadmin_email
+from goodcrypto.mail.utils import get_email
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import i18n, get_email

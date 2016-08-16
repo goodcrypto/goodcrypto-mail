@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-28
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -22,7 +22,7 @@ from goodcrypto.mail.message.crypto_message import CryptoMessage
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.encrypt_utils import add_dkim_sig_optionally, create_protected_message
 from goodcrypto.mail.message.metadata import get_metadata_address, parse_bundled_message
-from goodcrypto.mail.utils import get_encryption_software, get_sysadmin_email, send_message
+from goodcrypto.mail.utils import get_encryption_software, send_message
 from goodcrypto.mail.utils.dirs import get_packet_directory, SafeDirPermissions
 from goodcrypto.mail.utils.notices import report_bad_bundled_encrypted_message
 from goodcrypto.oce.crypto_factory import CryptoFactory

@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,8 +12,9 @@ from django.http import HttpResponse, HttpResponseRedirect, HttpResponsePermanen
 from django.template import RequestContext
 from django.template.context_processors import csrf
 
-from goodcrypto.mail import contacts, crypto_software, forms, options
+from goodcrypto.mail import config_postfix, contacts, crypto_software, forms, options
 from goodcrypto.mail.api import MailAPI
+from goodcrypto.mail.forms import PrepPostfixForm
 from goodcrypto.mail.i18n_constants import ERROR_PREFIX, PUBLIC_KEY_INVALID
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import history
@@ -22,7 +23,7 @@ from goodcrypto.mail.models import MessageHistory
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
-from goodcrypto.utils import i18n
+from goodcrypto.utils import get_ip_address, i18n
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from reinhardt.utils import is_secure_connection
@@ -51,7 +52,7 @@ def home(request):
     else:
         is_secure = is_secure_connection(request)
         params = {
-            'domain': domain, 
+            'domain': domain,
             'secure': is_secure,
             'fingerprint_login_req': options.login_to_view_fingerprints(),
             'export_login_req': options.login_to_export_keys()
@@ -675,13 +676,6 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
 
     return result_ok, status, fingerprint_ok
 
-def configure(request):
-    ''' Show how to configure mta. '''
-
-    template = 'mail/configure.html'
-    return render_to_response(
-        template, {'domain': get_domain()}, context_instance=RequestContext(request))
-
 def api(request):
     '''
         Interface with the client through the API.
@@ -821,6 +815,108 @@ def show_metadata_domains(request):
 
     return response
 
+def prep_postfix(request):
+    ''' Prepare Postfix for GoodCrypto.'''
+
+    if not request.user.is_authenticated() or not request.user.is_superuser:
+        context = {}
+        context.update(csrf(request))
+        response = redirect('/login/?next={}'.format(request.path), context)
+    else:
+        template = 'mail/postfix_prep.html'
+        if request.method == 'POST':
+            try:
+                form = PrepPostfixForm(request.POST)
+                if form.is_valid():
+                    response = get_postfix_config(form, request)
+
+                else:
+                    response = render_to_response(template, {'form': form,},
+                        context_instance=RequestContext(request))
+                    log_message('integrate postfix form had errors')
+            except:
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for more details')
+                record_exception()
+                response = render_to_response(template, {'form': form,},
+                    context_instance=RequestContext(request))
+
+        else:
+            ip_address = get_goodcrypto_private_server_ip(request)
+            if ip_address is not None and len(ip_address) > 0:
+                form = PrepPostfixForm(initial={'goodcrypto_private_server_ip': ip_address})
+            else:
+                form = PrepPostfixForm()
+            response = render_to_response(template, {'form': form},
+                context_instance=RequestContext(request))
+
+    return response
+
+def get_postfix_config(form, request):
+    ''' Get the postfix config from the form. '''
+
+    log_message('postfix form is valid')
+    private_server_ip = form.cleaned_data.get('goodcrypto_private_server_ip')
+    main_cf_lines = form.cleaned_data.get('main_cf')
+    master_cf_lines = form.cleaned_data.get('master_cf')
+    alias_lines = form.cleaned_data.get('aliases')
+
+    new_main_cf_lines, __, mta_ip, ssl_cert_file, ssl_key_file, other_filters = config_postfix.config_main_conf(
+        main_cf_lines.replace('\r\n','\n').replace('\r','\n').split('\n'), private_server_ip)
+
+    # abort if TLS is not configured
+    if ssl_cert_file is None or ssl_key_file is None:
+        error = config_postfix.ERROR_MESSAGE
+
+        response = render_to_response(template, {'form': form, 'error_message': error},
+            context_instance=RequestContext(request))
+    else:
+        if other_filters:
+            warning = config_postfix.WARNING_MESSAGE
+        else:
+            warning = None
+
+        new_master_cf_lines = config_postfix.config_master_lines(
+            master_cf_lines.replace('\r\n','\n').replace('\r','\n').split('\n'),
+            mta_ip, private_server_ip, ssl_cert_file, ssl_key_file)
+
+        if alias_lines is None or len(alias_lines) <= 0:
+            alias_lines = []
+            new_alias_file = True
+        else:
+            alias_lines = alias_lines.replace('\r\n','\n').replace('\r','\n').split('\n')
+            new_alias_file = False
+        new_alias_lines = config_postfix.config_alias_lines(alias_lines)
+
+        params = {'main_cf_lines': '\n'.join(new_main_cf_lines),
+                  'master_cf_lines': '\n'.join(new_master_cf_lines),
+                  'alias_lines': '\n'.join(new_alias_lines),
+                  'new_alias_file': new_alias_file,
+                  'warning': warning,
+        }
+        response = render_to_response('mail/postfix_results.html', params,
+            context_instance=RequestContext(request))
+
+    return response
+
+def get_goodcrypto_private_server_ip(request):
+    ''' Get the ip address for the goodcrypto private server. '''
+
+    ip_address = get_ip_address(request=request)
+    if ip_address is None:
+        url = options.goodcrypto_server_url()
+        if url is not None:
+            m = re.match('^https?://(.*):8\d\d\d/$', url)
+            if m:
+                ip_address = m.group(1)
+
+    # don't accept local address or local virtual address as the ip address
+    if ip_address == '127.0.0.1' or ip_address == '10.0.2.15':
+        ip_address = None
+
+    log_message('ip address: {}'.format(ip_address))
+
+    return ip_address
+
 def log_message(message):
     '''
         Log a message to the local log.
@@ -838,6 +934,6 @@ def log_message(message):
     if log is None:
         log = LogFile()
 
-    log.write(message)
+    log.write_and_flush(message)
 
 

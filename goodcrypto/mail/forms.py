@@ -2,16 +2,16 @@
     Mail app forms.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-11
+    Last modified: 2015-12-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from django import forms
 from django.forms.widgets import HiddenInput
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_ipv46_address
 
 from goodcrypto import api_constants
-from goodcrypto.mail import models
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.options import mta_listen_port
 from goodcrypto.mail.utils import config_dkim
@@ -22,6 +22,37 @@ from reinhardt.admin_extensions import RequireOneFormSet
 
 _log = LogFile()
 
+class PrepPostfixForm(forms.Form):
+    '''
+        Prepare postfix for GoodCrypto.
+    '''
+
+    def clean(self):
+        cleaned_data = super(PrepPostfixForm, self).clean()
+
+        # clean up simple errors
+        goodcrypto_private_server_ip = cleaned_data.get('goodcrypto_private_server_ip')
+        if goodcrypto_private_server_ip is not None:
+            goodcrypto_private_server_ip = goodcrypto_private_server_ip.strip()
+        validate_ipv46_address(goodcrypto_private_server_ip)
+        self.cleaned_data['goodcrypto_private_server_ip'] = goodcrypto_private_server_ip
+
+        return cleaned_data
+
+    goodcrypto_private_server_ip = forms.CharField(required=True,
+        help_text=i18n("The IP address for your GoodCrypto private server. For example, 194.10.34.1"),)
+    main_cf = forms.CharField(required=True,
+       widget=forms.Textarea(attrs={'rows':10, 'cols':100, 'class': "input-xlarge"}),
+       label='main.cf content',
+       help_text=i18n("Paste the full content of your mail server's /etc/postfix/main.cf file."),)
+    master_cf = forms.CharField(required=True,
+       widget=forms.Textarea(attrs={'rows':10, 'cols':100, 'class': "input-xlarge"}),
+       label='master.cf content',
+       help_text=i18n("Paste the full content of your mail server's /etc/postfix/master.cf file."),)
+    aliases = forms.CharField(required=False,
+       widget=forms.Textarea(attrs={'rows':5, 'cols':100, 'class': "input-xlarge"}),
+       label='aliases content',
+       help_text=i18n("Paste the full content of your mail server's aliases file. Leave blank if you don't use aliases."),)
 
 class EncryptionSoftwareForm(forms.ModelForm):
 
@@ -39,7 +70,9 @@ class EncryptionSoftwareForm(forms.ModelForm):
         return cleaned_data
 
     class Meta:
-        model = models.EncryptionSoftware
+        from goodcrypto.mail.models import EncryptionSoftware
+        
+        model = EncryptionSoftware
         fields = ['name', 'active', 'classname']
 
     class Media:
@@ -48,7 +81,9 @@ class EncryptionSoftwareForm(forms.ModelForm):
 class ContactAdminForm(forms.ModelForm):
 
     class Meta:
-        model = models.Contact
+        from goodcrypto.mail.models import Contact
+        
+        model = Contact
         fields = ['email', 'user_name']
 
     class Media:
@@ -57,7 +92,9 @@ class ContactAdminForm(forms.ModelForm):
 class ContactsCryptoAdminForm(forms.ModelForm):
 
     class Meta:
-        model = models.ContactsCrypto
+        from goodcrypto.mail.models import ContactsCrypto
+
+        model = ContactsCrypto
         fields = ['contact', 'encryption_software', 'fingerprint', 'verified', 'active']
 
     class Media:
@@ -112,7 +149,9 @@ class OptionsAdminForm(forms.ModelForm):
         return cleaned_data
 
     class Meta:
-        model = models.Options
+        from goodcrypto.mail.models import Options
+
+        model = Options
         fields = [
                   'mail_server_address',
                   'goodcrypto_server_url',
@@ -171,10 +210,12 @@ class ContactsCryptoInlineFormSet(RequireOneFormSet):
 
 class GetFingerprintForm(forms.Form):
 
+    from goodcrypto.mail.models import EncryptionSoftware
+
     email = forms.EmailField(max_length=254,
        help_text=i18n('Enter the email address whose fingerprint you want to verify.'),)
     encryption_software = forms.ModelChoiceField(
-       queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
+       queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the encryption software for the key.'),)
 
 
@@ -189,25 +230,31 @@ class VerifyFingerprintForm(forms.Form):
 
 class VerifyMessageForm(forms.Form):
 
+    from goodcrypto.mail.models import MessageHistory
+
     verification_code = forms.CharField(widget=forms.TextInput(attrs={'size':'{}'.format(
-       models.MessageHistory.MAX_VERIFICATION_CODE)}),
+       MessageHistory.MAX_VERIFICATION_CODE)}),
        help_text=i18n('Enter the verification code to check if GoodCrypto encrypted or decrypted your message.'),)
 
 class ExportKeyForm(forms.Form):
 
+    from goodcrypto.mail.models import EncryptionSoftware
+
     email = forms.EmailField(max_length=254,
        help_text=i18n('Enter the email address whose public key you want exported.'),)
     encryption_software = forms.ModelChoiceField(
-       queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
+       queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the type of encryption software associated with the key.'),)
 
 MAX_PUBLIC_KEY_FILEZISE = 500000
 class ImportKeyForm(forms.Form):
 
+    from goodcrypto.mail.models import EncryptionSoftware
+
     public_key_file = forms.FileField(max_length=MAX_PUBLIC_KEY_FILEZISE,
        help_text=i18n('Select the file that contains the public key.'),)
     encryption_software = forms.ModelChoiceField(
-       queryset=models.EncryptionSoftware.objects.filter(active=True), empty_label=None,
+       queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the type of encryption software associated with the key.'),)
     user_name = forms.CharField(max_length=100, required=False,
        help_text='Printable name of the contact in case the key does not contain it. Optional.')
@@ -230,7 +277,7 @@ class APIForm(forms.Form):
        choices=API_Actions,
        error_messages={'required': i18n('You must select an action.')})
 
-    sysadmin = forms.EmailField(required=False)
+    admin = forms.EmailField(required=False)
 
     password = forms.CharField(max_length=100, required=False)
 

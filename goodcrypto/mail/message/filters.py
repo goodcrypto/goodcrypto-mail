@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-29
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,7 +17,7 @@ from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.encrypt import Encrypt
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.metadata import is_metadata_address
-from goodcrypto.mail.utils import email_in_domain, get_sysadmin_email, send_message
+from goodcrypto.mail.utils import email_in_domain, get_admin_email, send_message
 from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.utils import i18n
@@ -79,7 +79,7 @@ class Filters(object):
             # something is wrong if an outbound message is from the metadata address
             # any messages from a metadata address don't pass through the filter
             if is_metadata_address(self.sender):
-                self.sender = get_sysadmin_email()
+                self.sender = get_admin_email()
                 self.bounce_outbound_message(i18n('Message originating from your metadata address'))
                 self.out_message = None
             else:
@@ -127,7 +127,7 @@ class Filters(object):
         ''' Process an inbound message, decrypting if appropriate. '''
 
         try:
-            if self.DEBUGGING: 
+            if self.DEBUGGING:
                 self.log_message(crypto_message.get_email_message().to_string())
 
             debundle = Debundle(crypto_message)
@@ -250,7 +250,7 @@ class Filters(object):
                 to_address = self.recipient
                 subject = i18n('Error: Unable to receive message')
             else:
-                to_address = get_sysadmin_email()
+                to_address = get_admin_email()
                 subject = i18n('Message rejected.')
 
             notice = '{}'.format(error_message)

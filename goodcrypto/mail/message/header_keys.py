@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-30
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,7 +12,7 @@ from goodcrypto.mail.message.inspect_utils import get_multientry_header
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.metadata import is_metadata_address
 from goodcrypto.mail.message.utils import get_public_key_header_name
-from goodcrypto.mail.utils import get_sysadmin_email
+from goodcrypto.mail.utils import get_admin_email
 from goodcrypto.mail.utils import notices
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import strip_fingerprint
@@ -69,9 +69,9 @@ class HeaderKeys(object):
         try:
             from_user = crypto_message.smtp_sender()
             self.recipient_to_notify = crypto_message.smtp_recipient()
-            # all notices about a metadata address goes to the sysadmin
+            # all notices about a metadata address goes to the admin
             if is_metadata_address(self.recipient_to_notify):
-                self.recipient_to_notify = get_sysadmin_email()
+                self.recipient_to_notify = get_admin_email()
 
             name, address = parse_address(from_user)
             if address is None or crypto_message is None or crypto_message.get_email_message() is None:

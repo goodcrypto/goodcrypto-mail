@@ -2,7 +2,7 @@
     Mail utilities.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-28
+    Last modified: 2015-12-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -20,6 +20,9 @@ from goodcrypto.utils.log_file import LogFile
 from syr.message import send_mime_message
 from syr.process import is_program_running
 from syr.utils import generate_password
+
+# the tests themsevles set this variable to True when appropriate
+TESTS_RUNNING = False
 
 DEBUGGING = False
 USE_SMTP_PROXY = False
@@ -159,7 +162,7 @@ def ok_to_modify_key(encryption_name, key_plugin):
 
     return ok
 
-def create_superuser(sysadmin, password=None):
+def create_superuser(admin, password=None):
     '''
         Create a django superuser.
 
@@ -181,33 +184,33 @@ def create_superuser(sysadmin, password=None):
     '''
 
     user = password = error_message = None
-    if sysadmin is None:
+    if admin is None:
         error_message = i18n("Sysadmin is not defined so unable to finish configuration.")
-        log_message('sysadmin not defined so unable to configure superuser')
+        log_message('admin not defined so unable to configure superuser')
     else:
         try:
-            user = User.objects.filter(username=sysadmin)
+            user = User.objects.filter(username=admin)
         except:
             record_exception()
             log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         if user:
-            log_message('{} user name already exists'.format(sysadmin))
+            log_message('{} user name already exists'.format(admin))
         else:
             try:
                 if password is None:
                     # create a password
                     password = gen_passcode(max_length=24)
 
-                if len(sysadmin) > 30:
-                    user_name = sysadmin[:30]
+                if len(admin) > 30:
+                    user_name = admin[:30]
                 else:
-                    user_name = sysadmin
-                user = User.objects.create_superuser(user_name, sysadmin, password)
+                    user_name = admin
+                user = User.objects.create_superuser(user_name, admin, password)
                 log_message('created superuser: {}'.format(user))
             except:
                 user = password = None
-                error_message = i18n('Unable to add a sysadmin user named {}.'.format(sysadmin))
+                error_message = i18n('Unable to add an admin user named {}.'.format(admin))
                 record_exception()
                 log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
@@ -363,40 +366,40 @@ def delete_user(email):
 
     return ok
 
-def get_sysadmin_email():
+def get_admin_email():
     '''
-        Get the sysadmin's email.
+        Get the admin's email.
 
-        >>> email = get_sysadmin_email()
+        >>> email = get_admin_email()
         >>> email is not None
         True
         >>> email.endswith(get_domain())
         True
     '''
 
-    sysadmin_email = None
+    admin_email = None
     try:
         users = User.objects.filter(is_superuser=True)
         if users is not None and len(users) > 0:
             for user in users:
                 email = user.email
                 if email is not None and len(email.strip()) > 0:
-                    sysadmin_email = email
+                    admin_email = email
                     break
                 else:
                     username = user.username
                     email = get_email(user.username)
                     if email is not None and len(email.strip()) > 0:
-                        sysadmin_email = email
+                        admin_email = email
                         break
     except:
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
-    if sysadmin_email is None:
-        sysadmin_email = 'daemon@{}'.format(get_domain())
+    if admin_email is None:
+        admin_email = 'daemon@{}'.format(get_domain())
 
-    return sysadmin_email
+    return admin_email
 
 def get_address_string(addresses):
     '''
@@ -587,25 +590,29 @@ def send_message(sender, recipient, message):
         The message can be a Message in string format or a "email.Message" class.
     '''
 
-    try:
-        log_message('starting to send message')
-        if USE_SMTP_PROXY:
-            result_ok, msg = send_mime_message(sender, recipient, message, use_smtp_proxy=USE_SMTP_PROXY,
-              mta_address=mail_server_address(), mta_port=mta_listen_port())
-        else:
-            result_ok, msg = send_mime_message(sender, recipient, message)
+    if TESTS_RUNNING:
+        log_message('not sending message when tests running')
+        result_ok = True
+    else:
+        try:
+            log_message('starting to send message')
+            if USE_SMTP_PROXY:
+                result_ok, msg = send_mime_message(sender, recipient, message, use_smtp_proxy=USE_SMTP_PROXY,
+                  mta_address=mail_server_address(), mta_port=mta_listen_port())
+            else:
+                result_ok, msg = send_mime_message(sender, recipient, message)
 
-        if DEBUGGING:
-            if result_ok:
-                log_message('=================')
-                log_message(msg)
-                log_message('=================')
-        log_message('finished sending message: {}'.format(result_ok))
-    except Exception as exception:
-        result_ok = False
-        log_message('error while sending message')
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-        record_exception()
+            if DEBUGGING:
+                if result_ok:
+                    log_message('=================')
+                    log_message(msg)
+                    log_message('=================')
+            log_message('finished sending message: {}'.format(result_ok))
+        except Exception as exception:
+            result_ok = False
+            log_message('error while sending message')
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            record_exception()
 
     return result_ok
 

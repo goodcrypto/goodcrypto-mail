@@ -2,7 +2,7 @@
     Sync the django database and the encryption databases (i.e., keyrings).
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-27
+    Last modified: 2015-12-22
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -18,7 +18,7 @@ gc_django.setup()
 from goodcrypto.mail import contacts, crypto_software, user_keys, utils
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message.metadata import is_metadata_address
-from goodcrypto.mail.options import create_private_keys, goodcrypto_server_url
+from goodcrypto.mail.options import create_private_keys
 from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
 from goodcrypto.mail.utils import notices
 from goodcrypto.oce.key.constants import EXPIRES_IN, EXPIRATION_UNIT
@@ -600,7 +600,7 @@ def _config_database_and_user(
             crypto_name, email))
 
         if is_metadata_address(email):
-            to_email = utils.get_sysadmin_email()
+            to_email = utils.get_admin_email()
             notices.report_metadata_key_creation_error(email)
         else:
             to_email = email

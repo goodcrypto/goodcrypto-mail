@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-27
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@ from traceback import format_exc
 
 from goodcrypto.mail import contacts, crypto_software, options, user_keys
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
-from goodcrypto.mail.utils import get_encryption_software, get_sysadmin_email
+from goodcrypto.mail.utils import get_encryption_software
 from goodcrypto.mail.message import decrypt_utils, tags, utils
 from goodcrypto.mail.message.adjust import plaintext_to_message
 from goodcrypto.mail.message.constants import ORIGINAL_FROM, ORIGINAL_TO, PGP_ENCRYPTED_CONTENT_TYPE

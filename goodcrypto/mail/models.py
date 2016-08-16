@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-07
+    Last modified: 2015-12-22
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -18,7 +18,7 @@ from django.db.models.signals import pre_delete, post_save
 from goodcrypto.mail import constants, model_signals
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.utils import i18n
-# do not use LogFile because it references models.System
+# do not use LogFile because it references models.Options
 from syr.log import get_log
 
 _log = get_log()
@@ -343,7 +343,7 @@ post_save.connect(model_signals.post_save_internal_settings, sender=InternalSett
 
 class Options(models.Model):
     '''
-        GoodCrypto Mail settings controled by the sysadmin.
+        GoodCrypto Mail settings controled by the admin.
 
         >>> options = Options.objects.all()
         >>> options is not None
@@ -411,7 +411,7 @@ class Options(models.Model):
 
     goodcrypto_server_url = models.CharField(i18n('GoodCrypto server url'),
         max_length=100, blank=True, null=True,
-        help_text=i18n("The full url to reach your GoodCrypto server's website, including the port. For example, http://194.10.334.1:8080 or https://194.10.334.1:8443"))
+        help_text=i18n("The full url to reach your GoodCrypto server's website, including the port. For example, http://194.10.34.1:8080 or https://194.10.34.1:8443"))
 
     encrypt_metadata = models.BooleanField(i18n('Encrypt metadata'), default=True,
        help_text=i18n("Of course, until other packages implement this open source protocol for metadata protection, you may need GoodCrypto on both ends."))

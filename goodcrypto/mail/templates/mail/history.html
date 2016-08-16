@@ -2,8 +2,8 @@
 {% comment %}
 
     Copyright 2015 GoodCrypto
-    Last modified: 2015-07-19
-    
+    Last modified: 2015-12-12
+
 {% endcomment %}
 {% load i18n custom %}
 
@@ -29,7 +29,7 @@
     <div class="row">
         {% if results %}
             <form id="changelist-form" action="" method="post"{% csrf_token %}
-        
+
                 <div class="results">
                 <table class="table table-hover table-responsive" id="result_list">
                     <thead>
@@ -64,14 +64,6 @@
 
     {% if results %}
         {% if results|length > 1 %}
-            <div class="row">
-                <p class="pull-right">
-                Click the column headers to change the order.
-                <noscript>
-                Javascript required.
-                </noscript>
-                </p>
-            </div>
             <div class="row col-md-8">
                 <table class="table table-responsive well" id="protected_chart">
                     <tr>
@@ -88,7 +80,7 @@
                     </tr>
                 </table>
             </div>
-        
+
             <script type="text/javascript">
             $(document).ready(function()
                 {

@@ -2,7 +2,7 @@
     Urls for Mail
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-07
+    Last modified: 2015-12-23
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -31,7 +31,7 @@ urlpatterns = patterns('',
     url(r'^show_protection/?', views.show_protection, name='mail_show_protection'),
     url(r'^show_metadata_domains/?', views.show_metadata_domains, name='mail_show_metadata_domains'),
 
-    url(r'^configure/?', views.configure, name='mail_configure'),
+    url(r'^prep_postfix/?$', views.prep_postfix, name='mail_prep_postfix'),
 
     #url(r'^api/?', views.api, name='mail_api'),
 )

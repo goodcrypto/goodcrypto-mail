@@ -1,7 +1,7 @@
 #! /usr/bin/python
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-27
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -19,7 +19,7 @@ from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.message.filters import Filters
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.message_rq import rq_message
-from goodcrypto.mail.utils import email_in_domain, get_sysadmin_email
+from goodcrypto.mail.utils import email_in_domain, get_admin_email
 from goodcrypto.mail.utils.notices import report_unexpected_ioerror, report_unexpected_named_error
 from goodcrypto.utils import i18n, get_email
 from goodcrypto.utils.exception import record_exception
@@ -95,7 +95,7 @@ class Main(object):
             if len(self.recipients) > 0:
                 to_address = self.recipients[0]
             else:
-                to_address = get_sysadmin_email()
+                to_address = get_admin_email()
             filters = Filters(self.sender, to_address, self.in_message)
             filters.reject_message(str(exception), message=self.in_message)
         except IOError as io_error:
@@ -105,7 +105,7 @@ class Main(object):
             if len(self.recipients) > 0:
                 to_address = self.recipients[0]
             else:
-                to_address = get_sysadmin_email()
+                to_address = get_admin_email()
             filters = Filters(self.sender, to_address, self.in_message)
             filters.reject_message(str(io_error), message=self.in_message)
 
@@ -244,21 +244,9 @@ if __name__ == "__main__":
 
     except NameError:
         # hopefully our testing prevents this from ever occuring, but if not, we'd definitely like to know about it
-        """
-        subject = '{} - Serious unexpected NameError'.format(TAG_ERROR)
-        body = 'A serious, unexpected NameError was detected while processing mail. Please send the Traceback to support@goodcrypto.com\n{}'.format(format_exc())
-        notify_user(get_sysadmin_email(), subject, body)
-        record_exception()
-        """
         report_unexpected_named_error()
 
     except Exception, IOError:
-        """
-        subject = '{} - Serious unexpected exception'.format(TAG_ERROR)
-        body = 'A serious, unexpected exception was detected while processing mail. If you contact support@goodcrypto.com, please include the Traceback.\n{}'.format(format_exc())
-        notify_user(get_sysadmin_email(), subject, body)
-        record_exception()
-        """
         report_unexpected_ioerror()
 
     if report_usage:

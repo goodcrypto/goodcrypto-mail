@@ -2,7 +2,7 @@
     Send notices from the GoodCrypto Server daemon.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-30
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,7 +16,7 @@ from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message.inspect_utils import get_hashcode
 from goodcrypto.mail.message.metadata import is_metadata_address
 from goodcrypto.mail.options import goodcrypto_server_url, require_key_verified
-from goodcrypto.mail.utils import get_sysadmin_email, send_message, write_message
+from goodcrypto.mail.utils import get_admin_email, send_message, write_message
 from goodcrypto.mail.utils.dirs import get_notices_directory
 from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils import get_email, i18n, parse_domain
@@ -72,11 +72,11 @@ def send_user_credentials(email, password):
         paragraph1=paragraph1, paragraph2=paragraph2, paragraph3=paragraph3)
     notify_user(email, subject, body)
 
-def send_sysadmin_credentials(sysadmin, password, domain):
+def send_admin_credentials(admin, password, domain):
     '''
-        Email the sysadmin password.
+        Email the admin password.
 
-        >>> send_sysadmin_credentials('edward@goodcrypto.local', 'test-password', 'goodcrypto.local')
+        >>> send_admin_credentials('edward@goodcrypto.local', 'test-password', 'goodcrypto.local')
         True
     '''
 
@@ -90,7 +90,7 @@ def send_sysadmin_credentials(sysadmin, password, domain):
             i18n('Every message will have a GoodCrypto tag.'),
             _get_paragraph_about_goodcrypto())
 
-        paragraph3 = _get_credential_paragraph(sysadmin, password)
+        paragraph3 = _get_credential_paragraph(admin, password)
 
         paragraph4 = i18n('To make it easier for users to verify private messages, in the Mail options you can include the url for your GoodCrypto private server. ' +
                      'Then private messages will include a simply verification link.')
@@ -98,9 +98,9 @@ def send_sysadmin_credentials(sysadmin, password, domain):
         body = '{paragraph1}\n\n{paragraph2}\n\n{paragraph3}\n\n{paragraph4}\n'.format(
             paragraph1=paragraph1, paragraph2=paragraph2, paragraph3=paragraph3, paragraph4=paragraph4)
 
-        result_ok = notify_user(sysadmin, subject, body)
+        result_ok = notify_user(admin, subject, body)
         if result_ok:
-            log_message('notified {} about new sysadmin account'.format(sysadmin))
+            log_message('notified {} about new admin account'.format(admin))
         else:
             log_message('unable to notify user about account; see notices.log for details')
     except:
@@ -127,16 +127,16 @@ def notify_user_key_ready(email):
 def notify_new_key_arrived(to_user, id_fingerprint_pairs):
     '''
         Notify user a new key arrived.
-        
+
         >>> notify_new_key_arrived(None, None)
     '''
-    
+
     if to_user is None or id_fingerprint_pairs is None:
         pass
     else:
         # use the first email address from the imported key
         email, __ = id_fingerprint_pairs[0]
-    
+
         header = i18n("To be safe, verify their key now by following these instructions:")
         tip = i18n("https://goodcrypto.com/qna/knowledge-base/user-verify-key")
         regular_notice = True
@@ -163,10 +163,10 @@ def notify_new_key_arrived(to_user, id_fingerprint_pairs):
             body,
             header,
             tip)
-    
+
         for (user_id, fingerprint) in id_fingerprint_pairs:
             body_text += "    {}: {}".format(user_id, format_fingerprint(fingerprint))
-    
+
         if regular_notice:
             prefix = TAG_PREFIX
         else:
@@ -244,16 +244,16 @@ def report_bad_bundled_encrypted_message(to_domain, bundled_messages):
     line3 = i18n("You can disable bundling and padding messages, but it means that your users will be easier to track.")
 
     # leave a trailing space in case we add a 4th line
-    sysadmin_message = '{}\n\n{}\n\n{} '.format(line1, line2, line3)
+    admin_message = '{}\n\n{}\n\n{} '.format(line1, line2, line3)
 
     if len(bundled_messages) > 0:
         line4 = i18n("Also, {} messages to {domain} will be lost if you disable bundling before resolving the current problem.".format(
             len(bundled_messages), domain=to_domain))
-        sysadmin_message += line4
+        admin_message += line4
 
-    sysadmin = get_sysadmin_email()
-    notify_user(sysadmin, subject, sysadmin_message)
-    log_message('sent bad encrypted bundle message notice to {}\n{}'.format(sysadmin, sysadmin_message))
+    admin = get_admin_email()
+    notify_user(admin, subject, admin_message)
+    log_message('sent bad encrypted bundle message notice to {}\n{}'.format(admin, admin_message))
 
 def report_replacement_key(to_user, from_user, encryption_name, id_fingerprint_pairs, crypto_message):
     '''
@@ -463,7 +463,7 @@ def report_unable_to_send_bundled_messages(exception):
     '''
 
     subject = '{} - Unable to send bundled messages periodically'.format(TAG_ERROR)
-    notify_user(get_sysadmin_email(), subject, '{}\n\n{}'.format(subject, exception))
+    notify_user(get_admin_email(), subject, '{}\n\n{}'.format(subject, exception))
     record_exception()
 
 def report_unable_to_decrypt(to_user, message):
@@ -488,7 +488,7 @@ def report_message_undeliverable(message, sender):
         subject += i18n('from {sender}'.format(sender=sender))
     error_message = i18n(
       'An unexpected error was detected when trying to deliver the attached message.\n\n{}'.format(message))
-    notify_user(get_sysadmin_email(), subject, error_message)
+    notify_user(get_admin_email(), subject, error_message)
 
 def report_unexpected_ioerror():
     ''' Report an unexpected ioerror or exception.
@@ -498,7 +498,7 @@ def report_unexpected_ioerror():
 
     subject = '{} - Serious unexpected exception'.format(TAG_ERROR)
     body = 'A serious, unexpected exception was detected while processing mail. If you contact support@goodcrypto.com, please include the Traceback.\n{}'.format(format_exc())
-    notify_user(get_sysadmin_email(), subject, body)
+    notify_user(get_admin_email(), subject, body)
     record_exception()
 
 def report_unexpected_named_error():
@@ -510,7 +510,7 @@ def report_unexpected_named_error():
     # hopefully our testing prevents this from ever occuring, but if not, we'd definitely like to know about it
     subject = '{} - Serious unexpected NameError'.format(TAG_ERROR)
     body = 'A serious, unexpected NameError was detected while processing mail. Please send the Traceback to support@goodcrypto.com\n{}'.format(format_exc())
-    notify_user(get_sysadmin_email(), subject, body)
+    notify_user(get_admin_email(), subject, body)
     record_exception()
 
 def notify_user(to_address, subject, text=None, attachment=None, filename=None):
@@ -529,9 +529,9 @@ def notify_user(to_address, subject, text=None, attachment=None, filename=None):
 
     message = None
     try:
-        # all messages to the metadata user should get routed to the sysadmin
+        # all messages to the metadata user should get routed to the admin
         if is_metadata_address(to_address):
-            to_address = get_sysadmin_email()
+            to_address = get_admin_email()
 
         message = create_notice_message(
             to_address, subject, text=text, attachment=attachment, filename=filename)
@@ -653,7 +653,9 @@ def _get_credential_paragraph(email, password):
     '''
         Get the paragraph with the credentials.
 
-        >>> _get_credential_paragraph('edward@goodcrypto.local', 'test-password')
+        >>> paragraph = _get_credential_paragraph('edward@goodcrypto.local', 'test-password')
+        >>> len(paragraph) > 0
+        True
     '''
 
     verify_private_msg = VERIFY_HEADER
@@ -674,7 +676,9 @@ def _get_paragraph_about_goodcrypto():
     '''
         Get paragraph with details about how GoodCrypto works.
 
-        >>> _get_paragraph_about_goodcrypto()
+        >>> paragraph = _get_paragraph_about_goodcrypto()
+        >>> len(paragraph) > 0
+        True
     '''
 
     # do *not* remove the trailing white space inside the ''

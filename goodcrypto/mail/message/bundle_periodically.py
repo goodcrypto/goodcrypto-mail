@@ -1,7 +1,7 @@
 #! /usr/bin/python
 '''
     Copyright 2015 GoodCrypto
-    Last modified: 2015-11-27
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -19,7 +19,6 @@ from goodcrypto.mail import options
 from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.internal_settings import get_date_queue_last_active, set_date_queue_last_active
 from goodcrypto.mail.message.bundle import Bundle
-from goodcrypto.mail.utils import get_sysadmin_email
 from goodcrypto.mail.utils.notices import report_unable_to_send_bundled_messages
 from goodcrypto.utils import i18n
 from goodcrypto.utils.exception import record_exception
@@ -87,11 +86,6 @@ class BundlePeriodically(object):
         except Exception as exception:
             ok = False
             report_unable_to_send_bundled_messages(exception)
-            """
-            subject = '{} - Unable to send bundled messages'.format(TAG_ERROR)
-            notify_user(get_sysadmin_email(), subject, '{}\n\n{}'.format(subject, exception))
-            record_exception()
-            """
             self.log('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         return ok
@@ -109,11 +103,6 @@ def main():
             if bp.ready_to_run():
                 bp.bundle_and_pad_messages()
         except Exception as exception:
-            """
-            subject = '{} - Unable to send bundled messages periodically'.format(TAG_ERROR)
-            notify_user(get_sysadmin_email(), subject, '{}\n\n{}'.format(subject, exception))
-            record_exception()
-            """
             report_unable_to_send_bundled_messages(exception)
             print(str(exception))
 

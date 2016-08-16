@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-09-29
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -43,7 +43,7 @@ class MailAPI(object):
         try:
             self.action = self.domain = self.mail_server_address = None
             self.public_key = self.encryption_name = self.email = self.fingerprint = None
-            self.user_name = self.sysadmin = self.password = None
+            self.user_name = self.admin = self.password = None
             self.ip = get_remote_ip(request)
             self.log_message('attempting mail api call from {}'.format(self.ip))
 
@@ -56,8 +56,8 @@ class MailAPI(object):
                         self.action = cleaned_data.get(api_constants.ACTION_KEY)
                         self.log_message('action: {}'.format(self.action))
                         if self.action == api_constants.CREATE_SUPERUSER:
-                            self.sysadmin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
-                            self.log_message('sysadmin: {}'.format(self.sysadmin))
+                            self.admin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
+                            self.log_message('admin: {}'.format(self.admin))
                         elif self.action == api_constants.CONFIGURE:
                             self.domain = strip_input(cleaned_data.get(api_constants.DOMAIN_KEY))
                             self.log_message('domain: {}'.format(self.domain))
@@ -77,14 +77,14 @@ class MailAPI(object):
                             self.log_message('fingerprint: {}'.format(self.fingerprint))
                             self.user_name = strip_input(cleaned_data.get(api_constants.USER_NAME_KEY))
                             self.log_message('user_name: {}'.format(self.user_name))
-                            self.sysadmin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
-                            self.log_message('sysadmin: {}'.format(self.sysadmin))
+                            self.admin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
+                            self.log_message('admin: {}'.format(self.admin))
                             self.password = strip_input(cleaned_data.get(api_constants.PASSWORD_KEY))
                         elif self.action == api_constants.GET_CONTACT_LIST:
                             self.encryption_name = strip_input(cleaned_data.get(api_constants.ENCRYPTION_NAME_KEY))
                             self.log_message('encryption_name: {}'.format(self.encryption_name))
-                            self.sysadmin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
-                            self.log_message('sysadmin: {}'.format(self.sysadmin))
+                            self.admin = strip_input(cleaned_data.get(api_constants.SYSADMIN_KEY))
+                            self.log_message('admin: {}'.format(self.admin))
                             self.password = strip_input(cleaned_data.get(api_constants.PASSWORD_KEY))
 
                         result = self.take_api_action()
@@ -135,7 +135,7 @@ class MailAPI(object):
                 self.log_message('configure result: {}'.format(result))
 
             elif self.action == api_constants.CREATE_SUPERUSER:
-                user, password, error_message = create_superuser(self.sysadmin)
+                user, password, error_message = create_superuser(self.admin)
                 if error_message is None:
                     if password is None:
                         result = self.format_bad_result(error_message)
@@ -206,9 +206,9 @@ class MailAPI(object):
                     self.log_message('minimum configure data found')
 
             elif self.action == api_constants.CREATE_SUPERUSER:
-                if self.has_content(self.sysadmin):
+                if self.has_content(self.admin):
                     ok = True
-                    self.log_message('minimum create user data found: {}'.format(self.sysadmin))
+                    self.log_message('minimum create user data found: {}'.format(self.admin))
 
             elif self.action == api_constants.STATUS:
                 ok = True
@@ -223,14 +223,14 @@ class MailAPI(object):
             elif self.action == api_constants.IMPORT_KEY:
                 if (self.has_content(self.public_key) and
                     self.has_content(self.encryption_name) and
-                    self.has_content(self.sysadmin) and
+                    self.has_content(self.admin) and
                     self.has_content(self.password)):
                     ok = True
                     self.log_message('minimum import key data found')
 
             elif self.action == api_constants.GET_CONTACT_LIST:
                 if (self.has_content(self.encryption_name) and
-                    self.has_content(self.sysadmin) and
+                    self.has_content(self.admin) and
                     self.has_content(self.password)):
                     ok = True
                     self.log_message('minimum get contact list data found')

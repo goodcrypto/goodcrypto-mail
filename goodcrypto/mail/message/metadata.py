@@ -1,6 +1,6 @@
 '''
     Copyright 2015 GoodCrypto
-    Last modified: 2015-12-01
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -216,7 +216,7 @@ def send_metadata_key(from_user, to_user):
     try:
         if from_user is None or to_user is None:
             sent_message = False
-            log_message('missing user data so message not sent to sysadmin')
+            log_message('missing user data so message not sent to admin')
 
         else:
             from goodcrypto.mail.utils import send_message

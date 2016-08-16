@@ -719,8 +719,8 @@ def get_metadata_domains():
         Get a list of metadata domains. 
 
         # Test extreme case. See unittests to see how to use this function.
-        >>> get_metadata_domains()
-        []
+        >>> type(get_metadata_domains())
+        <type 'list'>
     '''
 
     from goodcrypto.mail.message.metadata import get_metadata_user

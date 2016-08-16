@@ -1,6 +1,6 @@
 '''
     Copyright 2015 GoodCrypto
-    Last modified: 2015-11-28
+    Last modified: 2015-12-09
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,7 +17,7 @@ from goodcrypto.mail.message.header_keys import HeaderKeys
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.metadata import is_metadata_address, send_metadata_key, parse_bundled_message
 from goodcrypto.mail.message.validator import Validator
-from goodcrypto.mail.utils import get_sysadmin_email, send_message
+from goodcrypto.mail.utils import get_admin_email, send_message
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.mail.utils.notices import report_message_undeliverable
 from goodcrypto.utils import i18n
@@ -265,12 +265,12 @@ class Debundle(object):
             original_recipient = inner_crypto_message.get_email_message().get_header(ORIGINAL_TO)
             original_subject = inner_crypto_message.get_email_message().get_header(mime_constants.SUBJECT_KEYWORD)
 
-            # if this message is an internal message with a subject, then send it to the sysadmin
+            # if this message is an internal message with a subject, then send it to the admin
             if (original_sender == inner_crypto_message.smtp_sender() and
                 original_recipient == inner_crypto_message.smtp_recipient() and
                 original_subject is not None):
-                sysadmin = get_sysadmin_email()
-                inner_crypto_message.set_smtp_recipient(sysadmin)
+                admin = get_admin_email()
+                inner_crypto_message.set_smtp_recipient(admin)
             else:
                 inner_crypto_message.set_smtp_sender(original_sender)
                 inner_crypto_message.set_smtp_recipient(original_recipient)
