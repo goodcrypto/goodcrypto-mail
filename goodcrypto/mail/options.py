@@ -143,6 +143,18 @@ def set_clear_sign_email(sign):
     record.clear_sign = sign
     save_options(record)
 
+def clear_sign_policy():
+    ''' Get the policy to clear sign a message. '''
+
+    return get_options().clear_sign_policy
+
+def set_clear_sign_policy(policy):
+    ''' Set the user's preference to clear sign encrypted outbound mail. '''
+
+    record = get_options()
+    record.clear_sign_policy = policy
+    save_options(record)
+
 def filter_html():
     ''' Get whether to filter html from inbound email messages. '''
 
@@ -246,6 +258,24 @@ def set_login_to_export_keys(require):
     record = get_options()
     try:
         record.login_to_export_keys = require
+        save_options(record)
+    except:
+        pass
+
+def require_outbound_encryption():
+    ''' Get whether to require all outbound mail is encrypted. '''
+
+    try:
+        return get_options().require_outbound_encryption
+    except:
+        return False
+
+def set_require_outbound_encryption(require):
+    ''' Set whether to require all outbound mail is encrypted. '''
+
+    record = get_options()
+    try:
+        record.require_outbound_encryption = require
         save_options(record)
     except:
         pass

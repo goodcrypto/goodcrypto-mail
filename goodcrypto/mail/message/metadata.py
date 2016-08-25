@@ -1,6 +1,6 @@
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-01-29
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,8 +11,10 @@ from goodcrypto.mail import contacts, options, user_keys
 from goodcrypto.mail.crypto_rq import add_private_key_via_rq, set_fingerprint_via_rq
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants
+from goodcrypto.mail.message.history import sig_verified
 from goodcrypto.mail.message.inspect_utils import get_charset
 from goodcrypto.mail.message.message_exception import MessageException
+from goodcrypto.mail.utils import get_domain_user
 from goodcrypto.mail.utils.dirs import get_packet_directory, SafeDirPermissions
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import get_email, i18n, parse_domain
@@ -24,8 +26,6 @@ from syr.message import prep_mime_message
 
 
 DEBUGGING = False
-
-METADATA_LOCAL_USER = '_no_metadata_'
 
 _log = None
 
@@ -52,7 +52,7 @@ def get_metadata_address(email=None, domain=None):
         log_message('unable to get metadata address without a domain')
     else:
         try:
-            metadata_address = 'Metadata Protector <{}@{}>'.format(get_metadata_user(), domain)
+            metadata_address = '{} domain key (system use only) <{}@{}>'.format(domain, get_domain_user(), domain)
         except:
             record_exception()
             log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
@@ -74,7 +74,7 @@ def is_metadata_address(email):
         try:
             address = get_email(email)
             local, __, __ = address.partition('@')
-            if local == get_metadata_user():
+            if local == get_domain_user():
                 result = True
         except:
             record_exception()
@@ -322,6 +322,8 @@ def packetize(crypto_message, encrypted_with, verification_code):
                     encrypted_names += ', '
                 encrypted_names += encrypted_name
             log_message('queued message encrypted with: {}'.format(encrypted_names))
+        private_sig_verified = sig_verified(crypto_message.is_private_signed(), crypto_message.private_signers_list())
+        clear_sig_verified = sig_verified(crypto_message.is_clear_signed(), crypto_message.clear_signers_list())
         message_name = get_unique_filename(dirname, constants.MESSAGE_PREFIX, constants.MESSAGE_SUFFIX)
         with open(message_name, 'wt') as f:
             f.write(crypto_message.get_email_message().to_string())
@@ -330,6 +332,12 @@ def packetize(crypto_message, encrypted_with, verification_code):
             f.write('{}: {}\n'.format(mime_constants.TO_KEYWORD, crypto_message.smtp_recipient()))
             f.write('{}: {}\n'.format(constants.CRYPTED_KEYWORD, crypto_message.is_crypted()))
             f.write('{}: {}\n'.format(constants.CRYPTED_WITH_KEYWORD, encrypted_names))
+            f.write('{}: {}\n'.format(constants.SIGNED_KEYWORD, crypto_message.is_private_signed()))
+            f.write('{}: {}\n'.format(constants.SIG_VERIFIED_KEYWORD, private_sig_verified))
+            f.write('{}: {}\n'.format(constants.CLEAR_SIGNED_KEYWORD, crypto_message.is_clear_signed()))
+            f.write('{}: {}\n'.format(constants.CLEAR_SIG_VERIFIED_KEYWORD, clear_sig_verified))
+            f.write('{}: {}\n'.format(constants.DKIM_SIGNED_KEYWORD, crypto_message.is_dkim_signed()))
+            f.write('{}: {}\n'.format(constants.DKIM_SIG_VERIFIED_KEYWORD, crypto_message.is_dkim_sig_verified()))
             f.write('{}: {}\n'.format(constants.VERIFICATION_KEYWORD, verification_code))
             f.write(constants.END_ADDENDUM)
         log_message('packetized message filename: {}'.format(os.path.basename(message_name)))
@@ -355,11 +363,33 @@ def parse_bundled_message(bundled_message):
         >>> addendum[mime_constants.FROM_KEYWORD] is None
         True
     '''
+
+    def set_addendum_item(msg, keyword, boolean=False):
+        try:
+            i = msg.find(keyword)
+            if i > 0:
+                item = msg[i + len(keyword + ': '):]
+                i = item.find('\n')
+                if boolean:
+                    addendum[keyword] = item[:i] == 'True'
+                else:
+                    addendum[keyword] = item[:i]
+        except:
+            record_exception()
+            addendum[keyword] = None
+
+
     addendum = {
        mime_constants.FROM_KEYWORD: None,
        mime_constants.TO_KEYWORD: None,
        constants.CRYPTED_KEYWORD: False,
        constants.CRYPTED_WITH_KEYWORD: [],
+       constants.SIGNED_KEYWORD: False,
+       constants.SIG_VERIFIED_KEYWORD: False,
+       constants.CLEAR_SIGNED_KEYWORD: False,
+       constants.CLEAR_SIG_VERIFIED_KEYWORD: False,
+       constants.DKIM_SIGNED_KEYWORD: False,
+       constants.DKIM_SIG_VERIFIED_KEYWORD: False,
        constants.VERIFICATION_KEYWORD: None,
     }
     original_message = sender = recipient = crypted_with = None
@@ -371,26 +401,9 @@ def parse_bundled_message(bundled_message):
             msg = bundled_message[i:]
             original_message = bundled_message[:i]
 
-        # get the sender
-        i = msg.find(mime_constants.FROM_KEYWORD)
-        if i > 0:
-            sender = msg[i + len(mime_constants.FROM_KEYWORD + ': '):]
-            i = sender.find('\n')
-            addendum[mime_constants.FROM_KEYWORD] = sender[:i]
-
-        # get the recipient
-        i = msg.find(mime_constants.TO_KEYWORD)
-        if i > 0:
-            recipient = msg[i + len(mime_constants.TO_KEYWORD + ': '):]
-            i = recipient.find('\n')
-            addendum[mime_constants.TO_KEYWORD] = recipient[:i]
-
-        # get the crypted status
-        i = msg.find(constants.CRYPTED_KEYWORD)
-        if i > 0:
-            crypted = msg[i + len(constants.CRYPTED_KEYWORD + ': '):]
-            i = crypted.find('\n')
-            addendum[constants.CRYPTED_KEYWORD] = bool(crypted[:i])
+        set_addendum_item(msg, mime_constants.FROM_KEYWORD)
+        set_addendum_item(msg, mime_constants.TO_KEYWORD)
+        set_addendum_item(msg, constants.CRYPTED_KEYWORD, boolean=True)
 
         # get the programs the message was encrypted
         i = msg.find(constants.CRYPTED_WITH_KEYWORD)
@@ -399,12 +412,22 @@ def parse_bundled_message(bundled_message):
             i = crypted_with.find('\n')
             addendum[constants.CRYPTED_WITH_KEYWORD] = crypted_with[:i].split(', ')
 
+        # get details about the signatures
+        set_addendum_item(msg, constants.SIGNED_KEYWORD, boolean=True)
+        set_addendum_item(msg, constants.SIG_VERIFIED_KEYWORD, boolean=True)
+        set_addendum_item(msg, constants.CLEAR_SIGNED_KEYWORD, boolean=True)
+        set_addendum_item(msg, constants.CLEAR_SIG_VERIFIED_KEYWORD, boolean=True)
+        set_addendum_item(msg, constants.DKIM_SIGNED_KEYWORD, boolean=True)
+        set_addendum_item(msg, constants.DKIM_SIG_VERIFIED_KEYWORD, boolean=True)
+
         # get the verification code that was added to the message if it was encrypted
         i = msg.find(constants.VERIFICATION_KEYWORD)
         if i > 0:
             verification_code = msg[i + len(constants.VERIFICATION_KEYWORD + ': '):]
             i = verification_code.find('\n')
             addendum[constants.VERIFICATION_KEYWORD] = verification_code[:i].split(', ')
+
+        if DEBUGGING: log_message('addendum:\n{}'.format(addendum))
     except AttributeError as attribute_exception:
         # common error for "padding" parts of a bundled message
         log_message(attribute_exception)
@@ -416,16 +439,6 @@ def parse_bundled_message(bundled_message):
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     return original_message, addendum
-
-def get_metadata_user():
-    '''
-        Get the user for a metadata key.
-
-        >>> get_metadata_user()
-        '_no_metadata_'
-    '''
-
-    return METADATA_LOCAL_USER
 
 def log_message(message):
     '''

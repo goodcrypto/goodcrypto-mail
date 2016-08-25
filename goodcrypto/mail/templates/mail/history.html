@@ -1,118 +1,54 @@
-{% extends "base.html" %}
+{% extends "mail/message.html" %}
 {% comment %}
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-12
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-04
 
 {% endcomment %}
 {% load i18n custom %}
 
-{% block extrastyle %}
-  {{ block.super }}
-  <link rel="stylesheet" type="text/css" href="{% static "css/admin.css" %}" />
-{% endblock %}
+                            {% block sig_headers %}
+                            <th scope="col">
+                               <div class="text">
+                                    <center>
+                                        <abbr title="Digitally signed">
+                                            <a href="#Signed">Signed</a>
+                                        </abbr>
+                                    </center>
+                                </div>
+                               <div class="clear"></div>
+                            </th>
+                            {% endblock sig_headers %}
 
-{% block extrascript %}
-  {{ block.super }}
-    <script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
-{% endblock extrascript %}
-
-{% block contentpane %}
-
-    <div class="row">
-        <h2>
-            {% block main_headline %}
-            {% endblock main_headline %}
-        </h2>
-    </div>
-
-    <div class="row">
-        {% if results %}
-            <form id="changelist-form" action="" method="post"{% csrf_token %}
-
-                <div class="results">
-                <table class="table table-hover table-responsive" id="result_list">
-                    <thead>
-                        <tr>
-                            {% block results_header %}
-                            {% endblock results_header %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for result in results %}
-                            <tr class="{% cycle 'row1' 'row2' %}">
-                                {% for item in result %}<td>{{ item|safe }}</td>{% endfor %}
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                </div>
-            </form>
-        {% elif error_message %}
-            <p>&nbsp;</p>
-            <p class="dropcap">
-                {{ error_message|safe }}
-            </p>
-        {% else %}
-            <p>&nbsp;</p>
-            <p class="dropcap">
-                {% block no_results %}
-                {% endblock no_results %}
-            </p>
-        {% endif %}
-    </div>
-
-    {% if results %}
-        {% if results|length > 1 %}
-            <div class="row col-md-8">
-                <table class="table table-responsive well" id="protected_chart">
-                    <tr>
-                        {% include 'mail/snippets/protect_header.html' %}
-                    </tr>
-                    <tr>
-                        {% include 'mail/snippets/protect_content.html' %}
-                    </tr>
-                    <tr>
-                        {% include 'mail/snippets/protect_metadata.html' %}
-                   </tr>
-                    <tr>
-                        {% include 'mail/snippets/protect_metadata_content.html' %}
-                    </tr>
-                </table>
-            </div>
-
-            <script type="text/javascript">
-            $(document).ready(function()
-                {
-                    <!-- $("#result_list").tablesorter( {sortList: [[0,0], [1,0]]} );-->
-                    $("#result_list").tablesorter({sortList: [[1,0]]} );
-                }
-            );
-            </script>
-        {% else %}
-            <div class="row col-md-8">
-                <table class="table table-responsive well" id="protected_chart">
-                    <tr>
-                        {% include 'mail/snippets/protect_header.html' %}
-                    </tr>
-                {% for result in results %}
-                    {% if result.status == "Metadata + content 2x" %}
-                    <tr>
-                        {% include 'mail/snippets/protect_metadata_content.html' %}
-                    </tr>
-                    {% elif result.status == "Metadata + content" %}
-                    <tr>
-                        {% include 'mail/snippets/protect_metadata.html' %}
-                    </tr>
-                    {% else %}
-                    <tr>
-                        {% include 'mail/snippets/protect_content.html' %}
-                    </tr>
-                    {% endif %}
-                {% endfor %}
-                </table>
-            </div>
-        {% endif %}
-    {% endif %}
-{% endblock contentpane %}
+                            {% block signatures %}
+                                <td scope="col">
+                                   <center>
+                                    {% if result.record.private_signed or result.record.clear_signed or result.record.dkim_signed %}
+                                        {% if result.record.private_sig_verified or result.record.clear_sig_verified or result.record.dkim_sig_verified %}
+                                            <abbr title="Digital signature verified">
+                                                <img alt="Yes" src="/static/images/general/check_mark_small.png">
+                                            </abbr>
+                                        {% else %}
+                                            <abbr title="Digital signature NOT verified">
+                                                <img alt="Yes" src="/static/images/general/error_mark_small.png">
+                                            </abbr>
+                                        {% endif %}
+                                    {% else %}
+                                         <abbr title="NOT digitally signed">
+                                               <img alt="No" src="/static/images/general/error_mark_small.png">
+                                           </abbr>
+                                    {% endif %}
+                                    </center>
+                                </td>
+                            {% endblock signatures %}
+                            {% block verification %}
+                                    <td scope="col">
+                                       <div class="text">
+                                           <abbr title="Click to see more details about message's protection.">
+                                            {% block verification_link %}
+                                            {% endblock verification_link %}
+                                            </abbr>
+                                        </div>
+                                    </td>
+                            {% endblock verification %}
 

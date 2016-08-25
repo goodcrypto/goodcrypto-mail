@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2015 GoodCrypto
-    Last modified: 2015-06-17
+    Last modified: 2016-01-27
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -11,44 +11,63 @@
   {% block meta_description %}
   <meta name="Description" content="Verify the key ID for a contact's key.">
   {% endblock meta_description %}
-  
+
   {% block titlevar %}{{ page_title }}{% endblock %}
 
 {% block contentpane %}
 
     <div class="row">
-        <h2>{{ page_title }}</h2> 
+        <h2>{{ page_title }}</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <form method="POST" action="/mail/verify_fingerprint/" class="form-horizontal" role="form">{% csrf_token %}
         <div class="row">
             <div class="form-group">
-                <label class="control-label col-sm-2 col-lg-2 " for="fingerprint_label">{% trans 'Key ID' %}</label>
-                <div class=" col-sm-10 col-lg-10 ">
+                <label class="control-label col-sm-3 col-lg-3" for="fingerprint_label">{% trans 'Key ID' %}</label>
+                <div class=" col-sm-9 col-lg-9">
                     {{ fingerprint }}
                 </div>
             </div>
         </div>
 
+        <div class="row">&nbsp;</div>
+
         <div class="row">
             <div class="form-group">
-                <label class="control-label col-sm-2 col-lg-2 " for="Use key to encrypt_label">{% trans 'Use key to encrypt?' %}</label>
-                <div class="col-sm-10 col-lg-10 ">
+                <label class="control-label col-sm-3 col-lg-3" for="active_label">{% trans 'Uses encryption' %}</label>
+                <div class="col-sm-9 col-lg-9">
                     {% if active %}
-                        <p>{% trans 'Yes' %}</p>
+                        <p><img alt="Yes" src="/static/images/general/check_mark_small.png"></p>
                     {% else %}
-                        <p>{% trans 'No' %}</p>
+                        <p><img alt="No" src="/static/images/general/error_mark_small.png"></p>
                     {% endif %}
                 </div>
             </div>
         </div>
-    
+
+        <div class="row">&nbsp;</div>
+
         <div class="row">
             <div class="form-group">
-                <label class="control-label col-sm-2 col-lg-2 " for="verified_label">{% trans 'Verified?' %}</label>
-                <div class=" col-sm-10 col-lg-10 ">
+                <label class="control-label col-sm-3 col-lg-3" for="requires_verification_label">{% trans 'Requires verification' %}</label>
+                <div class="col-sm-9 col-lg-9">
+                    {% if requires %}
+                        <p><img alt="Yes" src="/static/images/general/check_mark_small.png"> &nbsp;&nbsp; {% trans 'The key must be verified before it can be used.' %}</p>
+                    {% else %}
+                        <p><img alt="No" src="/static/images/general/error_mark_small.png"> &nbsp;&nbsp; {% trans 'The key will be used even if it has not been verified.' %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="row">&nbsp;</div>
+
+        <div class="row">
+            <div class="form-group">
+                <label class="control-label col-sm-3 col-lg-3" for="verified_label">{% trans 'Verified?' %}</label>
+                <div class=" col-sm-9 col-lg-9">
                     {% if checked %}
                         <input id="id_verified" name="verified" type="checkbox" checked="checked"/>
                     {% else %}
@@ -60,12 +79,12 @@
         </div>
 
         <div class="form-group">
-            <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
-            <div class=" col-sm-10 col-lg-10 ">
+            <div class=" control-label col-sm-3 col-lg-3">&nbsp;</div>
+            <div class=" col-sm-9 col-lg-9">
                 <input class="btn btn-primary" type="submit" value="Update" name="submit"> <font color="red">{{ error_message }}</font>
             </div>
         </div>
-        
+
         <div class="form-group">
             <input id="id_email" name="email" type="hidden" value="{{ email }}"/>
             <input id="id_encryption_name" name="encryption_name" type="hidden" value="{{ encryption_name }}"/>

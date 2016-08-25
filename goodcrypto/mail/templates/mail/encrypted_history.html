@@ -1,52 +1,40 @@
 {% extends "mail/history.html" %}
 {% comment %}
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-06-26
-    
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-04
+
 {% endcomment %}
 {% load i18n custom %}
 
-{% block titlevar %}Messages you sent privately{% endblock %}
+{% block titlevar %}Messages you sent with added security{% endblock %}
 
 {% block main_headline %}
-    Messages you sent privately
+    Messages you sent with added security
 {% endblock main_headline %}
-    
-{% block results_header %}
-    <th scope="col">
-       <div class="text">
-            <a href="#To">To</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Date">Date</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Subject">Subject</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Protection">Protection</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Protection">Message ID</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-{% endblock results_header %}
+
+                            {% block email_header %}
+                                <th scope="col">
+                                   <div class="text">
+                                        <a href="#To">To</a>
+                                    </div>
+                                   <div class="clear"></div>
+                                </th>
+                            {% endblock email_header %}
+                            {% block verify_header %}
+                            <th scope="col">
+                               <div class="text">
+                                    <center><a href="#MessageID">Message ID</a></center>
+                                </div>
+                               <div class="clear"></div>
+                            </th>
+                            {% endblock verify_header %}
+
+                                {% block verification_link %}
+                                    <a href="{{ result.verification_link }}">{{ result.record.message_id|safe }}</a>
+                                {% endblock verification_link %}
 
 {% block no_results %}
-    {% blocktrans %}Your GoodCrypto private server has not encrypted any messages for you, yet.{% endblocktrans %}
+    {% blocktrans %}Your GoodCrypto private server has not encrypted nor signed any messages for you, yet.{% endblocktrans %}
 {% endblock no_results %}
 

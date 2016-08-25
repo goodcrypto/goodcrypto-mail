@@ -1,12 +1,13 @@
 '''
     Mail app forms.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-23
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from django import forms
+from django.forms.models import BaseInlineFormSet
 from django.forms.widgets import HiddenInput
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address
@@ -18,7 +19,7 @@ from goodcrypto.mail.utils import config_dkim
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.utils import i18n, is_mta_ok
-from reinhardt.admin_extensions import RequireOneFormSet
+from reinhardt.admin_extensions import ShowOneFormSet
 
 _log = LogFile()
 
@@ -71,7 +72,7 @@ class EncryptionSoftwareForm(forms.ModelForm):
 
     class Meta:
         from goodcrypto.mail.models import EncryptionSoftware
-        
+
         model = EncryptionSoftware
         fields = ['name', 'active', 'classname']
 
@@ -82,9 +83,9 @@ class ContactAdminForm(forms.ModelForm):
 
     class Meta:
         from goodcrypto.mail.models import Contact
-        
+
         model = Contact
-        fields = ['email', 'user_name']
+        fields = ['email', 'user_name', 'outbound_encrypt_policy']
 
     class Media:
         js = ('/static/js/admin_js.js',)
@@ -95,7 +96,7 @@ class ContactsCryptoAdminForm(forms.ModelForm):
         from goodcrypto.mail.models import ContactsCrypto
 
         model = ContactsCrypto
-        fields = ['contact', 'encryption_software', 'fingerprint', 'verified', 'active']
+        fields = ['contact', 'encryption_software', 'fingerprint', 'verified']
 
     class Media:
         js = ('/static/js/admin_js.js',)
@@ -155,9 +156,11 @@ class OptionsAdminForm(forms.ModelForm):
         fields = [
                   'mail_server_address',
                   'goodcrypto_server_url',
-                  'auto_exchange',
-                  'create_private_keys',
+                  #'auto_exchange',
+                  #'create_private_keys',
                   'clear_sign',
+                  'clear_sign_policy',
+                  'require_outbound_encryption',
                   'require_key_verified',
                   'login_to_view_fingerprints',
                   'login_to_export_keys',
@@ -178,8 +181,10 @@ class OptionsAdminForm(forms.ModelForm):
         js = ('/static/js/admin_js.js',)
     """
 
-class ContactsCryptoInlineFormSet(RequireOneFormSet):
+class ContactsCryptoInlineFormSet(BaseInlineFormSet):
 
+    pass
+    """
     def clean(self):
 
         super(ContactsCryptoInlineFormSet, self).clean()
@@ -208,6 +213,9 @@ class ContactsCryptoInlineFormSet(RequireOneFormSet):
         if good_programs < 1:
             raise ValidationError(i18n('You must include at least one encryption program for this contact.'))
 
+        return cleaned_data
+    """
+
 class GetFingerprintForm(forms.Form):
 
     from goodcrypto.mail.models import EncryptionSoftware
@@ -221,12 +229,11 @@ class GetFingerprintForm(forms.Form):
 
 class VerifyFingerprintForm(forms.Form):
 
-    email = forms.EmailField(max_length=254, widget=HiddenInput,)
-    encryption_name = forms.CharField(max_length=100, widget=HiddenInput,)
-    key_id = forms.CharField(max_length=100, widget=HiddenInput,)
+    email = forms.EmailField(max_length=254, widget=HiddenInput, required=False,)
+    encryption_name = forms.CharField(max_length=100, widget=HiddenInput, required=False,)
+    key_id = forms.CharField(max_length=100, widget=HiddenInput, required=False,)
     verified = forms.BooleanField(required=False,
-       help_text=i18n('Add a check mark if you checked the fingerprint is correct for the user.'),)
-
+       help_text=i18n('Add a check mark if you confirmed the fingerprint is correct for the user.'),)
 
 class VerifyMessageForm(forms.Form):
 

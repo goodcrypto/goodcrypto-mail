@@ -1,8 +1,8 @@
 '''
     Send notices from the GoodCrypto Server daemon.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-24
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -10,7 +10,7 @@ import os
 from email.utils import formataddr
 from traceback import format_exc
 
-from goodcrypto.mail.constants import TAG_ERROR, TAG_PREFIX, TAG_WARNING
+from goodcrypto.mail.constants import DOMAIN_USER, TAG_ERROR, TAG_PREFIX, TAG_WARNING
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message.inspect_utils import get_hashcode
@@ -209,7 +209,8 @@ def report_metadata_key_creation_error(email):
     subject = i18n('GoodCrypto - Error while creating a private metadata key')
     body = '{}.\n{}'.format(
         subject,
-       i18n("Metadata cannot be protected until you create a private key for _no_metadata_@{}".format(get_domain())))
+       i18n("Metadata cannot be protected until you create a private key for {}@{}".format(
+           DOMAIN_USER, get_domain())))
     notify_user(email, subject, body)
 
 def report_error_creating_login(email, error_message):
@@ -239,7 +240,8 @@ def report_bad_bundled_encrypted_message(to_domain, bundled_messages):
 
     subject = i18n('{} - Unable to send messages to {domain}'.format(TAG_WARNING, domain=to_domain))
 
-    line1 = i18n('Your GoodCrypto private server tried to send messages to {domain} using the _no_metadata_ keys. It was unable to do so.'.format(domain=to_domain))
+    line1 = i18n('Your GoodCrypto private server tried to send messages to {domain} using the {user} keys. It was unable to do so.'.format(
+        domain=to_domain, user=DOMAIN_USER))
     line2 = i18n("You should verify that you have a contact and key for both your domain and {domain}'s domain.".format(domain=to_domain))
     line3 = i18n("You can disable bundling and padding messages, but it means that your users will be easier to track.")
 

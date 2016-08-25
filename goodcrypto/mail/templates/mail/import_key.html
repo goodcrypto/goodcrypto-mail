@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-04
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -13,15 +13,15 @@
   {% endblock meta_description %}
 
   {% block titlevar %}{% trans 'Import Public Key' %}{% endblock %}
-  
+
 {% block contentpane %}
 
     <div class="row">
-        <h2>{% trans 'Import Public Key' %}</h2> 
+        <h2>{% trans 'Import Public Key' %}</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <form enctype="multipart/form-data" method="POST" action="/mail/import_key/" id="import_form" class="form-horizontal" role="form">{% csrf_token %}
 
         {{ form|bootstrap_horizontal }}
@@ -32,5 +32,9 @@
             </div>
         </div>
     </form>
+
+    <script type="text/javascript">
+    document.getElementById('id_user_name').focus()
+    </script>
 {% endblock contentpane %}
 

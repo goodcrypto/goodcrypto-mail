@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-12-01
+    Copyright 2014-2016 GoodCrypto.
+    Last modified: 2016-01-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -30,7 +30,8 @@
         email = contact.email
     </pre>
 '''
-from goodcrypto.mail import crypto_software
+from string import capwords
+from goodcrypto.mail import constants, crypto_software
 from goodcrypto.mail.i18n_constants import PUBLIC_KEY_INVALID
 from goodcrypto.mail.models import Contact, ContactsCrypto
 from goodcrypto.oce.crypto_exception import CryptoException
@@ -112,8 +113,7 @@ def get(email):
         True
     '''
 
-    address = None
-    contact = None
+    address = contact = None
 
     try:
         if email is not None:
@@ -151,12 +151,20 @@ def add(email, encryption_program, fingerprint=None):
         >>> contact = add(email, None)
         >>> contact.email
         'thomas@goodcrypto.remote'
+        >>> contact.user_name
+        'Thomas'
         >>> get_contacts_crypto(email)
         []
         >>> contact.delete()
         >>> contact = add(None, None)
         >>> contact is None
         True
+        >>> contact = add('_domain_@test.com', None)
+        >>> contact.email
+        '_domain_@test.com'
+        >>> contact.user_name
+        'test.com domain key (system use only)'
+        >>> contact.delete()
     '''
 
     try:
@@ -173,6 +181,26 @@ def add(email, encryption_program, fingerprint=None):
                     contact.save()
             except Contact.DoesNotExist:
                 log_message('creating a contact for {}'.format(email_address))
+                try:
+                    if user_name is None or len(user_name.strip()) <= 0:
+                        from goodcrypto.mail.message.metadata import is_metadata_address
+
+                        user_name = email_address
+                        i = user_name.find('@')
+
+                        # handle domain keys specially
+                        if is_metadata_address(email_address):
+                            if i > 0:
+                                email_domain = user_name[i+1:]
+                            user_name = '{} domain key (system use only)'.format(email_domain)
+                        else:
+                            if i > 0:
+                                user_name = user_name[:i]
+                            user_name = user_name.replace('.', ' ').replace('-', ' ').replace('_', ' ')
+                            user_name = capwords(user_name)
+                except:
+                    pass
+
                 contact = Contact.objects.create(email=email_address, user_name=user_name)
             except Exception:
                 record_exception()
@@ -198,8 +226,8 @@ def add(email, encryption_program, fingerprint=None):
                     contacts_crypto = ContactsCrypto.objects.create(
                         contact=contact, encryption_software=encryption_software,
                         fingerprint=strip_fingerprint(fingerprint))
-                    log_message("created {} crypto record for {} with {} fingerprint".format(
-                        encryption_software, email, fingerprint))
+                    log_message("created {} crypto record for {} with {} fingerprint: {}".format(
+                        encryption_software, email, fingerprint, contacts_crypto is not None))
                 except:
                     record_exception()
                     log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
@@ -252,6 +280,82 @@ def delete(email_or_address):
 
     return result_ok
 
+def use_global_encrypt_outbound_setting(email):
+    '''
+        Determine if the user should receive encrypted email based on the global option.
+
+        # Test extreme case.
+        >>> use_global_encrypt_outbound_setting(None)
+        True
+    '''
+
+    use_global_setting = True
+    contact = get(email)
+    if contact is not None:
+        use_global_setting = contact.outbound_encrypt_policy == constants.USE_GLOBAL_OUTBOUND_SETTING
+        log_message('contact outbound encrypt policy: {}'.format(contact.outbound_encrypt_policy))
+
+    return use_global_setting
+
+def always_encrypt_outbound(email):
+    '''
+        Determine if the user should always receive encrypted email.
+
+        # Test extreme case.
+        >>> always_encrypt_outbound(None)
+        False
+    '''
+
+    always_encrypt = False
+    contact = get(email)
+    if contact is not None:
+        always_encrypt = contact.outbound_encrypt_policy == constants.ALWAYS_ENCRYPT_OUTBOUND
+
+    return always_encrypt
+
+def never_encrypt_outbound(email):
+    '''
+        Determine if the user should never receive encrypted email.
+
+        # Test extreme case.
+        >>> never_encrypt_outbound(None)
+        False
+    '''
+
+    never_encrypt = False
+    contact = get(email)
+    if contact is not None:
+        never_encrypt = contact.outbound_encrypt_policy == constants.NEVER_ENCRYPT_OUTBOUND
+
+    return never_encrypt
+
+def set_outbound_encrypt_policy(email, policy):
+    '''
+        Set the policy for encrypting outbound mail for this user.
+
+        # Test extreme case.
+        >>> set_outbound_encrypt_policy(None, None)
+        False
+        >>> set_outbound_encrypt_policy('edward@goodcrypto.local', None)
+        False
+    '''
+
+    Policies = [
+       constants.USE_GLOBAL_OUTBOUND_SETTING, constants.ALWAYS_ENCRYPT_OUTBOUND, constants.NEVER_ENCRYPT_OUTBOUND]
+
+    contact = get(email)
+    if contact is not None and policy in Policies:
+        if contact.outbound_encrypt_policy != policy:
+            contact.outbound_encrypt_policy = policy
+            contact.save()
+        ok = True
+        log_message('contact outbound encrypt policy: {}'.format(contact.outbound_encrypt_policy))
+    else:
+        ok = False
+        log_message('{} not in: {}'.format(policy, Policies))
+
+    return ok
+
 def get_contacts_crypto(email, encryption_name=None):
     '''
         Get the ContactsCrypto record that matches the encryption_name for this email.
@@ -267,17 +371,14 @@ def get_contacts_crypto(email, encryption_name=None):
         address = get_email(email)
         if email is not None and len(address) > 0:
             if encryption_name is None:
-                query_results = ContactsCrypto.objects.filter(contact__email=address)
+                query_results = ContactsCrypto.objects.filter(
+                  contact__email=address, encryption_software__active=True)
             else:
-                encryption_software = crypto_software.get(encryption_name)
-                if encryption_software is None:
-                    query_results = None
-                else:
-                    query_results = ContactsCrypto.objects.get(
-                       contact__email=address, encryption_software=encryption_software)
+                query_results = ContactsCrypto.objects.get(contact__email=address,
+                  encryption_software__name=encryption_name)
 
             if query_results is None:
-                log_message("{} does not have any encryption software defined".format(address))
+                log_message("{} does not have any active encryption software defined".format(address))
             else:
                 from django.db.models.query import QuerySet
 
@@ -286,7 +387,7 @@ def get_contacts_crypto(email, encryption_name=None):
         else:
             log_message("{} is not parseable".format(email))
     except ContactsCrypto.DoesNotExist:
-        log_message('{} does not use {}'.format(email, encryption_software))
+        log_message('{} does not use {}'.format(email, encryption_name))
     except Contact.DoesNotExist:
         log_message('{} does not use the exist in the contacts table'.format(email))
     except Exception:
@@ -327,7 +428,8 @@ def get_fingerprint(email, encryption_name):
         Get the fingerprint for the encryption software for this email.
 
         >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
-        >>> fingerprint, verified, active = get_fingerprint(EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> fingerprint, verified, active = get_fingerprint(
+        ...    EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> len(fingerprint) > 0
         True
         >>> active
@@ -349,16 +451,19 @@ def get_fingerprint(email, encryption_name):
             from django.db.models.query import QuerySet
 
             if isinstance(contacts_crypto, QuerySet):
-                fingerprint = contacts_crypto[0].fingerprint
-                verified = contacts_crypto[0].verified
-                active = contacts_crypto[0].active
+                cc = contacts_crypto[0]
             else:
-                fingerprint = contacts_crypto.fingerprint
-                verified = contacts_crypto.verified
-                active = contacts_crypto.active
-            log_message("{} {} unformatted fingerprint: {}".format(email, encryption_name, fingerprint))
+                cc = contacts_crypto
 
-    log_message("{} {} fingerprint: {} verified: {}".format(email, encryption_name, fingerprint, verified))
+            fingerprint = cc.fingerprint
+            verified = cc.verified
+            active = cc.contact.outbound_encrypt_policy in constants.ACTIVE_ENCRYPT_POLICIES
+            if fingerprint is None:
+                log_message("{} does not have {} fingerprint".format(email, encryption_name))
+            else:
+                log_message("length of {} {} unformatted fingerprint: {}".format(email, encryption_name, len(fingerprint)))
+
+            log_message("{} verified: {} active: {}".format(email, verified, active))
 
     return fingerprint, verified, active
 
@@ -657,12 +762,9 @@ def get_encryption_names(email):
         if query_results:
             log_message("{} has {} address(es)".format(address, len(query_results)))
             for contacts_encryption in query_results:
-                if contacts_encryption.active:
-                    encryption_name = contacts_encryption.encryption_software.name
-                    encryption_names.append(encryption_name)
-                    log_message("{} encryption software: {}".format(email, encryption_name))
-                else:
-                    log_message("{} encryption software not active: {}".format(email, encryption_name))
+                encryption_name = contacts_encryption.encryption_software.name
+                encryption_names.append(encryption_name)
+                log_message("{} encryption software: {}".format(email, encryption_name))
         else:
             log_message("no encryption software for this contact")
     else:
@@ -715,22 +817,22 @@ def get_contact_list(encryption_name=None):
     return contact_list
 
 def get_metadata_domains():
-    ''' 
-        Get a list of metadata domains. 
+    '''
+        Get a list of metadata domains.
 
         # Test extreme case. See unittests to see how to use this function.
         >>> type(get_metadata_domains())
         <type 'list'>
     '''
 
-    from goodcrypto.mail.message.metadata import get_metadata_user
+    from goodcrypto.mail.utils import get_domain_user
 
     metadata_list = []
     try:
-        # get all the active metadata keys
+        # get all the active domain keys
         query_results = ContactsCrypto.objects.filter(
-            contact__email__startswith=get_metadata_user(),
-            encryption_software__active=True)
+            contact__email__startswith=get_domain_user(),
+            contact__outbound_encrypt_policy__in=[constants.USE_GLOBAL_OUTBOUND_SETTING, constants.ALWAYS_ENCRYPT_OUTBOUND])
 
         if query_results:
             for contacts_encryption in query_results:

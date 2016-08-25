@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -25,7 +25,7 @@ from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 
 
-class Filters(object):
+class Filter(object):
     '''
         Filters a message through the encrypt or decrypt filter as needed.
 
@@ -39,8 +39,8 @@ class Filters(object):
         '''
             >>> # In honor of John Kiriakou, who went to prison for exposing CIA torture.
             >>> # In honor of asn, developer of Obfsproxy.
-            >>> filters = Filters('john@goodcrypto.local', 'asn@goodcypto.remote', 'message')
-            >>> filters is not None
+            >>> filter = Filter('john@goodcrypto.local', 'asn@goodcypto.remote', 'message')
+            >>> filter is not None
             True
         '''
         self.log = self.out_message = None
@@ -127,6 +127,9 @@ class Filters(object):
         ''' Process an inbound message, decrypting if appropriate. '''
 
         try:
+            debundled_message = None
+            filtered = crypted = processed = False
+
             if self.DEBUGGING:
                 self.log_message(crypto_message.get_email_message().to_string())
 
@@ -156,11 +159,11 @@ class Filters(object):
             self.drop_message(dkim_exception)
             self.out_message = None
         except CryptoException as crypto_exception:
-            if not debundled_message.is_dropped():
+            if debundled_message is not None and not debundled_message.is_dropped():
                 self.wrap_inbound_message(crypto_exception, debundled_message)
             self.out_message = None
         except MessageException as message_exception:
-            if not debundled_message.is_dropped():
+            if debundled_message is not None and not debundled_message.is_dropped():
                 self.wrap_inbound_message(message_exception, debundled_message)
             self.out_message = None
         except Exception as exception:
@@ -190,8 +193,8 @@ class Filters(object):
         '''
             Get the message after it has been processed.
 
-            >>> filters = Filters('root', 'root', 'bad message')
-            >>> filters.get_processed_message()
+            >>> filter = Filter('root', 'root', 'bad message')
+            >>> filter.get_processed_message()
         '''
         return self.out_message
 
@@ -235,8 +238,8 @@ class Filters(object):
             Reject a message that had an unexpected error.
 
             >>> # This message will fail if testing on dev system
-            >>> filters = Filters('root', 'root', 'bad message')
-            >>> filters.reject_message('Unknown message')
+            >>> filter = Filter('root', 'root', 'bad message')
+            >>> filter.reject_message('Unknown message')
             u'support@goodcrypto.local'
         '''
         try:
@@ -305,9 +308,9 @@ class Filters(object):
             >>> import os.path
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami
-            >>> filters = Filters('edward@goodcrypto.local', ['chelsea@goodcrypto.local'], 'message')
-            >>> filters.log_message('test')
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.filters.log'))
+            >>> filter = Filter('edward@goodcrypto.local', ['chelsea@goodcrypto.local'], 'message')
+            >>> filter.log_message('test')
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.filter.log'))
             True
         '''
 

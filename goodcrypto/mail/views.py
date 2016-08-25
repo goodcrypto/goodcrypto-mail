@@ -1,8 +1,8 @@
 '''
     Mail views
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-23
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-04
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -14,12 +14,11 @@ from django.template.context_processors import csrf
 
 from goodcrypto.mail import config_postfix, contacts, crypto_software, forms, options
 from goodcrypto.mail.api import MailAPI
+from goodcrypto.mail.constants import ACTIVE_ENCRYPT_POLICIES
 from goodcrypto.mail.forms import PrepPostfixForm
 from goodcrypto.mail.i18n_constants import ERROR_PREFIX, PUBLIC_KEY_INVALID
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import history
-from goodcrypto.mail.message.metadata import get_metadata_user
-from goodcrypto.mail.models import MessageHistory
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
@@ -32,12 +31,13 @@ from syr.utils import get_remote_ip
 
 ENCRYPTED_STATUS = i18n('encrypted')
 DECRYPTED_STATUS = i18n('decrypted')
+SIGNED_STATUS = i18n('signed')
 NOT_SENT_PRIVATELY = i18n('GoodCrypto did <font color="red">not</font> send message privately from <strong>{email}</strong> (verification code: {verification_code}).')
 TAMPERED_SENT_WARNING = i18n("If the message has a tag which states it was sent privately from {email} and you're double checked the verification code, then someone probably tampered with the message.")
-NOT_RECEIVED_PRIVATELY = i18n('GoodCrypto did <font color="red">not</font> receive a message privately for <strong>{email}</strong> with the verification code: <strong>{verification_code}</strong>')
+NOT_RECEIVED_PRIVATELY = i18n('GoodCrypto did <font color="red">not</font> receive a message for <strong>{email}</strong> with the verification code: <strong>{verification_code}</strong>')
 TAMPERED_RECEIVED_WARNING = i18n("If the message has a tag which states it was received privately and you're double checked the verification code, then someone probably tampered with the message.")
-NOT_EXCHANGED_PRIVATELY = i18n('GoodCrypto did <font color="red">not</font> exchange a message privately for <strong>{email}</strong> with the verification code: <strong>{verification_code}</strong>')
-TAMPERED_EXCHANGED_WARNING = i18n("If the message has a tag which states it was exchanged privately and you're double checked the verification code, then someone probably tampered with the message.")
+NOT_EXCHANGED_PRIVATELY = i18n('GoodCrypto did <font color="red">not</font> exchange a message for <strong>{email}</strong> with the verification code: <strong>{verification_code}</strong>')
+TAMPERED_EXCHANGED_WARNING = i18n("If the message has a tag which states it was exchanged privately or signed and you're double checked the verification code, then someone probably tampered with the message.")
 
 log = None
 
@@ -82,6 +82,7 @@ def show_protection(request):
             'bundle_and_pad': options.bundle_and_pad(),
             'require_key_verified': options.require_key_verified(),
             'filter_html': options.filter_html(),
+            'require_outbound_encryption': options.require_outbound_encryption(),
             'clear_sign': options.clear_sign_email(),
             'add_dkim_sig': options.add_dkim_sig(),
         }
@@ -131,7 +132,8 @@ def view_fingerprint(request):
                                             'encryption_name': encryption_software.name,
                                             'fingerprint': format_fingerprint(fingerprint),
                                             'checked': checked,
-                                            'active': active},
+                                            'active': active,
+                                            'requires': options.require_key_verified()},
                                             context_instance=RequestContext(request))
 
                     if response is None:
@@ -174,15 +176,16 @@ def verify_fingerprint(request):
                     key_id = form.cleaned_data['key_id']
 
                     contacts_crypto = contacts.get_contacts_crypto(email, encryption_name)
-                    active = contacts_crypto.active
                     if (contacts_crypto.fingerprint == strip_fingerprint(key_id) and
                         contacts_crypto.verified != verified):
 
                         contacts_crypto.verified = verified
                         contacts_crypto.save()
+                        log_message('updated verify field for {}'.format(email))
 
                     email = contacts_crypto.contact.email
-                    encryption_software = contacts_crypto.encryption_software
+                    active = contacts_crypto.contact.outbound_encrypt_policy in ACTIVE_ENCRYPT_POLICIES
+                    encryption_software = contacts_crypto.encryption_software.name
                     key_id = contacts_crypto.fingerprint
                     page_title = i18n('{encryption_software} fingerprint for {email}'.format(
                         encryption_software=encryption_software, email=email))
@@ -222,7 +225,7 @@ def verify_crypted(request):
                    request.user.email, form.cleaned_data['verification_code'])
                 if 'error_message' in params and params['error_message'] is not None:
                     log_message('retry verification code: {}'.format(urllib.quote(form.cleaned_data['verification_code'])))
-                    retry_params = get_crypted_params(
+                    retry_params, __ = get_crypted_params(
                        request.user.email, urllib.quote(form.cleaned_data['verification_code']))
                     if 'error_message' in retry_params and retry_params['error_message'] is None:
                         params = retry_params
@@ -264,7 +267,7 @@ def msg_encrypted(request, verification_code):
             error_message = None
 
             email = request.user.email
-            records = history.get_encrypted_messages(email)
+            records = history.get_outbound_messages(email)
             if records:
                 # narrow the messages to those matching the verification_code
                 records = records.filter(verification_code=urllib.unquote(verification_code))
@@ -276,14 +279,24 @@ def msg_encrypted(request, verification_code):
                     pass
 
             if records:
-                main_headline = i18n('Verified')
-                subheadline = i18n('Message sent privately')
+                sent_privately = sent_with_sig = False
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id,
-                                    history.get_status(record.status),))
+                    results.append({'email': record.sender, 'record': record})
+                    if record.content_protected or record.metadata_protected:
+                        sent_privately = True
+                    if record.private_signed or record.clear_signed or record.dkim_signed:
+                        sent_with_sig = True
+
+                main_headline = i18n('Verified')
+                if sent_privately and sent_with_sig:
+                    subheadline = i18n('Message sent privately and signed')
+                elif sent_privately:
+                    subheadline = i18n('Message sent privately')
+                elif sent_with_sig:
+                    subheadline = i18n('Message sent signed')
             else:
                 main_headline = i18n('<font color="red">Not</font> Verified')
-                subheadline = i18n('Message not sent privately')
+                subheadline = i18n('Message not sent privately nor signed')
                 error1 = NOT_SENT_PRIVATELY.format(email=email, verification_code=verification_code)
                 error2 = TAMPERED_SENT_WARNING.format(email=email)
                 error_message = '{} {}'.format(error1, error2)
@@ -316,12 +329,13 @@ def show_encrypted_history(request):
             error_message = None
 
             template = 'mail/encrypted_history.html'
-            records = history.get_encrypted_messages(request.user.email)
+            records = history.get_outbound_messages(request.user.email)
             if records:
                 for record in records:
-                    results.append(
-                     (record.recipient, record.message_date, record.subject,
-                     history.get_status(record.status), record.message_id,))
+                    verification_link = get_formatted_verification_link(
+                        record.verification_code, 'msg-encrypted')
+                    results.append({
+                      'email': record.recipient, 'record': record, 'verification_link': verification_link})
 
             params = {'email': request.user.email,
                       'results': results,
@@ -350,21 +364,30 @@ def msg_decrypted(request, verification_code):
             error_message = None
 
             email = request.user.email
-            records = history.get_decrypted_messages(email)
+            records = history.get_inbound_messages(email)
             if records:
                 # narrow the messages to those matching the verification_code
                 records = records.filter(verification_code=urllib.unquote(verification_code))
 
             if records:
-                main_headline = i18n('Verified')
-                subheadline = i18n('Message received privately')
+                received_privately = received_with_sig = False
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id,
-                                    history.get_status(record.status),
-                                    record.verification_code,))
+                    results.append({'email': record.sender, 'record': record})
+                    if record.content_protected or record.metadata_protected:
+                        received_privately = True
+                    if record.private_signed or record.clear_signed or record.dkim_signed:
+                        received_with_sig = True
+
+                main_headline = i18n('<font color="green">Verified</font>')
+                if received_privately and received_with_sig:
+                    subheadline = i18n('Message received privately and signed')
+                elif received_privately:
+                    subheadline = i18n('Message received privately')
+                elif received_with_sig:
+                    subheadline = i18n('Message received signed')
             else:
                 main_headline = i18n('<font color="red">Not</font> Verified')
-                subheadline = i18n('Message not received privately')
+                subheadline = i18n('Message not received privately nor signed.')
                 error1 = NOT_RECEIVED_PRIVATELY.format(email=email, verification_code=verification_code)
                 error2 = TAMPERED_RECEIVED_WARNING
                 error_message = '{} {}'.format(error1, error2)
@@ -398,13 +421,13 @@ def show_decrypted_history(request):
             results = []
             error_message = None
 
-            records = history.get_decrypted_messages(request.user.email)
+
+            records = history.get_inbound_messages(request.user.email)
             if records:
                 for record in records:
-                    verification = get_formatted_verification_code(record.verification_code, 'msg-decrypted')
-                    results.append(
-                     (record.sender, record.message_date, record.subject,
-                     history.get_status(record.status), verification,))
+                    verification_link = get_formatted_verification_link(record.verification_code, 'msg-decrypted')
+                    results.append({
+                      'email': record.sender, 'record': record, 'verification_link': verification_link})
             params = {'email': request.user.email,
                       'results': results,
                       'error_message': error_message}
@@ -644,6 +667,8 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
                     log_message('verified fingerprint')
                 else:
                     fingerprint_ok = False
+                    log_message('possible fingerprint: {}'.format(strip_fingerprint(possible_fingerprint).lower()))
+                    log_message('imported fingerprint: {}'.format(strip_fingerprint(fingerprint).lower()))
         except:
             record_exception()
             log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
@@ -660,7 +685,11 @@ def _import_key_add_contact(public_key, user_name, possible_fingerprint, id_fing
     if result_ok:
         i = 0
         for (user_id, fingerprint) in id_fingerprint_pairs:
-            contact = contacts.add(user_id, plugin.get_name())
+            if user_name is not None:
+                full_email = '{} <{}>'.format(user_name, user_id)
+            else:
+                full_email = user_id
+            contact = contacts.add(full_email, plugin.get_name())
             if contact is None:
                 log_message('unable to add contact for {}'.format(user_id))
             else:
@@ -703,22 +732,15 @@ def api(request):
 def show_fingerprint(request, email, fingerprint, verified, active, page_title):
     ''' Show the fingerprint. '''
 
-    if verified:
-        verified_msg = i18n('Yes')
-    else:
-        verified_msg = i18n('No')
-    if active:
-        active_msg = i18n('Yes')
-    else:
-        active_msg = i18n('No')
-
     log_message('showing {} fingerprint verified: {}'.format(email, verified))
+    log_message('require verification {}'.format(options.require_key_verified()))
 
     template = 'mail/show_fingerprint.html'
     data = {'page_title': page_title,
             'fingerprint': format_fingerprint(fingerprint),
-            'verified': verified_msg,
-            'active': active_msg}
+            'verified': verified,
+            'active': active,
+            'requires': options.require_key_verified()}
     return render_to_response(template, data, context_instance=RequestContext(request))
 
 def get_crypted_params(email, verification_code):
@@ -736,29 +758,32 @@ def get_crypted_params(email, verification_code):
                 record = records[0]
                 if record.sender == email:
                     main_headline = i18n('Verified')
-                    subheadline = i18n('Message sent privately')
+                    if record.content_protected or record.metadata_protected:
+                        subheadline = i18n('Message sent privately')
+                        status = ENCRYPTED_STATUS
+                    else:
+                        subheadline = i18n('Message sent with signature')
+                        status = SIGNED_STATUS
                     for record in records:
-                        results.append((record.sender, record.message_date, record.message_id,
-                                        history.get_status(record.status),))
-                    status = ENCRYPTED_STATUS
+                        results.append({'email': record.sender, 'record': record})
                 else:
                     main_headline = i18n('Verified')
-                    subheadline = i18n('Message received privately')
+                    if record.content_protected or record.metadata_protected:
+                        subheadline = i18n('Message received privately')
+                        status = DECRYPTED_STATUS
+                    else:
+                        subheadline = i18n('Message received with signature')
+                        status = SIGNED_STATUS
                     for record in records:
-                        results.append((record.sender, record.message_date, record.message_id,
-                                        history.get_status(record.status),
-                                        record.verification_code,))
-                    status = DECRYPTED_STATUS
+                        results.append({'email': record.sender, 'record': record})
             else:
                 main_headline = i18n('Verified')
                 subheadline = i18n('Exchanged the messages privately')
                 for record in records:
-                    results.append((record.sender, record.message_date, record.message_id,
-                                    history.get_status(record.status),
-                                    record.verification_code,))
+                    results.append({'email': record.sender, 'record': record})
         else:
             main_headline = i18n('<font color="red">Not</font> Verified')
-            subheadline = i18n('Message not exchanged privately')
+            subheadline = i18n('Message not exchanged privately nor signed')
             error1 = NOT_EXCHANGED_PRIVATELY.format(email=email, verification_code=verification_code)
             error2 = TAMPERED_EXCHANGED_WARNING
             error_message = '{} {}'.format(error1, error2)
@@ -776,17 +801,17 @@ def get_crypted_params(email, verification_code):
 
     return params, status
 
-def get_formatted_verification_code(verification_code, partial_link):
+def get_formatted_verification_link(verification_code, partial_link):
     ''' Create a link for the verification code. '''
 
     try:
         code = verification_code
         quoted_code = urllib.quote(code)
-        verification = '<a href="/mail/{}/{}">{}</a>'.format(partial_link, quoted_code, code)
+        link = '/mail/{}/{}'.format(partial_link, quoted_code, code)
     except:
-        verification = code
+        link = code
 
-    return verification
+    return link
 
 def show_metadata_domains(request):
     '''Show domains that have metadata keys.'''
@@ -805,6 +830,8 @@ def show_metadata_domains(request):
 
             template = 'mail/metadata_domains.html'
             params = {'metadata_list': metadata_list,
+                      'encrypt_metadata': options.encrypt_metadata(),
+                      'require_key_verified': options.require_key_verified(),
                       'error_message': error_message}
             response = render_to_response(
                 template, params, context_instance=RequestContext(request))

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2015 GoodCrypto
-    Last modified: 2015-11-01
+    Last modified: 2016-01-08
 {% endcomment %}
 {% load i18n custom %}
 
@@ -24,27 +24,54 @@
 
     <div class="row">
         <div class="form-group">
-            <label class="control-label col-sm-2 col-lg-2 " for="fingerprint_label">{% trans 'Fingerprint' %}</label>
-            <div class=" col-sm-10 col-lg-10 ">
+            <label class="control-label col-sm-3 col-lg-3" for="fingerprint_label">{% trans 'Fingerprint' %}</label>
+            <div class=" col-sm-9 col-lg-9 ">
                 {{ fingerprint }}
             </div>
         </div>
     </div>
 
+    <div class="row">&nbsp;</div>
+
     <div class="row">
         <div class="form-group">
-            <label class="control-label col-sm-2 col-lg-2 " for="verified_label">{% trans 'Use key to encrypt?' %}</label>
-            <div class=" col-sm-10 col-lg-10 ">
-                {{ active }}
+            <label class="control-label col-sm-3 col-lg-3" for="verified_label">{% trans 'Uses encryption' %}</label>
+            <div class=" col-sm-9 col-lg-9 ">
+                {% if active %}
+                    <p><img alt="Yes" src="/static/images/general/check_mark_small.png"></p>
+                {% else %}
+                    <p><img alt="No" src="/static/images/general/error_mark_small.png"></p>
+                {% endif %}
             </div>
         </div>
     </div>
 
+    <div class="row">&nbsp;</div>
+
     <div class="row">
         <div class="form-group">
-            <label class="control-label col-sm-2 col-lg-2 " for="verified_label">{% trans 'Verified?' %}</label>
-            <div class=" col-sm-10 col-lg-10 ">
-                {{ verified }}
+            <label class="control-label col-sm-3 col-lg-3" for="verified_label">{% trans 'Requires verification' %}</label>
+            <div class=" col-sm-9 col-lg-9 ">
+                {% if requires %}
+                    <p><img alt="Yes" src="/static/images/general/check_mark_small.png"> &nbsp;&nbsp; {% trans 'The key must be verified before it can be used.' %}</p>
+                {% else %}
+                    <p><img alt="No" src="/static/images/general/error_mark_small.png"> &nbsp;&nbsp; {% trans 'The key will be used even if it has not been verified.' %}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row">&nbsp;</div>
+
+    <div class="row">
+        <div class="form-group">
+            <label class="control-label col-sm-3 col-lg-3" for="verified_label">{% trans 'Verified?' %}</label>
+            <div class=" col-sm-9 col-lg-9 ">
+                {% if verified %}
+                    <p><img alt="Yes" src="/static/images/general/check_mark_small.png"></p>
+                {% else %}
+                    <p><img alt="No" src="/static/images/general/error_mark_small.png"></p>
+                {% endif %}
             </div>
         </div>
     </div>

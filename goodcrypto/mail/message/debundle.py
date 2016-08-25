@@ -1,6 +1,6 @@
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -86,7 +86,7 @@ class Debundle(object):
                     if not dkim_sig_verified and options.verify_dkim_sig():
                         self.crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(
                             self.crypto_message)
-                        self.log_message('verified dkim signature ok: {}'.format(dkim_sig_verified))
+                        self.log_message('dkim signature must be verified: {}'.format(dkim_sig_verified))
 
                     self.decrypt_message()
 
@@ -119,7 +119,7 @@ class Debundle(object):
         if options.verify_dkim_sig():
             # verify dkim sig before any changes to message happen
             self.crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(self.crypto_message)
-            self.log_message('verified dkim signature ok: {}'.format(dkim_sig_verified))
+            self.log_message('verified metadata dkim signature ok: {}'.format(dkim_sig_verified))
 
         # the metadata wrapper always includes its own pub key in the header
         # and it must be imported if we don't already have it
@@ -151,8 +151,6 @@ class Debundle(object):
                 wrapped_crypto_message.set_metadata_crypted(True)
                 wrapped_crypto_message.set_metadata_crypted_with(decrypted_with)
                 self.log_message('created decrypted wrapped message')
-                self.log_message("metadata decrypted with: {}".format(
-                    wrapped_crypto_message.is_metadata_crypted_with()))
                 if self.DEBUGGING:
                     self.log_message('DEBUG: logged decrypted wrapped headers in goodcrypto.message.utils.log')
                     utils.log_message_headers(wrapped_crypto_message, tag='decrypted wrapped headers')
@@ -165,7 +163,7 @@ class Debundle(object):
         # use the new inner crypto message
         self.crypto_message = wrapped_crypto_message
         self.log_message("metadata decrypted with: {}".format(
-            self.crypto_message.is_metadata_crypted_with()))
+            self.crypto_message.get_metadata_crypted_with()))
 
         return dkim_sig_verified
 
@@ -255,7 +253,7 @@ class Debundle(object):
             if options.verify_dkim_sig():
                 # verify dkim sig before any changes to message happen
                 inner_crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(inner_crypto_message)
-                self.log_message('verified dkim signature ok: {}'.format(dkim_sig_verified))
+                self.log_message('verified bundled dkim signature ok: {}'.format(dkim_sig_verified))
 
             if self.DEBUGGING:
                 self.log_message('DEBUG: logged bundled inner headers in goodcrypto.message.utils.log')
@@ -349,7 +347,7 @@ class Debundle(object):
                     self.log_message('discarded badly formatted message')
                 else:
                     if self.DEBUGGING: self.log_message('DEBUG: content of part: {}'.format(content))
-                    metadata_crypted_with = self.crypto_message.is_metadata_crypted_with()
+                    metadata_crypted_with = self.crypto_message.get_metadata_crypted_with()
 
                     inner_crypto_message = CryptoMessage(EmailMessage(original_message))
                     inner_crypto_message.set_smtp_sender(sender)
@@ -359,7 +357,7 @@ class Debundle(object):
                     self.log_message('created message from {}'.format(sender))
                     self.log_message('created message to {}'.format(recipient))
                     self.log_message("metadata decrypted with: {}".format(
-                        inner_crypto_message.is_metadata_crypted_with()))
+                        inner_crypto_message.get_metadata_crypted_with()))
                     if self.DEBUGGING: self.log_message('original message: {}'.format(original_message))
         except:
             inner_crypto_message = None

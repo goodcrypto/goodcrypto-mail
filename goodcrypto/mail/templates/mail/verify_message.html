@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-01
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-04
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -31,5 +31,9 @@
             </div>
         </div>
     </form>
+
+    <script type="text/javascript">
+    document.getElementById('id_verification_code').focus()
+    </script>
 {% endblock contentpane %}
 

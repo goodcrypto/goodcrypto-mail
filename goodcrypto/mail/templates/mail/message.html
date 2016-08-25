@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% comment %}
+
+    Copyright 2016 GoodCrypto
+    Last modified: 2016-02-04
+
+{% endcomment %}
+{% load i18n bootstrap custom %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static "css/admin.css" %}" />
+{% endblock %}
+
+{% block extrascript %}
+  {{ block.super }}
+    <script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
+{% endblock extrascript %}
+
+{% block contentpane %}
+
+    <div class="row">
+        <h2>
+            {% block main_headline %}
+            {% endblock main_headline %}
+        </h2>
+    </div>
+    <div class="row">
+        <h3>
+            {% block subheadline %}
+            {% endblock subheadline %}
+        </h3>
+    </div>
+
+    <div class="row">
+        {% if results %}
+            <form id="changelist-form" action="" method="post"{% csrf_token %}
+                <div class="results">
+                    <table class="table table-hover table-responsive" id="result_list">
+                        <thead>
+                            <tr>
+                                {% block email_header %}
+                                {% endblock email_header %}
+                                <th scope="col">
+                                   <div class="text">
+                                        <a href="#Date">Date</a>
+                                    </div>
+                                   <div class="clear"></div>
+                                </th>
+                                <th scope="col">
+                                   <div class="text">
+                                        <a href="#Subject">Subject</a>
+                                    </div>
+                                   <div class="clear"></div>
+                                </th>
+                                <th scope="col">
+                                   <div class="text">
+                                        <center>
+                                            <abbr title="Metadata encrypted">
+                                                <a href="#Metadata">Metadata<br/>Private</a>
+                                            </abbr>
+                                        </center>
+                                    </div>
+                                   <div class="clear"></div>
+                                </th>
+                                <th scope="col">
+                                   <div class="text">
+                                        <center>
+                                            <abbr title="Body of message and attachments encrypted">
+                                                <a href="#Content">Content<br/>Private</a>
+                                            </abbr>
+                                        </center>
+                                    </div>
+                                   <div class="clear"></div>
+                                </th>
+                                {% block sig_headers %}
+                                {% endblock sig_headers %}
+                                {% block verify_header %}
+                                {% endblock verify_header %}
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for result in results %}
+                            <tr class="{% cycle 'row1' 'row2' %}">
+                                <td scope="col">
+                                   <div class="text">
+                                        {{ result.email }}
+                                    </div>
+                                </td>
+                                <td scope="col">
+                                   <div class="text">
+                                        {{ result.record.message_date }}
+                                    </div>
+                                </td>
+                                <td scope="col">
+                                   <div class="text">
+                                        {{ result.record.subject }}
+                                    </div>
+                                </td>
+                                <td scope="col">
+                                   <center>
+                                    {% if result.record.metadata_protected %}
+                                        <abbr title="Metadata was encrypted">
+                                            <img alt="Yes" src="/static/images/general/check_mark_small.png">
+                                        </abbr>
+                                    {% else %}
+                                        <abbr title="Metadata was NOT encrypted">
+                                            <img alt="No" src="/static/images/general/error_mark_small.png">
+                                        </abbr>
+                                    {% endif %}
+                                    </center>
+                                </td>
+                                <td scope="col">
+                                   <center>
+                                    {% if result.record.metadata_protected and result.record.content_protected %}
+                                        <abbr title="The body and attachments were protected by layered encryption"><img alt="Yes" src="/static/images/general/check_mark_small.png">
+                                            <!-- &nbsp;&nbsp;
+                                            <img alt="Yes" src="/static/images/general/check_mark_small.png">-->
+                                            <font color="green">+</font></abbr>
+                                    {% elif result.record.metadata_protected or result.record.content_protected %}
+                                        <abbr title="The body and attachments were encrypted"><img alt="Yes" src="/static/images/general/check_mark_small.png"></abbr>
+                                    {% else %}
+                                        <abbr title="The body and attachments were NOT encrypted"><img alt="No" src="/static/images/general/error_mark_small.png"></abbr>
+                                    {% endif %}
+                                    </center>
+                                </td>
+                                {% block signatures %}
+                                {% endblock signatures %}
+                                {% block verification %}
+                                {% endblock verification %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        {% elif error_message %}
+            <p>&nbsp;</p>
+            {% block error_details %}
+            {% endblock error_details %}
+            <p class="dropcap">
+                {{ error_message|safe }}
+            </p>
+        {% else %}
+            <p>&nbsp;</p>
+            <p class="dropcap">
+                {% block no_results %}
+                {% endblock no_results %}
+            </p>
+        {% endif %}
+    </div>
+
+    {% if results %}
+        {% if results|length > 1 %}
+            <script type="text/javascript">
+            $(document).ready(function()
+                {
+                    <!-- $("#result_list").tablesorter( {sortList: [[0,0], [1,0]]} );-->
+                    $("#result_list").tablesorter({sortList: [[1,0]]} );
+                }
+            );
+            </script>
+        {% endif %}
+    {% endif %}
+{% endblock contentpane %}
+

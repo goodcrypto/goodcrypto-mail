@@ -1,7 +1,7 @@
 #! /usr/bin/python
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,7 +16,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 
 from goodcrypto.mail.constants import TAG_ERROR
-from goodcrypto.mail.message.filters import Filters
+from goodcrypto.mail.message.filter import Filter
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.message_rq import rq_message
 from goodcrypto.mail.utils import email_in_domain, get_admin_email
@@ -78,9 +78,9 @@ class Main(object):
 
                 # if we couldn't queue the message
                 if not rqueued:
-                    # we're not calling Filters.process(), just reinjecting the message
-                    filters = Filters(self.sender, self.recipients, self.in_message)
-                    if not filters.reinject_message(message=self.in_message):
+                    # we're not calling Filter.process(), just reinjecting the message
+                    filter = Filter(self.sender, self.recipients, self.in_message)
+                    if not filter.reinject_message(message=self.in_message):
                         exit_result = self.ERROR_EXIT
 
             else:
@@ -96,8 +96,8 @@ class Main(object):
                 to_address = self.recipients[0]
             else:
                 to_address = get_admin_email()
-            filters = Filters(self.sender, to_address, self.in_message)
-            filters.reject_message(str(exception), message=self.in_message)
+            filter = Filter(self.sender, to_address, self.in_message)
+            filter.reject_message(str(exception), message=self.in_message)
         except IOError as io_error:
             # don't set the exit code because we don't want to reveal too much to the sender
             record_exception()
@@ -106,8 +106,8 @@ class Main(object):
                 to_address = self.recipients[0]
             else:
                 to_address = get_admin_email()
-            filters = Filters(self.sender, to_address, self.in_message)
-            filters.reject_message(str(io_error), message=self.in_message)
+            filter = Filter(self.sender, to_address, self.in_message)
+            filter.reject_message(str(io_error), message=self.in_message)
 
         self.log_message('finished goodcrypto mail filter')
 

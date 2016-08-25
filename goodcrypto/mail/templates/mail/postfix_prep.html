@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-22
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-04
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
@@ -30,7 +30,7 @@
                 <strong>Copy and paste the content from your mail server's postfix configuration files.</strong>
             </div>
         </div>
-        
+
         {% if error_message %}
         <div class="form-group">
             <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
@@ -48,5 +48,17 @@
             </div>
         </div>
     </form>
+
+    <script type="text/javascript">
+        var serverInput = $('#id_goodcrypto_private_server_ip');
+
+        // Multiply by 2 to ensure the cursor always ends up at the end;
+        // Opera sometimes sees a carriage return as 2 characters.
+        var strLength = serverInput.val().length * 2;
+
+        serverInput.focus();
+        serverInput[0].setSelectionRange(strLength, strLength);
+
+    </script>
 {% endblock contentpane %}
 

@@ -2,7 +2,7 @@
     Constants for GoodCrypto app.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-30
+    Last modified: 2015-01-25
 '''
 
 import os, os.path

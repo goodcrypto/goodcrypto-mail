@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% comment %}
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-07
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-04
 
 {% endcomment %}
 {% load i18n custom %}
@@ -24,6 +24,29 @@
         <h3>Domains Ready to Protect Metadata</h3>
     </div>
 
+    <div class="row">
+        <p>&nbsp;</p>
+        <p class="dropcap">
+        {% if encrypt_metadata %}
+            {% if require_key_verified %}
+                All messages to email addresses that use any of the following domains that
+                have been verified will automatically have the content plus the metadata protected.
+            {% else %}
+                All messages to email addresses that use any of the following domains
+                will automatically have the content plus the metadata protected.
+            {% endif %}
+        {% else %}
+            {% if require_key_verified %}
+                Currently your mail administrator has disabled protecting your metadata. When it is
+                re-enabled, the following domains that have been verified are ready to protect metadata.
+            {% else %}
+                Currently your mail administrator has disabled protecting your metadata. When it is
+                re-enabled, the following domains are ready to protect metadata.
+            {% endif %}
+        {% endif %}
+        </p>
+    </div>
+
     <div class="col-md-12 col-xm-6">
         <div class="row">&nbsp;</div>
         <div class="table-responsive">
@@ -33,7 +56,9 @@
                         {% trans 'Domain' %}
                     </th>
                     <th>
-                        {% trans 'Verified' %}
+                        <center>
+                            {% trans 'Verified' %}
+                        </center>
                     </th>
                     <th>
                         {% trans 'Fingerprint' %}
@@ -44,16 +69,34 @@
                     <tr>
                         <td> {{ domain }} </td>
                         <td>
+                            <center>
                             {% if verified %}
-                                <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                                <abbr title="Key verified and ready to protect metadata.">
+                                    <img alt="{% trans 'Yes' %}" src="/static/images/general/check_mark_small.png">
+                                </abbr>
                             {% else %}
-                                <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                                {% if require_key_verified %}
+                                    <abbr title="Key cannot be used to protect metadata until it's verified. Contact your mail administrator.">
+                                        <img alt="{% trans 'No' %}" src="/static/images/general/error_mark_small.png">
+                                    </abbr>
+                                {% else %}
+                                    <abbr title="Key not verified, but it can be used to protect metadata. We strongly recommend the key be verified before use.">
+                                        <img alt="{% trans 'No*' %}" src="/static/images/general/warning_mark_small.png">
+                                    </abbr>
+                                {% endif %}
                             {% endif %}
+                            </center>
                         </td>
                         <td> {{ fingerprint }} </td>
                     </tr>
                 {% endfor %}
             </table>
+        </div>
+
+        <div>
+            <p>&nbsp;</p>
+            <p>
+            </p>
         </div>
     </div>
 {% endblock contentpane %}

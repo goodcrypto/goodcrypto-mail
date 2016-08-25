@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-13
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-30
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,7 +15,7 @@ from random import random
 from goodcrypto.mail import contacts, options, user_keys
 from goodcrypto.mail.crypto_software import get_classname
 from goodcrypto.mail.internal_settings import get_domain
-from goodcrypto.mail.message import constants, history, metadata, utils
+from goodcrypto.mail.message import constants, metadata, utils
 from goodcrypto.mail.message.crypto_message import CryptoMessage
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.inspect_utils import get_charset, is_multipart_message
@@ -48,8 +48,12 @@ def encrypt_text_message(crypto_message, crypto, users_dict):
         ciphertext, error_message = encrypt_byte_array(bytearray(content), crypto, users_dict)
 
         #  if we encrypted successfully, save the results
-        if ciphertext != None and len(ciphertext) > 0:
+        if ciphertext is not None and len(ciphertext) > 0:
             crypto_message.get_email_message().get_message().set_payload(ciphertext)
+            from_user = users_dict[FROM_KEYWORD]
+            log_message('from user: {}'.format(from_user))
+            log_message('passcode: {}'.format(users_dict[PASSCODE_KEYWORD]))
+            set_sigs(crypto_message, from_user, users_dict[PASSCODE_KEYWORD])
             result_ok = True
         else:
             result_ok = False
@@ -105,8 +109,10 @@ def encrypt_mime_message(crypto_message, crypto, users_dict):
         bytearray(crypto_message.get_email_message().to_string()), crypto, users_dict)
 
     if ciphertext is not None and len(ciphertext) > 0:
+        from_user = users_dict[FROM_KEYWORD]
         convert_encrypted_mime_message(
-          crypto_message, ciphertext, users_dict[FROM_KEYWORD], users_dict[TO_KEYWORD])
+          crypto_message, ciphertext, from_user, users_dict[TO_KEYWORD])
+        set_sigs(crypto_message, from_user, users_dict[PASSCODE_KEYWORD])
 
     elif error_message is not None:
         raise MessageException(value=error_message)
@@ -353,7 +359,9 @@ def create_protected_message(from_user, to_user, data, message_id):
                     ciphertext, error_message = encrypt_byte_array(data, crypto, users_dict)
                     if ciphertext is not None and len(ciphertext) > 0:
                         crypto_message.get_email_message().get_message().set_payload(ciphertext)
+
                         crypto_message.add_public_key_to_header(users_dict[FROM_KEYWORD])
+                        set_sigs(crypto_message, from_user_id, passcode)
                         crypto_message.set_filtered(True)
                         crypto_message.set_crypted(True)
 
@@ -381,6 +389,7 @@ def create_protected_message(from_user, to_user, data, message_id):
             if crypto_message.is_crypted():
                 crypto_message.set_metadata_crypted(True)
                 crypto_message.set_metadata_crypted_with(encrypted_with)
+                log_message('metadata encrypted with: {}'.format(encrypted_with))
                 if DEBUGGING:
                     log_message("metadata message:\n{}".format(
                         crypto_message.get_email_message().to_string()))
@@ -403,6 +412,20 @@ def create_protected_message(from_user, to_user, data, message_id):
         raise MessageException(value=error_message)
 
     return crypto_message
+
+def set_sigs(crypto_message, from_user, passcode):
+    ''' Set details about the signatures in the crypto message. '''
+
+    if from_user is not None and passcode is not None:
+        crypto_message.set_private_signed(True)
+        crypto_message.add_private_signer(
+            {constants.SIGNER: from_user, constants.SIGNER_VERIFIED: True})
+        log_message('message signed by {}'.format(from_user))
+
+        if options.clear_sign_email():
+            crypto_message.set_clear_signed(True)
+            crypto_message.add_clear_signer(
+              {constants.SIGNER: from_user, constants.SIGNER_VERIFIED: True})
 
 def add_dkim_sig_optionally(crypto_message):
     ''' Add DKIM signature if option selected. '''
@@ -432,8 +455,9 @@ def add_dkim_sig_optionally(crypto_message):
             if sig.startswith('DKIM-Signature'):
                 signed_message = '{}{}'.format(sig, message)
                 crypto_message.get_email_message().set_message(signed_message)
+                crypto_message.set_dkim_signed(True)
+                crypto_message.set_dkim_sig_verified(True)
                 log_message('added DKIM signature successfully')
-                log_message('length of message after dkim sig: {}'.format(len(crypto_message.get_email_message().to_string()))) #DEBUG
             else:
                 log_message('error trying to add DKIM signature')
         except:

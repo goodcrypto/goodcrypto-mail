@@ -496,6 +496,7 @@ def prep_sync(contacts_crypto):
                 if not result_ok:
                     log_message('key plugin not defined'.format(crypto_name))
     except:
+        log_message('{} had an unexpected error'.format(contacts_crypto))
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
         result_ok = False

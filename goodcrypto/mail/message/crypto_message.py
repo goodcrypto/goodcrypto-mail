@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-13
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,12 +9,14 @@ from email.mime.nonmultipart import MIMENonMultipart
 from goodcrypto.mail import contacts, crypto_software, options
 from goodcrypto.mail.message import constants, inspect_utils, utils
 from goodcrypto.mail.message.email_message import EmailMessage
+from goodcrypto.mail.message.history import sig_verified
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import add_private_key
 from goodcrypto.mail.utils import email_in_domain, get_encryption_software
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.utils import format_fingerprint
+from goodcrypto.utils import get_email
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
@@ -53,7 +55,7 @@ class CryptoMessage(object):
             self.log_message('starting crypto message with a blank email message')
         else:
             self.email_message = email_message
-            self.log_message('starting crypto message with an existing email message')
+            if self.DEBUGGING: self.log_message('starting crypto message with an existing email message')
 
         # initialize a few key elements
         self.set_smtp_sender(sender)
@@ -66,6 +68,12 @@ class CryptoMessage(object):
         self.drop(False)
         self.set_processed(False)
         self.set_tag('')
+        self.set_private_signed(False)
+        self.set_private_signers([])
+        self.set_clear_signed(False)
+        self.set_clear_signers([])
+        self.set_dkim_signed(False)
+        self.set_dkim_sig_verified(False)
 
 
     def get_email_message(self):
@@ -123,7 +131,7 @@ class CryptoMessage(object):
         '''
 
         self.sender = email_address
-        self.log_message('set sender: {}'.format(self.sender))
+        if self.DEBUGGING: self.log_message('set sender: {}'.format(self.sender))
 
     def smtp_recipient(self):
         '''
@@ -152,7 +160,7 @@ class CryptoMessage(object):
         '''
 
         self.recipient = email_address
-        self.log_message('set recipient: {}'.format(self.recipient))
+        if self.DEBUGGING: self.log_message('set recipient: {}'.format(self.recipient))
 
     def get_public_key_header(self, from_user):
         '''
@@ -391,7 +399,7 @@ class CryptoMessage(object):
             True
         '''
 
-        self.log_message("set filtered: {}".format(filtered))
+        if self.DEBUGGING: self.log_message("set filtered: {}".format(filtered))
         self.filtered = filtered
 
 
@@ -419,7 +427,7 @@ class CryptoMessage(object):
             True
         '''
 
-        self.log_message("set crypted: {}".format(crypted))
+        if self.DEBUGGING: self.log_message("set crypted: {}".format(crypted))
         self.crypted = crypted
 
 
@@ -446,7 +454,7 @@ class CryptoMessage(object):
             True
         '''
 
-        self.log_message("set metadata crypted: {}".format(crypted))
+        if self.DEBUGGING: self.log_message("set metadata crypted: {}".format(crypted))
         self.metadata_crypted = crypted
 
     def is_metadata_crypted(self):
@@ -463,6 +471,239 @@ class CryptoMessage(object):
         return self.metadata_crypted
 
 
+    def is_signed(self):
+        '''
+            Returns whether this email_message has any type of signature.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_signed()
+            False
+        '''
+
+        return self.is_private_signed() or self.is_clear_signed() or self.is_dkim_signed()
+
+    def set_private_signed(self, signed):
+        '''
+            Sets whether this email_message has been signed when encrypted.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_private_signed(True)
+            >>> crypto_message.is_private_signed()
+            True
+        '''
+
+        if self.DEBUGGING: self.log_message("set private signed: {}".format(signed))
+        self.private_signed = signed
+
+
+    def is_private_signed(self):
+        '''
+            Returns whether this email_message has been signed when encrypted.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_private_signed()
+            False
+        '''
+
+        return self.private_signed
+
+    def is_private_sig_verified(self):
+        '''
+            Returns whether this email_message's signature has been verified.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_private_sig_verified()
+            False
+        '''
+
+        return sig_verified(self.is_private_signed(), self.private_signers_list())
+
+    def set_private_signers(self, signers):
+        '''
+            Set who signed this email_message when encrypted.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_private_signers(
+            ...    [{'signer': 'edward@goodcrypto.local', 'verified': True}])
+            >>> crypto_message.private_signers_list()
+            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+        '''
+
+        self.private_signers = signers
+
+
+    def add_private_signer(self, signer):
+        '''
+            Add who signed this email_message when encrypted.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.add_private_signer(
+            ...   {constants.SIGNER: 'edward@goodcrypto.local', constants.SIGNER_VERIFIED: True})
+            >>> crypto_message.private_signers_list()
+            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+        '''
+
+        self.add_signer(signer, self.private_signers_list())
+
+
+    def private_signers_list(self):
+        '''
+            Returns a list of signers when encrypted.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.private_signers_list()
+            []
+        '''
+
+        if self.private_signers is None:
+            self.set_private_signers([])
+
+        return self.private_signers
+
+
+    def set_clear_signed(self, signed):
+        '''
+            Sets whether this email_message has been clear signed.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_clear_signed(True)
+            >>> crypto_message.is_clear_signed()
+            True
+        '''
+
+        if self.DEBUGGING: self.log_message("set clear signed: {}".format(signed))
+        self.clear_signed = signed
+
+
+    def is_clear_signed(self):
+        '''
+            Returns whether this email_message has been clear signed.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_clear_signed()
+            False
+        '''
+
+        return self.clear_signed
+
+    def is_clear_sig_verified(self):
+        '''
+            Returns whether this email_message's clear signature has been verified.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_clear_sig_verified()
+            False
+        '''
+
+        return sig_verified(self.is_clear_signed(), self.clear_signers_list())
+
+    def set_clear_signers(self, signers):
+        '''
+            Set who clear signed this email_message.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_clear_signers(
+            ...    [{'signer': 'edward@goodcrypto.local', 'verified': True}])
+            >>> crypto_message.clear_signers_list()
+            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+        '''
+
+        self.clear_signers = signers
+
+
+    def add_clear_signer(self, signer_dict):
+        '''
+            Add who clear signed this email_message.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.add_clear_signer({'signer': 'edward@goodcrypto.local', 'verified': True})
+            >>> crypto_message.clear_signers_list()
+            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+        '''
+
+        self.add_signer(signer_dict, self.clear_signers_list())
+
+    def clear_signers_list(self):
+        '''
+            Returns a list of clear signers.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.clear_signers_list()
+            []
+        '''
+
+        if self.clear_signers is None:
+            self.set_clear_signers([])
+
+        return self.clear_signers
+
+
+    def set_dkim_signed(self, signed):
+        '''
+            Sets whether this email_message has been signed using DKIM.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_dkim_signed(True)
+            >>> crypto_message.is_dkim_signed()
+            True
+        '''
+
+        if self.DEBUGGING: self.log_message("set dkim signed: {}".format(signed))
+        self.dkim_signed = signed
+
+
+    def is_dkim_signed(self):
+        '''
+            Returns whether this email_message has been signed using DKIM.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_dkim_signed()
+            False
+        '''
+
+        return self.dkim_signed
+
+    def set_dkim_sig_verified(self, verified):
+        '''
+            Sets whether this email_message's DKIM sig has been verified.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_dkim_sig_verified(True)
+            >>> crypto_message.is_dkim_sig_verified()
+            True
+        '''
+
+        if self.DEBUGGING: self.log_message("set dkim sig verified: {}".format(verified))
+        self.dkim_verified = verified
+
+
+    def is_dkim_sig_verified(self):
+        '''
+            Returns whether this email_message's DKIM sig has been verified.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.is_dkim_sig_verified()
+            False
+        '''
+
+        return self.dkim_verified
+
+    def add_signer(self, signer_dict, signer_list):
+        '''
+            Add who signed this email_message.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.add_signer({'signer': 'edward@goodcrypto.local', 'verified': True})
+        '''
+
+        if signer_dict is not None:
+            signer = get_email(signer_dict[constants.SIGNER])
+            signer_dict[constants.SIGNER] = signer
+            if signer_dict not in signer_list:
+                if self.DEBUGGING: self.log_message("add signer: {}".format(signer_dict))
+                signer_list.append(signer_dict)
+
+
     def drop(self, dropped=True):
         '''
             Sets whether this email_message has been dropped by a filter.
@@ -474,7 +715,7 @@ class CryptoMessage(object):
             True
         '''
 
-        self.log_message("set dropped: {}".format(dropped))
+        if self.DEBUGGING: self.log_message("set dropped: {}".format(dropped))
         self.dropped = dropped
 
 
@@ -502,7 +743,7 @@ class CryptoMessage(object):
             True
         '''
 
-        self.log_message("set processed: {}".format(processed))
+        if self.DEBUGGING: self.log_message("set processed: {}".format(processed))
         self.processed = processed
 
 
@@ -524,20 +765,20 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_crypted_with(['GPG'])
-            >>> crypto_message.is_crypted_with()
+            >>> crypto_message.get_crypted_with()
             ['GPG']
         '''
 
         self.crypted_with = crypted_with
-        self.log_message("set crypted_with: {}".format(self.is_crypted_with()))
+        if self.DEBUGGING: self.log_message("set crypted_with: {}".format(self.get_crypted_with()))
 
 
-    def is_crypted_with(self):
+    def get_crypted_with(self):
         '''
             Returns the encryption programs message was crypted.
 
             >>> crypto_message = CryptoMessage()
-            >>> crypto_message.is_crypted_with()
+            >>> crypto_message.get_crypted_with()
             []
         '''
 
@@ -550,20 +791,20 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_metadata_crypted_with(['GPG'])
-            >>> crypto_message.is_metadata_crypted_with()
+            >>> crypto_message.get_metadata_crypted_with()
             ['GPG']
         '''
 
         self.metadata_crypted_with = crypted_with
-        self.log_message("set metadata crypted_with: {}".format(self.is_metadata_crypted_with()))
+        if self.DEBUGGING: self.log_message("set metadata crypted_with: {}".format(self.get_metadata_crypted_with()))
 
 
-    def is_metadata_crypted_with(self):
+    def get_metadata_crypted_with(self):
         '''
             Returns the encryption programs the metadata was encrypted.
 
             >>> crypto_message = CryptoMessage()
-            >>> crypto_message.is_metadata_crypted_with()
+            >>> crypto_message.get_metadata_crypted_with()
             []
         '''
 
@@ -586,7 +827,7 @@ class CryptoMessage(object):
         '''
 
         active = options.create_private_keys()
-        self.log_message("Create private keys: {}".format(active))
+        if self.DEBUGGING: self.log_message("Create private keys: {}".format(active))
 
         return active
 
@@ -634,7 +875,7 @@ class CryptoMessage(object):
             self.log_message('email message not formed correctly')
         else:
             content_type = self.get_email_message().get_message().get_content_type()
-            self.log_message("message type is {}".format(content_type))
+            if self.DEBUGGING: self.log_message("message type is {}".format(content_type))
             if content_type is None:
                 pass
             elif (content_type == mime_constants.TEXT_PLAIN_TYPE or
@@ -697,7 +938,7 @@ class CryptoMessage(object):
             ['test tag']
         '''
 
-        self.log_message("tags:\n{}".format(self.tags))
+        if self.DEBUGGING: self.log_message("tags:\n{}".format(self.tags))
 
         return self.tags
 
@@ -715,7 +956,7 @@ class CryptoMessage(object):
             tag = ''
         else:
             tag = '\n'.join(self.tags)
-            self.log_message("tag:\n{}".format(tag))
+            if self.DEBUGGING: self.log_message("tag:\n{}".format(tag))
 
         return tag
 
@@ -730,17 +971,17 @@ class CryptoMessage(object):
         '''
 
         if new_tag is None:
-            self.log_message("tried to set blank tag")
+            if self.DEBUGGING: self.log_message("tried to set blank tag")
         elif new_tag == '':
             self.tags = []
-            self.log_message("reset tags")
+            if self.DEBUGGING: self.log_message("reset tags")
         else:
             if type(new_tag) is str:
                 new_tag = new_tag.strip('\n')
                 self.tags = [new_tag]
             else:
                 self.tags = new_tag
-            self.log_message("new tag:\n{}".format(new_tag))
+            if self.DEBUGGING: self.log_message("new tag:\n{}".format(new_tag))
 
 
     def add_tag(self, new_tag):
@@ -754,14 +995,14 @@ class CryptoMessage(object):
         '''
 
         if new_tag is None or len(new_tag) <= 0:
-            self.log_message("tried to add empty tag")
+            if self.DEBUGGING: self.log_message("tried to add empty tag")
         else:
             new_tag = new_tag.strip('\n')
             if self.tags == None or len(self.tags) <= 0:
-                self.log_message("adding to an empty tag:\n{}".format(new_tag))
+                if self.DEBUGGING: self.log_message("adding to an empty tag:\n{}".format(new_tag))
                 self.tags = [new_tag]
             else:
-                self.log_message("adding to tag:\n{}".format(new_tag))
+                if self.DEBUGGING: self.log_message("adding to tag:\n{}".format(new_tag))
                 if new_tag.startswith('.'):
                     self.tags[len(self.tags) - 1] += new_tag
                 else:
@@ -778,10 +1019,10 @@ class CryptoMessage(object):
         '''
 
         if new_tag is None or len(new_tag) <= 0:
-            self.log_message("tried to add empty prefix tag")
+            if self.DEBUGGING: self.log_message("tried to add empty prefix tag")
         else:
             new_tag = new_tag.strip('\n')
-            self.log_message("adding prefix to tag:\n{}".format(new_tag))
+            if self.DEBUGGING: self.log_message("adding prefix to tag:\n{}".format(new_tag))
             if self.tags == None or len(self.tags) <= 0:
                 self.tags = [new_tag]
             else:

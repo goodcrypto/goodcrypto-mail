@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-13
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-20
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -57,7 +57,17 @@ END_ADDENDUM = '-----END OF GOODCRYPTO ADDENDUM-----\n'
 # extra details needed in a queued message
 CRYPTED_KEYWORD = 'crypted'
 CRYPTED_WITH_KEYWORD = 'crypted-with'
+SIGNED_KEYWORD = 'signed'
+SIG_VERIFIED_KEYWORD = 'sig-verified'
+CLEAR_SIGNED_KEYWORD = 'clear-signed'
+CLEAR_SIG_VERIFIED_KEYWORD = 'clear-sig-verified'
+DKIM_SIGNED_KEYWORD = 'dkim-signed'
+DKIM_SIG_VERIFIED_KEYWORD = 'dkim-sig-verified'
 VERIFICATION_KEYWORD = 'verification-code'
+
+# fields in dictionary about a signed message
+SIGNER = 'signer'
+SIGNER_VERIFIED = 'verified'
 
 MIN_DKIM_KEY = 2048
 

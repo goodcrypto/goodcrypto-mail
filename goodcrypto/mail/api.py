@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-24
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -170,7 +170,7 @@ class MailAPI(object):
 
             elif self.action == api_constants.GET_FINGERPRINT:
 
-                fingerprint, verified, active = contacts.get_fingerprint(self.email, self.encryption_name)
+                fingerprint, verified, __ = contacts.get_fingerprint(self.email, self.encryption_name)
                 if fingerprint is None:
                     ok = False
                     error_message = 'No {} fingerprint for {}'.format(self.encryption_name, self.email)

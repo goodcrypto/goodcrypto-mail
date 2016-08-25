@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-01
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-02
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -129,29 +129,11 @@ def get_tags(crypto_message):
 
     try:
         if crypto_message.is_crypted():
-            log_message("crypted: {}".format(crypto_message.is_crypted()))
-            analyzer = OpenPGPAnalyzer()
-            content = crypto_message.get_email_message().get_content()
-            tag = crypto_message.get_tag()
-
-            if len(crypto_message.is_metadata_crypted_with()) > 0:
-                log_message('metadata crypted with: {}'.format(crypto_message.is_metadata_crypted_with()))
-                received_privately = RECEIVED_FULL_MESSAGE_PRIVATELY
-            else:
-                received_privately = RECEIVED_CONTENT_PRIVATELY
-
-            if RECEIVED_FULL_MESSAGE_PRIVATELY in tag:
-                pass
-            elif RECEIVED_CONTENT_PRIVATELY in tag:
-                if received_privately == RECEIVED_FULL_MESSAGE_PRIVATELY:
-                    tag = tag.replace(RECEIVED_CONTENT_PRIVATELY, RECEIVED_FULL_MESSAGE_PRIVATELY)
-                    crypto_message.set_tag(tag)
-            else:
-                crypto_message.add_prefix_to_tag_once('{}.'.format(received_privately))
-
-            if analyzer.is_encrypted(content):
-                crypto_message.add_tag_once(i18n('Warning: There still appears to be an extra protective layer.'))
-                if DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
+            add_crypted_tags(crypto_message)
+        if crypto_message.is_clear_signed():
+            add_clear_signed_tags(crypto_message)
+        if crypto_message.is_dkim_signed():
+            add_dkim_tags(crypto_message)
 
         #  if we have something to say, it's still been filtered
         if len(crypto_message.get_tags()) > 0 and not crypto_message.is_filtered():
@@ -164,14 +146,23 @@ def get_tags(crypto_message):
         tags = crypto_message.get_tags()
         log_message('tags: {}'.format(tags))
         if len(tags) > 0:
-            new_tag = '{} -'.format(TAG_PREFIX)
+            if len(tags) > 2:
+                new_tag = '{}:\n'.format(TAG_PREFIX)
+            else:
+                new_tag = '{} -'.format(TAG_PREFIX)
             for count in range(len(tags)):
-                new_tag += ' '
-                new_tag += tags[count]
+                tag = tags[count]
+                if len(tags) > 2:
+                    new_tag += '   {}) '.format(count + 1)
+                else:
+                    new_tag += ' '
+                new_tag += tag
                 if (not new_tag.endswith('.') and
-                    MESSAGE_VERIFICATION_PREFIX not in tags[count] and
-                    MESSAGE_VERIFY_PREFIX not in tags[count]):
+                    MESSAGE_VERIFICATION_PREFIX not in tag and
+                    MESSAGE_VERIFY_PREFIX not in tag):
                     new_tag += '.'
+                if len(tags) > 2:
+                    new_tag += '\n'
         else:
             new_tag = ''
 
@@ -188,13 +179,86 @@ def get_tags(crypto_message):
 
     return decrypt_tags, filtered
 
-def get_encrypt_signature_tag(crypto_message, from_user, signed_by, crypto_name):
+def add_crypted_tags(crypto_message):
+    ''' Add tags about the crypto state. '''
+
+    log_message("crypted: {}".format(crypto_message.is_crypted()))
+
+    analyzer = OpenPGPAnalyzer()
+    content = crypto_message.get_email_message().get_content()
+    tags = crypto_message.get_tags()
+    if tags is None:
+        tags = []
+
+    if len(crypto_message.get_metadata_crypted_with()) > 0:
+        log_message('metadata crypted with: {}'.format(crypto_message.get_metadata_crypted_with()))
+        received_privately = RECEIVED_FULL_MESSAGE_PRIVATELY
+    else:
+        received_privately = RECEIVED_CONTENT_PRIVATELY
+
+    if RECEIVED_FULL_MESSAGE_PRIVATELY in tags:
+        pass
+    else:
+        replaced_tag = found_content_tag = False
+        for tag in tags:
+            if received_privately in tag:
+                tag = tag.replace(RECEIVED_CONTENT_PRIVATELY, RECEIVED_FULL_MESSAGE_PRIVATELY)
+                replaced_tag = True
+            elif RECEIVED_CONTENT_PRIVATELY in tag:
+                found_content_tag = True
+        if replaced_tag:
+            crypto_message.set_tag(tags)
+        elif found_content_tag:
+            pass
+        else:
+            crypto_message.add_prefix_to_tag_once('{}.'.format(received_privately))
+
+    if analyzer.is_encrypted(content):
+        crypto_message.add_tag_once(i18n('Warning: There still appears to be an extra protective layer.'))
+        if DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
+
+def add_clear_signed_tags(crypto_message):
+    ''' Add tags about the clear signer. '''
+
+    Unknown_Signer = i18n('Warning: Content signed by an unknown user')
+
+    log_message("clear signed: {}".format(crypto_message.is_clear_signed()))
+
+    signers = crypto_message.clear_signers_list()
+    if len(signers) > 0:
+        sender = get_email(crypto_message.smtp_sender())
+        for signer_dict in signers:
+            signer = signer_dict[constants.SIGNER]
+            log_message("clear signed by: {}".format(signer))
+            if signer == sender:
+                crypto_message.add_tag_once(i18n('Content signed by {email}.'.format(email=signer)))
+            elif signer == 'unknown user':
+                crypto_message.add_tag_once(Unknown_Signer)
+            else:
+                crypto_message.add_tag_once(
+                 i18n('Warning: Content signed by {email}, not by the sender ({sender}).'.format(
+                     email=signer, sender=sender)))
+    else:
+        crypto_message.add_tag_once(Unknown_Signer)
+
+def add_dkim_tags(crypto_message):
+    ''' Add tags about the dkim signature. '''
+
+    log_message("dkim signed: {}".format(crypto_message.is_dkim_signed()))
+    log_message("dkim verified: {}".format(crypto_message.is_dkim_sig_verified()))
+
+    if crypto_message.is_dkim_sig_verified():
+        crypto_message.add_tag_once(i18n("Verified message originated on sender's mail server."))
+    else:
+        crypto_message.add_tag_once(i18n("Warning: Unable to verify message originated on sender's mail server."))
+
+def get_decrypt_signature_tag(crypto_message, from_user, signed_by, crypto_name):
     ''' Get the tag when the encrypted message was signed. '''
 
     tag = None
 
-    if len(crypto_message.is_metadata_crypted_with()) > 0:
-        log_message('metadata crypted with: {}'.format(crypto_message.is_metadata_crypted_with()))
+    if len(crypto_message.get_metadata_crypted_with()) > 0:
+        log_message('metadata crypted with: {}'.format(crypto_message.get_metadata_crypted_with()))
         received_privately = RECEIVED_FULL_MESSAGE_PRIVATELY
     else:
         received_privately = RECEIVED_CONTENT_PRIVATELY
@@ -217,6 +281,9 @@ def get_encrypt_signature_tag(crypto_message, from_user, signed_by, crypto_name)
                     signed_by_addr = from_user_addr
                     log_message("signer key is for multiple addresses, including sender")
 
+        # remember that the message was signed
+        crypto_message.set_private_signed(True)
+
         if from_user_addr == signed_by_addr:
             # assume the key is ok unless it's required to be verified before we use it
             key_ok = not options.require_key_verified()
@@ -225,15 +292,24 @@ def get_encrypt_signature_tag(crypto_message, from_user, signed_by, crypto_name)
 
             if key_ok:
                 tag = '{}.'.format(received_privately)
+                crypto_message.add_private_signer({
+                   constants.SIGNER: signed_by_addr, constants.SIGNER_VERIFIED: True})
+                log_message('signed by: {}'.format(crypto_message.private_signers_list()))
             else:
                 tag = '{}, {}'.format(
                   received_privately,
                   i18n('but the key has not been verified.'.format(email=signed_by_addr)))
+                crypto_message.add_private_signer({
+                  constants.SIGNER: signed_by_addr, constants.SIGNER_VERIFIED: False})
+                log_message('signed by: {}'.format(crypto_message.private_signers_list()))
         else:
             tag = '{}, {}'.format(
               received_privately,
               i18n('but it was signed by {signer}, not by the sender, {sender}.'.format(
                   signer=signed_by_addr, sender=from_user_addr)))
+            crypto_message.add_private_signer({
+              constants.SIGNER: signed_by_addr, constants.SIGNER_VERIFIED: False})
+            log_message('signed by: {}'.format(crypto_message.private_signers_list()))
 
     log_message('verified sig tag: {}'.format(tag))
 

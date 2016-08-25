@@ -1,9 +1,10 @@
 #! /usr/bin/python
 '''
     Copyright 2015 GoodCrypto
-    Last modified: 2015-12-23
+    Last modified: 2016-01-24
 
-    Original manual instructions: see server/docs/install.html
+    Run tools/goodcrypto/prep_postfix_config_tgz.py
+    after making any changes to this file.
 '''
 import os
 
@@ -243,8 +244,13 @@ def config_aliases(aliases_filename):
 def config_alias_lines(lines):
     ''' Configure lines in aliases for the metadata. '''
 
-    if '_no_metadata_' not in ''.join(lines):
-        lines.append('_no_metadata_: /dev/null\n')
+    # make sure the following matches mail/constants.py
+    # can't import the variable because this runs on as
+    # as stand-alone app without the goodcrypto package.
+    DOMAIN_USER = '_domain_'
+
+    if DOMAIN_USER not in ''.join(lines):
+        lines.append('{}: /dev/null\n'.format(DOMAIN_USER))
 
     return lines
 

@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-19
+    Last modified: 2016-01-24
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -24,7 +24,7 @@ class ContactsCryptoInline(CustomStackedInline):
         (None, {
             'classes': ('wide',),
             'fields': (('encryption_software',),
-                       ('fingerprint',), ('verified',), ('active',),
+                       ('fingerprint',), ('verified',),
                       )
         }),
     )
@@ -39,11 +39,12 @@ class ContactsCryptoInline(CustomStackedInline):
 class Contact(CustomModelAdmin):
     form = forms.ContactAdminForm
     inlines = [ContactsCryptoInline]
-    search_fields = ['email', 'user_name']
+    search_fields = ['email', 'user_name', 'outbound_encrypt_policy']
+    radio_fields = {'outbound_encrypt_policy': admin.HORIZONTAL}
 
     save_on_top = True
 
-    list_display = ('email', 'user_name',)
+    list_display = ('email', 'user_name', 'outbound_encrypt_policy',)
     staff_list_display = list_display
     superuser_list_display = list_display
     list_display_links = ('email',)
@@ -51,7 +52,7 @@ class Contact(CustomModelAdmin):
     staff_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': (('email',), ('user_name',),)
+            'fields': (('email', ), ('user_name',), ('outbound_encrypt_policy',))
         }),
     )
     superuser_fieldsets = staff_fieldsets
@@ -74,8 +75,8 @@ class Options(SingletonAdmin):
             'fields': (
                        'mail_server_address',
                        'goodcrypto_server_url',
-                       'auto_exchange',
-                       'create_private_keys',
+                       #'auto_exchange',
+                       #'create_private_keys',
                       )
         }),
         (metadata_protection_label, {
@@ -83,6 +84,7 @@ class Options(SingletonAdmin):
         }),
         (tighter_security_label, {
             'fields': (
+                       'require_outbound_encryption',
                        'require_key_verified',
                        'login_to_view_fingerprints',
                        'login_to_export_keys',
@@ -92,6 +94,7 @@ class Options(SingletonAdmin):
         (sig_label, {
             'fields': (
                        'clear_sign',
+                       #'clear_sign_policy',
                        'add_dkim_sig',
                        'verify_dkim_sig',
                        'dkim_delivery_policy',

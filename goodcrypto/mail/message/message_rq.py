@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,7 +16,7 @@ from time import sleep
 from goodcrypto.utils import gc_django
 gc_django.setup()
 
-from goodcrypto.mail.message.filters import Filters
+from goodcrypto.mail.message.filter import Filter
 from goodcrypto.mail.message.rq_message_settings import MESSAGE_RQ, MESSAGE_REDIS_PORT
 from goodcrypto.mail.rq_crypto_settings import CRYPTO_RQ, CRYPTO_REDIS_PORT
 from goodcrypto.mail.utils import email_in_domain
@@ -140,23 +140,23 @@ def filter_rq_message(from_user, to_user, message):
         recipient = b64decode(to_user)
         in_message = b64decode(message)
 
-        filters = Filters(sender, recipient, in_message)
-        log_message('filter message: {}'.format(filters))
+        filter = Filter(sender, recipient, in_message)
+        log_message('filter message: {}'.format(filter))
 
-        result_code = filters.process()
+        result_code = filter.process()
         log_message('result code: {}'.format(result_code))
     except Exception as exception:
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
         result_code = False
-        if filters is not None:
-            filters.reject_message(sender, recipient, in_message, str(exception))
+        if filter is not None:
+            filter.reject_message(sender, recipient, in_message, str(exception))
     except IOError as io_error:
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
         result_code = False
-        if filters is not None:
-            filters.reject_message(sender, recipient, in_message, str(io_error))
+        if filter is not None:
+            filter.reject_message(sender, recipient, in_message, str(io_error))
 
     return result_code
 

@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-29
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -135,11 +135,11 @@ class Bundle(object):
                 crypto_message = add_dkim_sig_optionally(crypto_message)
 
                 message = crypto_message.get_email_message().get_message()
-                self.crypted_with = crypto_message.is_crypted_with()
+                self.crypted_with = crypto_message.get_metadata_crypted_with()
+                self.log_message('crypted with: {}'.format(self.crypted_with))
                 for part in message.walk():
                     self.log_message('Content type: {}'.format(part.get_content_type()))
-                    if self.DEBUGGING:
-                        self.log_message(part.get_payload())
+                    if self.DEBUGGING: self.log_message(part.get_payload())
             else:
                 report_bad_bundled_encrypted_message(to_domain, self.bundled_messages)
 
@@ -183,8 +183,7 @@ class Bundle(object):
                 if self.DEBUGGING: self.log_message('message: {}'.format(str(message)))
                 for part in message.walk():
                     self.log_message('Content type: {}'.format(part.get_content_type()))
-                    if self.DEBUGGING:
-                        self.log_message(part.get_payload())
+                    if self.DEBUGGING: self.log_message(part.get_payload())
             else:
                 self.log_message('Unable to get any parts so no inner message created')
 
@@ -213,7 +212,11 @@ class Bundle(object):
             current_size += len(part.as_string())
             parts.append(part)
 
-        self.log_message('padded with {} random bytes'.format(target_size - original_size))
+        padded_bytes = target_size - original_size
+        if padded_bytes < 0:
+            self.log_message('original size: {}'.format(original_size))
+            self.log_message('target size: {}'.format(target_size))
+        self.log_message('padded with {} random bytes'.format(padded_bytes))
 
         return parts
 
@@ -237,6 +240,8 @@ class Bundle(object):
                 self.bounce_message(fullname,
                   i18n('Message too large to send. It must be {size} KB or smaller'.format(
                          size=options.bundle_message_kb())))
+                self.log_message('{} message too large; max size: {} KB'.format(
+                    filesize, options.bundle_message_kb()))
 
             elif (filesize + estimated_size) < max_size:
                 try:
@@ -292,15 +297,24 @@ class Bundle(object):
             value = addendum[keyword]
             if type(value) is str:
                 value = value.strip()
+            if value == 'True':
+                value = True
+            elif value == 'False':
+                value = False
 
             return value
 
         if len(self.bundled_messages) > 0:
             for bundled_message in self.bundled_messages:
+                self.log_message('message included in bundled: {}'.format(bundled_message))
                 with open(bundled_message) as f:
                     original_message, addendum = parse_bundled_message(f.read())
+                    self.log_message('addendum: {}'.format(addendum))
                     encrypted = get_addendum_value(addendum, constants.CRYPTED_KEYWORD)
-                    if encrypted:
+                    private_signed = get_addendum_value(addendum, constants.SIGNED_KEYWORD)
+                    clear_signed = get_addendum_value(addendum, constants.CLEAR_SIGNED_KEYWORD)
+                    dkim_signed = get_addendum_value(addendum, constants.DKIM_SIGNED_KEYWORD)
+                    if encrypted or private_signed or clear_signed or dkim_signed:
                         sender = get_addendum_value(addendum, mime_constants.FROM_KEYWORD)
                         recipient = get_addendum_value(addendum, mime_constants.TO_KEYWORD)
                         verification_code = get_addendum_value(addendum, constants.VERIFICATION_KEYWORD)
@@ -311,10 +325,21 @@ class Bundle(object):
                         crypto_message.set_crypted_with(addendum[constants.CRYPTED_WITH_KEYWORD])
                         crypto_message.set_metadata_crypted(True)
                         crypto_message.set_metadata_crypted_with(self.crypted_with)
-                        history.add_encrypted_record(crypto_message, verification_code)
-                        self.log_message('logged headers in goodcrypto.message.utils.log')
-                        utils.log_message_headers(crypto_message, tag='bundled headers')
-                        self.log_message('added encrypted history record from {}'.format(sender))
+                        crypto_message.set_private_signed(private_signed)
+                        crypto_message.set_private_signers(
+                          [{constants.SIGNER: sender,
+                            constants.SIGNER_VERIFIED: get_addendum_value(addendum, constants.SIG_VERIFIED_KEYWORD)}])
+                        crypto_message.set_clear_signed(clear_signed)
+                        crypto_message.set_clear_signers(
+                          [{constants.SIGNER: sender,
+                            constants.SIGNER_VERIFIED: get_addendum_value(addendum, constants.CLEAR_SIG_VERIFIED_KEYWORD)}])
+                        crypto_message.set_dkim_signed(dkim_signed)
+                        crypto_message.set_dkim_sig_verified(get_addendum_value(addendum, constants.DKIM_SIG_VERIFIED_KEYWORD))
+                        history.add_outbound_record(crypto_message, verification_code)
+                        self.log_message('added outbound history record from {}'.format(sender))
+                        if self.DEBUGGING:
+                            self.log_message('logged headers in goodcrypto.message.utils.log')
+                            utils.log_message_headers(crypto_message, tag='bundled headers')
 
                 if os.path.exists(bundled_message):
                     os.remove(bundled_message)

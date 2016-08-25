@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -132,9 +132,11 @@ class Decrypt(object):
 
             self.log_message('message content decrypted: {}'.format(decrypted))
 
-            # finally save a record so the user can verify the message was received privately
-            if decrypted or self.crypto_message.is_metadata_crypted():
+            # finally save a record so the user can verify the message was received securely
+            if decrypted or self.crypto_message.is_metadata_crypted() or self.crypto_message.is_signed():
                 decrypt_utils.add_history_and_verification(self.crypto_message)
+
+            if decrypted or self.crypto_message.is_metadata_crypted():
                 self.crypto_message.set_crypted(True)
                 if not decrypted:
                     self.log_message('metadata tag: {}'.format(self.crypto_message.get_tag()))
@@ -144,8 +146,8 @@ class Decrypt(object):
             filtered = tags.add_tag_to_message(self.crypto_message)
             self.crypto_message.set_filtered(filtered)
             self.log_message("finished adding tags to message; filtered: {}".format(filtered))
-            self.log_message("message encrypted with: {}".format(self.crypto_message.is_crypted_with()))
-            self.log_message("metadata encrypted with: {}".format(self.crypto_message.is_metadata_crypted_with()))
+            self.log_message("message encrypted with: {}".format(self.crypto_message.get_crypted_with()))
+            self.log_message("metadata encrypted with: {}".format(self.crypto_message.get_metadata_crypted_with()))
 
             if self.DEBUGGING:
                 self.log_message('logged final decrypted headers in goodcrypto.message.utils.log')
@@ -320,8 +322,7 @@ class Decrypt(object):
 
         passcode = user_keys.get_passcode(to_user, encryption_name)
         if passcode == None or len(passcode) <= 0:
-            tag = '{email} does not have a private {encryption} key configured.'.format(
-               email=to_user, encryption=encryption_name)
+            tag = '{email} does not have a private key configured.'.format(email=to_user)
             self.log_message(tag)
             self.crypto_message.add_tag_once(tag)
         else:
@@ -504,7 +505,7 @@ class Decrypt(object):
                     if self.DEBUGGING: self.log_message('data bytearray after decryption:\n{}'.format(data_bytearray))
                 else:
                     if result_code == 0:
-                        tag = tags.get_encrypt_signature_tag(
+                        tag = tags.get_decrypt_signature_tag(
                            self.crypto_message, from_user, signed_by, crypto.get_name())
                         if tag is not None:
                             self.crypto_message.add_prefix_to_tag_once(tag)

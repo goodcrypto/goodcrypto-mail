@@ -1,56 +1,38 @@
 {% extends "mail/verified.html" %}
 {% comment %}
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-06-25
-    
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-01-22
+
 {% endcomment %}
 {% load i18n%}
 
 {% block titlevar %}{{ subheadline }}{% endblock %}
 
-{% block main_headline %}
-    {% if main_headline %}
-        {{ main_headline|safe }}
-    {% endif %}
-{% endblock main_headline %}
+            {% block main_headline %}
+                {% if main_headline %}
+                    {{ main_headline|safe }}
+                {% endif %}
+            {% endblock main_headline %}
 
-{% block subheadline %}
-    {% if subheadline %}
-        {{ subheadline }}
-    {% endif %}
-{% endblock subheadline %}
+            {% block subheadline %}
+                {% if subheadline %}
+                    {{ subheadline }}
+                {% endif %}
+            {% endblock subheadline %}
 
-{% block results_header %}
-    <th scope="col">
-       <div class="text">
-            <a href="#To">To</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Date">Date</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#MessageID">Message ID</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-    <th scope="col">
-       <div class="text">
-            <a href="#Protection">Protection</a>
-        </div>
-       <div class="clear"></div>
-    </th>
-{% endblock results_header %}
+                        {% block email_header %}
+                        <th scope="col">
+                           <div class="text">
+                                <a href="#To">To</a>
+                            </div>
+                           <div class="clear"></div>
+                        </th>
+                        {% endblock email_header %}
 
-{% block no_results %}
-    {% blocktrans %}
-        Your GoodCrypto private server has not encrypted any messages for you, yet.
-    {% endblocktrans %}
-{% endblock no_results %}
+                {% block no_results %}
+                    {% blocktrans %}
+                        Your GoodCrypto private server has not encrypted any messages for you, yet.
+                    {% endblocktrans %}
+                {% endblock no_results %}
 

@@ -1,6 +1,6 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-02
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@ from goodcrypto.mail.constants import DKIM_WARN_POLICY
 from goodcrypto.mail.contacts import is_key_ok
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import history, tags, utils
-from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, CRLF, LF
+from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, CRLF, LF, SIGNER, SIGNER_VERIFIED
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.tags import add_verification_tag
 from goodcrypto.mail.utils import get_email
@@ -33,7 +33,7 @@ _log = None
 
 def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, crypto=None):
     '''
-        Check the signature if message is clear signed.
+        Check the signature if message is clear signed and remove signature.
 
         >>> # In honor of Mike Perry, Tor Browser and Tor Performance developer.
         >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
@@ -44,55 +44,48 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
         ...    crypto_message = CryptoMessage(email_message=EmailMessage(input_file))
         ...    verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO)
         ...    crypto_message.get_tag()
-        'Warning: Signed by an unknown user.'
+        'Warning: Content signed by an unknown user.'
     '''
 
-    def verify_signature(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
-        ''' Verify the signature if message is signed. '''
-
-        key_verified = False
-        error_message = None
+    def extract_signers(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
+        ''' Extract the signers if message is signed. '''
 
         crypto = CryptoFactory.get_crypto(encryption_name, crypto_software.get_classname(encryption_name))
         log_message('checking if message signed by {}'.format(email))
         for signature_block in signature_blocks:
             if crypto.verify(signature_block, email):
-                try:
-                    key_ok, key_verified, __ = is_key_ok(email, encryption_name)
-                    log_message('{} signed message'.format(email))
-                except CryptoException:
-                    key_verified = False
-                    log_message('see contacts.log for details about failure')
-                log_message('{} {} key verified: {}'.format(email, encryption_name, key_verified))
+                signer_dict = {
+                    SIGNER: email,
+                    SIGNER_VERIFIED: True,
+                }
+                log_message('{} signed message'.format(email))
             else:
                 log_message('signature block\n{}'.format(signature_block))
                 signer = crypto.get_signer(signature_block)
+                log_message('{} signed message'.format(signer))
                 if signer is None:
-                    error_message = i18n('Warning: Signed by an unknown user.')
-                    log_message(error_message)
+                    signer = 'unknown user'
                 else:
-                    error_message = i18n('Warning: Signed by {signer}, *not* by the sender, {email}.'.format(
-                        signer=get_email(signer), email=get_email(email)))
-                    log_message(error_message)
+                    signer = get_email(signer)
 
-        return key_verified, error_message
+                signer_dict = {
+                    SIGNER: signer,
+                    SIGNER_VERIFIED: False,
+                }
 
+            crypto_message.add_clear_signer(signer_dict)
+
+        log_message('clear signers: {}'.format(crypto_message.clear_signers_list()))
 
     # if the message is signed, then verify the signature
     signature_blocks = crypto_message.get_email_message().get_pgp_signature_blocks()
     if len(signature_blocks) > 0:
-        key_verified, error_message = verify_signature(
-           email, signature_blocks, encryption_name=encryption_name)
-        if key_verified:
-            if options.require_key_verified():
-                # Translator: Do not alter {email} simply move it wherever would be appropriate in the sentence.
-                crypto_message.add_tag_once(i18n('Signed by {email}, but the key has not been verified.'.format(email=get_email(email))))
-            else:
-                crypto_message.add_tag_once(i18n('Signed by {email}.'.format(email=get_email(email))))
-        elif error_message is not None:
-            crypto_message.add_tag_once(error_message)
-        else:
-            crypto_message.add_tag_once(i18n('Signed by {email}.'.format(email=get_email(email))))
+        crypto_message.set_clear_signed(True)
+        log_message('clear signed')
+        extract_signers(get_email(email), signature_blocks, encryption_name=encryption_name)
+
+        # remove the signature block; techies won't like this, but it makes the message more readable
+        crypto_message.get_email_message().remove_pgp_signature_blocks()
     else:
         log_message('no signature block found in this part of message')
 
@@ -104,7 +97,7 @@ def add_history_and_verification(crypto_message):
         log_message('crypto message undefined so not adding history or verification')
     else:
         verification_code = history.gen_verification_code()
-        history.add_decrypted_record(crypto_message, verification_code)
+        history.add_inbound_record(crypto_message, verification_code)
 
         add_verification_tag(crypto_message, verification_code)
 
@@ -117,32 +110,27 @@ def verify_dkim_sig(crypto_message):
         try:
             global _log
 
+            crypto_message.set_dkim_signed(True)
             message = crypto_message.get_email_message().to_string()
-            log_message('headers before DKIM verification:\n{}'.format(
-               crypto_message.get_email_message().get_header_lines()))
-            """
-            # in case there's a mixture of CR-LF and LF lines, convert CR-LF to LF and then all LFs to CR-LFs
-            if CRLF not in message:
-                message = message.replace(CRLF, LF).replace(LF, CRLF)
-            """
-            log_message('length of message before dkim verification: {}'.format(len(message))) #DEBUG
+            if DEBUGGING:
+                log_message('headers before DKIM verification:\n{}'.format(
+                   crypto_message.get_email_message().get_header_lines()))
+
             dkim = DKIM(message=message, logger=_log)
             verified_sig = dkim.verify()
             log_message('DKIM signature verified: {}'.format(verified_sig))
 
             if verified_sig:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
-                crypto_message.add_tag_once(i18n('DKIM signature ok.'))
+                crypto_message.set_dkim_sig_verified(True)
             elif options.dkim_delivery_policy() == DKIM_WARN_POLICY:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
-                crypto_message.add_tag_once(i18n('WARNING: Unable to verify DKIM signature.'))
                 log_message('dkim policy is to warn and accept message')
             else:
-                raise DKIMException('Unable to verify signature')
+                raise DKIMException("Unable to verify message originated on sender's mail server.")
         except DKIMException as dkim_exception:
             if options.dkim_delivery_policy() == DKIM_WARN_POLICY:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
-                crypto_message.add_tag_once(i18n('WARNING: Unable to verify DKIM signature.'))
                 log_message('dkim policy is to warn; {}'.format(dkim_exception))
             else:
                 raise DKIMException(str(dkim_exception))

@@ -1,8 +1,8 @@
 '''
     Mail utilities.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-23
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
 
 from goodcrypto.constants import STATUS_GREEN, STATUS_RED, STATUS_YELLOW
-from goodcrypto.mail.constants import PASSCODE_MAX_LENGTH, PASSWORD_MAX_LENGTH
+from goodcrypto.mail.constants import DOMAIN_USER, PASSCODE_MAX_LENGTH, PASSWORD_MAX_LENGTH
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.options import mail_server_address, mta_listen_port
 from goodcrypto.utils import i18n, parse_domain, get_email
@@ -180,12 +180,12 @@ def create_superuser(admin, password=None):
         True
         >>> __, __, error_message = create_superuser(None)
         >>> error_message
-        'Sysadmin is not defined so unable to finish configuration.'
+        'Email for the admin is not defined so unable to finish configuration.'
     '''
 
     user = password = error_message = None
     if admin is None:
-        error_message = i18n("Sysadmin is not defined so unable to finish configuration.")
+        error_message = i18n("Email for the admin is not defined so unable to finish configuration.")
         log_message('admin not defined so unable to configure superuser')
     else:
         try:
@@ -615,6 +615,26 @@ def send_message(sender, recipient, message):
             record_exception()
 
     return result_ok
+
+def get_domain_user():
+    '''
+        Get the user for a domain key.
+
+        >>> get_domain_user()
+        '_domain_'
+    '''
+
+    return DOMAIN_USER
+
+def get_domain_email():
+    '''
+        Get the email address for a domain key.
+
+        >>> get_domain_email()
+        '_domain_@goodcrypto.local'
+    '''
+
+    return '{}@{}'.format(get_domain_user(), get_domain())
 
 def log_message(message):
     '''

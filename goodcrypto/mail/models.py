@@ -6,8 +6,8 @@
     the probability of future compatibility in case GoodCrypto uses another way to store data
     or moves to another framework which doesn't interface with databases the same way as django.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-01-24
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -99,6 +99,12 @@ class Contact(models.Model):
 
     '''
 
+    Outbound_Encrypt_Policies = [
+        (constants.USE_GLOBAL_OUTBOUND_SETTING, i18n('Use global setting')),
+        (constants.ALWAYS_ENCRYPT_OUTBOUND, i18n('Always')),
+        (constants.NEVER_ENCRYPT_OUTBOUND, i18n('Never')),
+    ]
+
     email = models.EmailField(i18n('Email'), blank=False, null=False,
        unique=True, help_text=i18n('Email address of someone that uses encryption software.'))
 
@@ -106,12 +112,16 @@ class Contact(models.Model):
        max_length=100, blank=True, null=True,
        help_text=i18n('Printable name for the contact. Strongly recommended.'))
 
+    # radio button options: Use global setting / Always / Never
+    outbound_encrypt_policy = models.CharField(i18n('Encrypt to contact'), max_length=10, 
+       choices=Outbound_Encrypt_Policies, default=constants.DEFAULT_OUTBOUND_ENCRYPT_POLICY,
+       help_text=i18n('"Always" means encrypt or bounce. "Never" means plain text only. See Mail Protection for the global setting.'))
+
     def save(self, *args, **kwargs):
         # maintain all addresses in lower case
         if self.email:
             self.email = self.email.lower()
         super(Contact, self).save(*args, **kwargs)
-        # OperationalError: database is locked
 
     def __unicode__(self):
         if self.user_name and len(self.user_name.strip()) > 0:
@@ -161,7 +171,7 @@ class ContactsCrypto(models.Model):
     contact = models.ForeignKey(Contact,
        help_text=i18n('Email address.'))
 
-    encryption_software = models.ForeignKey(EncryptionSoftware,
+    encryption_software = models.ForeignKey(EncryptionSoftware, blank=True, null=True,
        help_text=i18n('Encryption software used by this contact.'))
 
     fingerprint = models.CharField(i18n('Fingerprint'),
@@ -171,8 +181,11 @@ class ContactsCrypto(models.Model):
     verified = models.BooleanField(i18n('Verified?'), default=False,
        help_text=i18n('We strongly recommend that you verify this fingerprint in a secure manner, not via email.'))
 
-    active = models.BooleanField(i18n('Use key to encrypt?'), default=True,
-       help_text=i18n('If there is *not* a check mark, GoodCrypto will send plain text messages to this user even though there is a key.'))
+    def save(self, *args, **kwargs):
+        # maintain all addresses in lower case
+        if not self.encryption_software or self.encryption_software is None:
+            self.encryption_software = EnryptionSoftware.objects.all()[0]
+        super(ContactsCrypto, self).save(*args, **kwargs)
 
     def __unicode__(self):
         return '{}: {}'.format(self.contact, self.encryption_software)
@@ -268,19 +281,11 @@ class MessageHistory(models.Model):
         tag being spoofed by a third party.
     '''
 
-    DECRYPTED_MESSAGE_STATUS = '1' # originally 'd'
-    ENCRYPTED_MESSAGE_STATUS = '2' # originally 'e'
-    DECRYPTED_METADATA_MESSAGE_STATUS = '3'
-    ENCRYPTED_METADATA_MESSAGE_STATUS = '4'
-    DOUBLE_DECRYPTED_MESSAGE_STATUS = '5'
-    DOUBLE_ENCRYPTED_MESSAGE_STATUS = '6'
-    MESSAGE_STATUS = (
-      (DECRYPTED_MESSAGE_STATUS, i18n('Content only')),
-      (ENCRYPTED_MESSAGE_STATUS, i18n('Content only')),
-      (DECRYPTED_METADATA_MESSAGE_STATUS, i18n('Metadata + content')),
-      (ENCRYPTED_METADATA_MESSAGE_STATUS, i18n('Metadata + content')),
-      (DOUBLE_DECRYPTED_MESSAGE_STATUS, i18n('Metadata + content 2x')),
-      (DOUBLE_ENCRYPTED_MESSAGE_STATUS, i18n('Metadata + content 2x')),
+    INBOUND_MESSAGE = '1'
+    OUTBOUND_MESSAGE = '2'
+    MESSAGE_DIRECTIONS = (
+      (INBOUND_MESSAGE, i18n('Inbound')),
+      (OUTBOUND_MESSAGE, i18n('Outbound')),
     )
     MAX_ENCRYPTION_PROGRAMS = 50
     MAX_MESSAGE_DATE = 50
@@ -294,8 +299,32 @@ class MessageHistory(models.Model):
     recipient = models.EmailField(i18n('Recipient email'), blank=False,  unique=False,
                   help_text=i18n('To user email address.'))
 
-    status = models.CharField(max_length=1, choices=MESSAGE_STATUS,
-       help_text=i18n('Shows whether the message was decrypted or encrypted by your GoodCrypto private server.'))
+    direction = models.CharField(max_length=1, choices=MESSAGE_DIRECTIONS, blank=True, null=True,
+       help_text=i18n('Shows whether the message was inbound or outbound.'))
+
+    content_protected = models.BooleanField(default=False,
+        help_text=i18n('True if the content was protected with a personal key.'))
+
+    metadata_protected = models.BooleanField(default=False,
+        help_text=i18n('True if the metadata was protected during transit.'))
+
+    private_signed = models.BooleanField(default=False,
+        help_text=i18n('True if the message was signed when encrypted.'))
+
+    private_sig_verified = models.BooleanField(default=False,
+        help_text=i18n('True if the private signature was verified.'))
+
+    clear_signed = models.BooleanField(default=False,
+        help_text=i18n('True if the message contained a clear signature.'))
+
+    clear_sig_verified = models.BooleanField(default=False,
+        help_text=i18n('True if the clear signature was verified.'))
+
+    dkim_signed = models.BooleanField(default=False,
+        help_text=i18n('True if the message had a DKIM signature.'))
+
+    dkim_sig_verified = models.BooleanField(default=False,
+        help_text=i18n('True if the DKIM signature was verified.'))
 
     encryption_programs = models.CharField(max_length=MAX_ENCRYPTION_PROGRAMS,
        help_text=i18n('List of encryption software programs used with this message.'))
@@ -364,6 +393,12 @@ class Options(models.Model):
       (constants.WEEKS_CODE, i18n('Weekly')),
     )
 
+    CLEAR_SIGN_POLICY_CHOICES = (
+      (constants.CLEAR_SIGN_WITH_DOMAIN_KEY, i18n("domain's key")),
+      (constants.CLEAR_SIGN_WITH_SENDER_KEY, i18n("sender's key if there is one")),
+      (constants.CLEAR_SIGN_WITH_SENDER_OR_DOMAIN, i18n("sender's key if there is one, otherwise domain's key")),
+    )
+
     DKIM_POLICY_CHOICES = (
       (constants.DKIM_WARN_POLICY, i18n('warn')),
       (constants.DKIM_DROP_POLICY, i18n('drop')),
@@ -388,13 +423,21 @@ class Options(models.Model):
        help_text=i18n("Generate keys for users who don't have one."))
 
     clear_sign = models.BooleanField(i18n('Clear sign mail'), default=False,
-       help_text=i18n("All outbound mail will include the sender's encrypted signature."))
+       help_text=i18n("Outbound mail will include an encrypted signature."))
 
+    clear_sign_policy = models.CharField(i18n('Clear sign policy'), max_length=10,
+       blank=True, null=True,
+       default=constants.DEFAULT_CLEAR_SIGN_POLICY, choices=CLEAR_SIGN_POLICY_CHOICES,
+       help_text=i18n("What key to use to clear sign a message. The most private is the domain key."))
+    
     filter_html = models.BooleanField(i18n('Filter HTML'), default=True,
        help_text=i18n("Remove dangerous HTML that may compromise end users' computers."))
 
     debugging_enabled = models.BooleanField(i18n('Enable diagnostic logs'), default=True,
        help_text=i18n('Activate logs to help debug unexpected behavior.'))
+
+    require_outbound_encryption = models.BooleanField(i18n('Require outbound encryption'), default=False,
+       help_text=i18n("All outbound messages will be encrypted or bounced. You can override by Contact."))
 
     require_key_verified = models.BooleanField(i18n('Require verify new keys'), default=False,
        help_text=i18n("Do not use a new public key until it is flagged as verified in the database."))
@@ -444,11 +487,14 @@ class Options(models.Model):
        help_text=i18n("The public key for DKIM. Enter this key into a TXT record for your DNS. <a href=\"https://goodcrypto.com/qna/knowledge-base/crypt-options#DkimPublicKey\">Learn more</a>"))
 
     def __unicode__(self):
-        return self.mail_server_address
+        if self.mail_server_address is not None and len(self.mail_server_address) > 0:
+            return self.mail_server_address
+        else:
+            return ''
 
     class Meta:
-        verbose_name = i18n('options')
-        verbose_name_plural = i18n('options')
+        verbose_name = i18n('global options')
+        verbose_name_plural = i18n('global options')
 post_save.connect(model_signals.post_save_options, sender=Options)
 
 
