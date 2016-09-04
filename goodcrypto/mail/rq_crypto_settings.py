@@ -2,7 +2,7 @@
     Crypto RQ worker settings.
 
     Copyright 2014 GoodCrypto
-    Last modified: 2015-09-21
+    Last modified: 2016-02-07
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -28,6 +28,4 @@ QUEUES = [CRYPTO_RQ]
 # to configure RQ for it in a single step
 #SENTRY_DSN = 'http://public:secret@example.com/1'
 
-KEY_SUFFIX = 'key'
-FINGERPRINT_SUFFIX = 'fingerprint'
 

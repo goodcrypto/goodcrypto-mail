@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-28
+    Last modified: 2016-02-17
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -8,15 +8,17 @@ import copy, os
 from traceback import format_exc
 
 from goodcrypto.mail import contacts, options, user_keys, utils
-from goodcrypto.mail.constants import TAG_WARNING
+from goodcrypto.mail.constants import NEVER_ENCRYPT_OUTBOUND, TAG_WARNING
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
+from goodcrypto.mail.crypto_rq import search_keyservers_via_rq
 from goodcrypto.mail.crypto_software import get_classname, get_key_classname
 from goodcrypto.mail.message import constants, encrypt_utils, history
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.history import gen_verification_code
 from goodcrypto.mail.message.inspect_utils import get_charset, get_message_id, is_content_type_text
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.metadata import is_metadata_address, is_ready_to_protect_metadata, packetize
+from goodcrypto.mail.message.metadata import (is_metadata_address, is_ready_to_protect_metadata,
+                                              packetize, get_metadata_address)
 from goodcrypto.mail.message.utils import add_private_key, log_message_headers
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -58,7 +60,7 @@ class Encrypt(object):
             True
         '''
 
-        self.log = LogFile()
+        self._log = LogFile()
         self.crypto_message = crypto_message
         self.verification_code = None
         self.ready_to_protect_metadata = False
@@ -73,52 +75,61 @@ class Encrypt(object):
 
         def log_error(error_message):
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             try:
                 self.crypto_message.add_tag_once('{} {}'.format(
                     SERIOUS_ERROR_PREFIX, error_message))
             except Exception:
                 record_exception()
-                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
 
         filtered = encrypted = False
         inner_encrypted_with = []
         # a place for the original message in case metadata is protected
-        original_crypto_message = None   
+        original_crypto_message = None
         try:
             if self.crypto_message is None:
-                self.log_message('no crypto message defined')
+                self._log_message('no crypto message defined')
                 self.crypto_message = CryptoMessage()
                 from_user = to_user = None
             else:
                 from_user = self.crypto_message.smtp_sender()
                 to_user = self.crypto_message.smtp_recipient()
 
-            self.log_message("trying to encrypt message from {} to {}".format(from_user, to_user))
+            self._log_message("trying to encrypt message from {} to {}".format(from_user, to_user))
 
             self.verification_code = gen_verification_code()
             self.ready_to_protect_metadata = is_ready_to_protect_metadata(from_user, to_user)
 
-            encryption_names = utils.get_encryption_software(to_user)
-            no_encryption_defined = encryption_names is None or len(encryption_names) <= 0
-            if no_encryption_defined or contacts.never_encrypt_outbound(to_user):
-                if no_encryption_defined:
-                    self.log_message('no encryption software defined for: {}'.format(to_user))
-                else:
-                    self.log_message('{} not using encryption even though they may be able to use {}'.format(to_user, encryption_names))
+            contact = contacts.get(to_user)
+            if contact is None:
+                never_encrypt = False
+                encryption_names = []
+
+                if options.use_keyservers():
+                    # if there's no contact, then start another job
+                    # that can determine whether we can find a key
+                    self._start_check_for_encryption(from_user, to_user)
+            else:
+                never_encrypt = contact.outbound_encrypt_policy == NEVER_ENCRYPT_OUTBOUND
+                encryption_names = utils.get_encryption_software(to_user)
+
+            if len(encryption_names) <= 0 or never_encrypt:
+
+                self._log_message('{} uses {} known encryption'.format(to_user, len(encryption_names)))
 
                 if not self.ready_to_protect_metadata:
-                    if contacts.never_encrypt_outbound(to_user):
-                        self.log_message('{} not using encryption'.format(to_user))
+                    if never_encrypt:
+                        self._log_message('{} set not to use any encryption'.format(to_user))
 
                     # fail if encryption is required globally or for this individual
                     elif options.require_outbound_encryption():
-                        self.log_message('message not sent because global encryption required')
+                        self._log_message('message not sent because global encryption required')
                         raise MessageException(value=self.MUST_ENCRYPT_ALL_MAIL.format(to_email=to_user))
 
                     elif contacts.always_encrypt_outbound(to_user):
-                        self.log_message('message not sent because encryption required for {}'.format(to_user))
+                        self._log_message('message not sent because encryption required for {}'.format(to_user))
                         raise MessageException(value=self.MUST_ENCRYPT_MAIL_TO_USER.format(to_email=to_user))
 
                 # see if message must be clear signed
@@ -128,13 +139,13 @@ class Encrypt(object):
                 # add the public key so the receiver can use crypto with us in the future
                 if options.auto_exchange_keys():
                     self.crypto_message.add_public_key_to_header(from_user)
-                    self.log_message('added {} public key to header'.format(from_user))
+                    self._log_message('added {} public key to header'.format(from_user))
 
                 # if we're not exchanging keys, but we are creating them,
                 # then start the process in background
                 elif options.create_private_keys():
                     add_private_key(from_user)
-                    self.log_message('created private key for {} if needed'.format(from_user))
+                    self._log_message('created private key for {} if needed'.format(from_user))
 
                 self.crypto_message.set_filtered(True)
 
@@ -142,7 +153,7 @@ class Encrypt(object):
                 try:
                     inner_encrypted_with = self._encrypt_message_with_all(encryption_names)
                     if self.DEBUGGING:
-                        self.log_message('message after encryption:\n{}'.format(
+                        self._log_message('message after encryption:\n{}'.format(
                           self.crypto_message.get_email_message().to_string()))
                 except MessageException as message_exception:
                     raise MessageException(value=message_exception.value)
@@ -158,20 +169,20 @@ class Encrypt(object):
             else:
                 if self.crypto_message.is_crypted():
                     if self.DEBUGGING:
-                        self.log_message('full encrypted message:\n{}'.format(
+                        self._log_message('full encrypted message:\n{}'.format(
                            self.crypto_message.get_email_message().to_string()))
 
                 elif contacts.never_encrypt_outbound(to_user):
-                    self.log_message('{} not using encryption'.format(to_user))
+                    self._log_message('{} not using encryption'.format(to_user))
                     self.crypto_message.add_tag_once('{}: {}'.format(
                       TAG_WARNING, i18n('Anyone could have read this message. Use encryption, it works.')))
 
                 elif options.require_outbound_encryption():
-                    self.log_message('message not sent because global encryption required')
+                    self._log_message('message not sent because global encryption required')
                     raise MessageException(value=self.MUST_ENCRYPT_ALL_MAIL.format(to_email=to_user))
 
                 elif contacts.always_encrypt_outbound(to_user):
-                    self.log_message('message not sent because encryption required for {}'.format(to_user))
+                    self._log_message('message not sent because encryption required for {}'.format(to_user))
                     raise MessageException(value=self.MUST_ENCRYPT_MAIL_TO_USER.format(to_email=to_user))
 
                 else:
@@ -179,11 +190,11 @@ class Encrypt(object):
                       TAG_WARNING, i18n('Anyone could have read this message. Use encryption, it works.')))
 
             if self.crypto_message.is_processed():
-                self.log_message('message processed and awaiting bundling')
+                self._log_message('message processed and awaiting bundling')
             else:
                 tags = self.crypto_message.get_tag()
                 tags_added = self.crypto_message.add_tag_to_message(tags)
-                self.log_message('tags added to message: {}'.format(tags_added))
+                self._log_message('tags added to message: {}'.format(tags_added))
 
                 # add the DKIM signature if user opted for it
                 self.crypto_message = encrypt_utils.add_dkim_sig_optionally(self.crypto_message)
@@ -193,17 +204,17 @@ class Encrypt(object):
                 # finally save a record so the user can verify what security measures were added
                 if self.crypto_message.is_crypted() or self.crypto_message.is_signed():
                     self._add_outbound_record(original_crypto_message, inner_encrypted_with)
-                    self.log_message('added outbound history record')
+                    self._log_message('added outbound history record')
 
         except MessageException as message_exception:
             raise MessageException(value=message_exception.value)
 
         except Exception, IOError:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         if self.crypto_message is not None:
-            self.log_message('  final status: filtered: {} encrypted: {}'.format(
+            self._log_message('  final status: filtered: {} encrypted: {}'.format(
                 self.crypto_message.is_filtered(), self.crypto_message.is_crypted()))
 
         return self.crypto_message
@@ -215,7 +226,7 @@ class Encrypt(object):
 
         if options.bundle_and_pad():
             tags_added = self.crypto_message.add_tag_to_message(self.crypto_message.get_tag())
-            self.log_message('tags added to message before bundling: {}'.format(tags_added))
+            self._log_message('tags added to message before bundling: {}'.format(tags_added))
 
             # add the DKIM signature if user opted for it
             self.crypto_message = encrypt_utils.add_dkim_sig_optionally(self.crypto_message)
@@ -223,19 +234,19 @@ class Encrypt(object):
             message_name = packetize(
                self.crypto_message, inner_encrypted_with, self.verification_code)
             if os.stat(message_name).st_size > options.bundled_message_max_size():
-                self.log_message('Message too large to bundle so throwing MessageException')
+                self._log_message('Message too large to bundle so throwing MessageException')
                 if os.path.exists(message_name):
                     os.remove(message_name)
                 error_message = 'Message too large to send. The maximum size, including attachments, is {} KB.'.format(
                      options.bundle_message_kb())
-                self.log_message(error_message)
+                self._log_message(error_message)
                 raise MessageException(value=i18n(error_message))
             else:
-                self.log_message('message waiting for bundling: {}'.format(
+                self._log_message('message waiting for bundling: {}'.format(
                   self.crypto_message.is_processed()))
 
         else:
-            self.log_message('protecting metadata')
+            self._log_message('protecting metadata')
 
             # add the original sender and recipient in the header
             self.crypto_message.get_email_message().add_header(constants.ORIGINAL_FROM, from_user)
@@ -244,7 +255,7 @@ class Encrypt(object):
             # add the DKIM signature to the inner message if user opted for it
             self.crypto_message = encrypt_utils.add_dkim_sig_optionally(self.crypto_message)
 
-            self.log_message('DEBUG: logged headers before encrypting with metadata key in goodcrypto.message.utils.log')
+            self._log_message('DEBUG: logged headers before encrypting with metadata key in goodcrypto.message.utils.log')
             log_message_headers(self.crypto_message, tag='headers before encrypting with metadata key')
 
             # even if the inner message isn't encrypted, encrypt
@@ -253,7 +264,7 @@ class Encrypt(object):
             self.crypto_message = encrypt_utils.create_protected_message(
                 self.crypto_message.smtp_sender(), self.crypto_message.smtp_recipient(),
                 self.crypto_message.get_email_message().to_string(), message_id)
-            self.log_message('added protective layer for metadata')
+            self._log_message('added protective layer for metadata')
 
     def _encrypt_message_with_all(self, encryption_names):
         '''
@@ -266,14 +277,14 @@ class Encrypt(object):
         to_user = self.crypto_message.smtp_recipient()
         original_payload = self.crypto_message.get_email_message().get_message().get_payload()
 
-        self.log_message("encrypting using {} encryption software".format(encryption_names))
+        self._log_message("encrypting using {} encryption software".format(encryption_names))
         for encryption_name in encryption_names:
             encryption_classname = get_key_classname(encryption_name)
             if encryption_classname not in encrypted_classnames:
                 try:
                     if options.require_key_verified():
                         __, key_ok, __ = contacts.get_fingerprint(to_user, encryption_name)
-                        self.log_message("{} {} key verified: {}".format(to_user, encryption_name, key_ok))
+                        self._log_message("{} {} key verified: {}".format(to_user, encryption_name, key_ok))
                     else:
                         key_ok = True
 
@@ -284,11 +295,11 @@ class Encrypt(object):
                     else:
                         error_message += i18n('You need to verify the {encryption} key for {email} before you can use it.'.format(
                             encryption=encryption_name, email=to_user))
-                        self.log_message(error_message)
+                        self._log_message(error_message)
                 except MessageException as message_exception:
                     fatal_error = True
                     error_message += message_exception.value
-                    self.log_exception(error_message)
+                    self._log_exception(error_message)
                     break
 
         # if the user has encryption software defined, then the message
@@ -310,8 +321,8 @@ class Encrypt(object):
             self.crypto_message.get_email_message().get_message().set_payload(original_payload)
 
         if fatal_error:
-            self.log_message('raising message exception in _encrypt_message_with_all')
-            self.log_message(error_message)
+            self._log_message('raising message exception in _encrypt_message_with_all')
+            self._log_message(error_message)
             raise MessageException(value=error_message)
 
         return encrypted_with
@@ -324,20 +335,20 @@ class Encrypt(object):
         '''
         result_ok = False
         try:
-            self.log_message("encrypting message with {}".format(encryption_name))
+            self._log_message("encrypting message with {}".format(encryption_name))
             crypto = CryptoFactory.get_crypto(encryption_name, get_classname(encryption_name))
             if crypto is None:
-                self.log_message("{} is not ready to use".format(encryption_name))
+                self._log_message("{} is not ready to use".format(encryption_name))
             elif (self.crypto_message is None or
                   self.crypto_message.smtp_sender() is None or
                   self.crypto_message.smtp_recipient() is None):
-                self.log_message("missing key data to encrypt message")
+                self._log_message("missing key data to encrypt message")
             else:
                 # get all the user ids that have encryption keys
                 user_ids = crypto.get_user_ids()
-                if self.DEBUGGING: self.log_message('user ids: {}'.format(user_ids))
+                if self.DEBUGGING: self._log_message('user ids: {}'.format(user_ids))
                 private_user_ids = crypto.get_private_user_ids()
-                if self.DEBUGGING: self.log_message('private user ids: {}'.format(private_user_ids))
+                if self.DEBUGGING: self._log_message('private user ids: {}'.format(private_user_ids))
 
                 self._prep_from_user(private_user_ids, encryption_name)
                 users_dict, result_ok = self._get_crypto_details(encryption_name, user_ids)
@@ -348,17 +359,17 @@ class Encrypt(object):
                     if options.auto_exchange_keys() and users_dict[encrypt_utils.FROM_KEYWORD] is not None:
                         self.crypto_message.add_public_key_to_header(users_dict[encrypt_utils.FROM_KEYWORD])
                 else:
-                    self.log_message("user_ids is not None and len(user_ids) > 0: {}".format(
+                    self._log_message("user_ids is not None and len(user_ids) > 0: {}".format(
                         user_ids is not None and len(user_ids) > 0))
 
                 if result_ok:
-                    self.log_message("from user ID: {}".format(users_dict[encrypt_utils.FROM_KEYWORD]))
-                    self.log_message("to user ID: {}".format(users_dict[encrypt_utils.TO_KEYWORD]))
-                    self.log_message("subject: {}".format(
+                    self._log_message("from user ID: {}".format(users_dict[encrypt_utils.FROM_KEYWORD]))
+                    self._log_message("to user ID: {}".format(users_dict[encrypt_utils.TO_KEYWORD]))
+                    self._log_message("subject: {}".format(
                       self.crypto_message.get_email_message().get_header(mime_constants.SUBJECT_KEYWORD)))
 
                     result_ok = self._encrypt_message_with_keys(crypto, users_dict)
-                    self.log_message('encrypted message: {}'.format(result_ok))
+                    self._log_message('encrypted message: {}'.format(result_ok))
                     if not result_ok:
                         error_message = self._get_encrypt_error_message(users_dict, encryption_name)
                         raise MessageException(value=error_message)
@@ -374,7 +385,7 @@ class Encrypt(object):
         except Exception:
             result_ok = False
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         return result_ok
 
@@ -414,7 +425,7 @@ class Encrypt(object):
                         error_message += '\n\n{}'.format(i18n(
                           'Ask your mail administrator to create a private key for you.'))
 
-                self.log_exception(error_message)
+                self._log_exception(error_message)
                 raise MessageException(error_message)
 
         if self.crypto_message is None or self.crypto_message.get_email_message() is None:
@@ -427,7 +438,7 @@ class Encrypt(object):
                       encrypt_utils.PASSCODE_KEYWORD: passcode,
                       encrypt_utils.CHARSET_KEYWORD: charset}
 
-        self.log_message('got crypto details and ready to encrypt: {}'.format(ready_to_encrypt))
+        self._log_message('got crypto details and ready to encrypt: {}'.format(ready_to_encrypt))
 
         return users_dict, ready_to_encrypt
 
@@ -440,20 +451,20 @@ class Encrypt(object):
         error_message = passcode = None
         from_user = self.crypto_message.smtp_sender()
 
-        self.log_message('user ids: {}'.format(user_ids))
+        self._log_message('user ids: {}'.format(user_ids))
         from_user_id = utils.get_user_id_matching_email(from_user, user_ids)
-        self.log_message('from_user_id: {}'.format(from_user_id))
+        self._log_message('from_user_id: {}'.format(from_user_id))
         if from_user_id is None:
             passcode = None
             error_message = i18n("There isn't a {encryption_name} key for {email}").format(
                 encryption_name=encryption_name, email=from_user)
-            self.log_message(error_message)
+            self._log_message(error_message)
         else:
             passcode = user_keys.get_passcode(from_user, encryption_name)
             if passcode is None:
                 error_message = i18n("There isn't a private {encryption_name} key for {email}").format(
                     encryption_name=encryption_name, email=from_user)
-                self.log_message(error_message)
+                self._log_message(error_message)
 
         return from_user_id, passcode, error_message
 
@@ -469,7 +480,7 @@ class Encrypt(object):
         to_user_id = utils.get_user_id_matching_email(to_user, user_ids)
         if to_user_id is None:
             ready_to_encrypt = False
-            self.log_message("No {} key for {}".format(encryption_name, to_user))
+            self._log_message("No {} key for {}".format(encryption_name, to_user))
         else:
             try:
                 contacts.is_key_ok(to_user_id, encryption_name)
@@ -477,8 +488,8 @@ class Encrypt(object):
             except CryptoException as exception:
                 to_user_id = None
                 ready_to_encrypt = False
-                self.log_exception(exception.value)
-                self.log_message('raising message exception in _get_to_crypto_details')
+                self._log_exception(exception.value)
+                self._log_message('raising message exception in _get_to_crypto_details')
                 raise MessageException(value=exception.value)
 
         return to_user_id, ready_to_encrypt
@@ -501,12 +512,12 @@ class Encrypt(object):
                     add_private_key(
                        self.crypto_message.smtp_sender(), encryption_software=encryption_name)
                 else:
-                    self.log_message("not creating a new {} key for {} because auto-create disabled".format(
+                    self._log_message("not creating a new {} key for {} because auto-create disabled".format(
                         encryption_name, from_user_id))
             else:
-                self.log_message('found matching user id: {}'.format(from_user_id))
+                self._log_message('found matching user id: {}'.format(from_user_id))
 
-        self.log_message('_prep_from_user: {}'.format(result_ok))
+        self._log_message('_prep_from_user: {}'.format(result_ok))
 
         return result_ok
 
@@ -553,9 +564,9 @@ class Encrypt(object):
                 encryption_names = utils.get_encryption_software(from_user)
         """
         encryption_names = utils.get_encryption_software(from_user)
-        if encryption_names is None or len(encryption_names) <= 0:
+        if len(encryption_names) <= 0:
             signed = False
-            self.log_message('unable to clear sign message because no encryption software defined for: {}'.format(from_user))
+            self._log_message('unable to clear sign message because no encryption software defined for: {}'.format(from_user))
         else:
             signed = self._clear_sign_message_with_all(encryption_names)
             # the message isn't really encrypted, just signed
@@ -564,9 +575,9 @@ class Encrypt(object):
                 self.crypto_message.set_clear_signed(True)
                 self.crypto_message.add_clear_signer(
                    {constants.SIGNER: from_user, constants.SIGNER_VERIFIED: True})
-                self.log_message('message clear signed, but not encrypted')
+                self._log_message('message clear signed, but not encrypted')
             if self.DEBUGGING:
-                self.log_message('message after clear signature:\n{}'.format(
+                self._log_message('message after clear signature:\n{}'.format(
                   self.crypto_message.get_email_message().to_string()))
 
         return signed
@@ -580,7 +591,7 @@ class Encrypt(object):
         signed_with = []
         encrypted_classnames = []
 
-        self.log_message("signing using {} encryption software".format(encryption_names))
+        self._log_message("signing using {} encryption software".format(encryption_names))
         for encryption_name in encryption_names:
             encryption_classname = get_key_classname(encryption_name)
             if encryption_classname not in encrypted_classnames:
@@ -590,7 +601,7 @@ class Encrypt(object):
                         encrypted_classnames.append(encryption_classname)
                 except MessageException as message_exception:
                     error_message += message_exception.value
-                    self.log_exception(error_message)
+                    self._log_exception(error_message)
                     break
 
         return signed_with
@@ -601,17 +612,17 @@ class Encrypt(object):
         '''
         result_ok = False
         try:
-            self.log_message("signing message with {}".format(encryption_name))
+            self._log_message("signing message with {}".format(encryption_name))
             crypto = CryptoFactory.get_crypto(encryption_name, get_classname(encryption_name))
             if crypto is None:
-                self.log_message("{} is not ready to use".format(encryption_name))
+                self._log_message("{} is not ready to use".format(encryption_name))
             elif (self.crypto_message is None or
                   self.crypto_message.smtp_sender() is None):
-                self.log_message("missing key data to sign message")
+                self._log_message("missing key data to sign message")
             else:
                 # get all the private user ids that have encryption keys
                 private_user_ids = crypto.get_private_user_ids()
-                if self.DEBUGGING: self.log_message('private user ids: {}'.format(private_user_ids))
+                if self.DEBUGGING: self._log_message('private user ids: {}'.format(private_user_ids))
 
                 result_ok = self._prep_from_user(private_user_ids, encryption_name)
                 if result_ok:
@@ -621,16 +632,16 @@ class Encrypt(object):
 
                     result_ok = from_user_id is not None and passcode is not None
                 else:
-                    self.log_message("private_user_ids is not None and len(private_user_ids) > 0: {}".format(
+                    self._log_message("private_user_ids is not None and len(private_user_ids) > 0: {}".format(
                         private_user_ids is not None and len(private_user_ids) > 0))
 
                 if result_ok:
-                    self.log_message("from user ID: {}".format(from_user_id))
-                    self.log_message("subject: {}".format(
+                    self._log_message("from user ID: {}".format(from_user_id))
+                    self._log_message("subject: {}".format(
                       self.crypto_message.get_email_message().get_header(mime_constants.SUBJECT_KEYWORD)))
 
                     result_ok = self._clear_sign_message_with_keys(crypto, from_user_id, passcode)
-                    self.log_message('signed message: {}'.format(result_ok))
+                    self._log_message('signed message: {}'.format(result_ok))
 
                 else:
                     # the message hasn't been signed, but we have
@@ -640,7 +651,7 @@ class Encrypt(object):
         except Exception:
             result_ok = False
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
         return result_ok
 
@@ -658,7 +669,7 @@ class Encrypt(object):
 
     def _add_outbound_record(self, original_crypto_message, inner_encrypted_with):
         ''' Add an outbound record that a message was sent privately.'''
-        
+
         self.crypto_message.set_crypted_with(inner_encrypted_with)
         # use the original message, not the protected one
         if original_crypto_message is None:
@@ -668,35 +679,50 @@ class Encrypt(object):
             original_crypto_message.set_crypted_with(inner_encrypted_with)
             original_crypto_message.set_metadata_crypted(True)
             original_crypto_message.set_metadata_crypted_with(self.crypto_message.get_metadata_crypted_with())
-            if self.crypto_message.is_private_signed(): 
+            if self.crypto_message.is_private_signed():
                 original_crypto_message.set_private_signed(True)
-            if self.crypto_message.is_private_sig_verified(): 
+            if self.crypto_message.is_private_sig_verified():
                 original_crypto_message.set_private_signers(self.crypto_message.private_signers_list())
-            if self.crypto_message.is_clear_signed(): 
+            if self.crypto_message.is_clear_signed():
                 original_crypto_message.set_clear_signed(True)
-            if self.crypto_message.is_clear_sig_verified(): 
+            if self.crypto_message.is_clear_sig_verified():
                 original_crypto_message.set_clear_signers(self.crypto_message.clear_signers_list())
-            if self.crypto_message.is_dkim_signed(): 
+            if self.crypto_message.is_dkim_signed():
                 original_crypto_message.set_dkim_signed(True)
-            if self.crypto_message.is_dkim_sig_verified(): 
+            if self.crypto_message.is_dkim_sig_verified():
                 original_crypto_message.set_dkim_sig_verified(True)
         history.add_outbound_record(original_crypto_message, self.verification_code)
 
-    def log_exception(self, msg):
+    def _start_check_for_encryption(self, from_user, to_user):
+        ''' Start checking if the user uses encryption. '''
+
+        # don't look for keys if the to_user's domain is also using goodcrypto
+        if contacts.get(get_metadata_address(email=to_user)) is None:
+            # start by adding a record so we don't search for a key again
+            contact = contacts.add(to_user, None)
+            contact.outbound_encrypt_policy = NEVER_ENCRYPT_OUTBOUND
+
+            # search for the keys; if one's found, send email to the from
+            # user so they can verify the fingerprint
+            search_keyservers_via_rq(to_user, from_user)
+        else:
+            self._log_message('{} is also using goodcrypto so not searching for a key'.format(to_user))
+
+    def _log_exception(self, msg):
         '''
             Log the message to the local and Exception logs.
         '''
 
-        self.log_message(msg)
+        self._log_message(msg)
         record_exception(message=msg)
 
-    def log_message(self, message):
+    def _log_message(self, message):
         '''
             Log the message to the local log.
         '''
 
-        if self.log is None:
-            self.log = LogFile()
+        if self._log is None:
+            self._log = LogFile()
 
-        self.log.write_and_flush(message)
+        self._log.write_and_flush(message)
 

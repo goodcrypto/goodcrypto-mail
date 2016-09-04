@@ -1,12 +1,13 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 
 from goodcrypto.mail import contacts, crypto_software
+from goodcrypto.mail.constants import MESSAGE_HEADER
 from goodcrypto.mail.message.constants import PUBLIC_KEY_HEADER
 from goodcrypto.mail.message.inspect_utils import get_multientry_header
 from goodcrypto.mail.message.message_exception import MessageException
@@ -262,7 +263,7 @@ class HeaderKeys(object):
                         else:
                             self.log_message('  same fingerprint: {}'.format(saved_fingerprint))
                             # warn user if unable to save the fingerprint, but proceed
-                            if not contacts.update_fingerprint(from_user, encryption_name, crypto_fingerprint):
+                            if not self.update_fingerprint(from_user, encryption_name, crypto_fingerprint):
                                 tag = notices.report_db_error(
                                     self.recipient_to_notify, from_user, encryption_name, crypto_message)
                     else:
@@ -354,7 +355,7 @@ class HeaderKeys(object):
         for (user_id, fingerprint) in id_fingerprint_pairs:
             self.log_message(
                 'adding contact for {} with {} fingerprint'.format(user_id, fingerprint))
-            contact = contacts.add(user_id, encryption_name, fingerprint=fingerprint)
+            contact = contacts.add(user_id, encryption_name, fingerprint=fingerprint, source=MESSAGE_HEADER)
             if contact is None:
                 result_ok = False
                 self.log_message('unable to add contact while trying to import key for {}'.format(email))
@@ -402,9 +403,85 @@ class HeaderKeys(object):
         '''
 
         accepted_crypto_packages = crypto_message.get_accepted_crypto_software()
-        contacts.update_accepted_crypto(from_user, accepted_crypto_packages)
+        self.update_accepted_crypto(from_user, accepted_crypto_packages)
 
         return accepted_crypto_packages
+
+    def update_fingerprint(self, email, encryption_name, new_fingerprint, verified=False):
+        '''
+            Set the fingerprint for the encryption software for this email.
+            If the fingerprint doesn't match the crypto's fingerprint, it won't
+            be saved in the database.
+        '''
+
+        if email is None or encryption_name is None:
+            result_ok = False
+            self.log_message("missing data to save {} fingerprint for {}".format(encryption_name, email))
+        else:
+            self.log_message('updating {} fingerprint for {}'.format(encryption_name, email))
+            contacts_crypto = contacts.get_contacts_crypto(email, encryption_name=encryption_name)
+            if contacts_crypto is None:
+                contact = contacts.add(email, encryption_name, source=MESSAGE_HEADER)
+                contacts_crypto = contacts.get_contacts_crypto(email, encryption_name=encryption_name)
+
+            if contacts_crypto is None:
+                result_ok = False
+                self.log_message("unable to save contact's {} fingerprint".format(encryption_name))
+            else:
+                try:
+                    need_update = False
+                    if new_fingerprint != contacts_crypto.fingerprint:
+                        contacts_crypto.fingerprint = new_fingerprint
+                        need_update = True
+                        self.log_message("contacts_crypto fingerprint: {}".format(contacts_crypto.fingerprint))
+                    if contacts_crypto.verified != verified:
+                        contacts_crypto.verified = verified
+                        need_update = True
+                        self.log_message('Updated verification status: {}'.format(verified))
+                    if need_update:
+                        contacts_crypto.save()
+                        self.log_message('saved changes')
+
+                    result_ok = True
+                except:
+                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    record_exception()
+                    result_ok = False
+
+        return result_ok
+
+    def update_accepted_crypto(self, email, encryption_software_list):
+        ''' Update the list of encryption software accepted by user.
+        '''
+
+        if email is None:
+            self.log_message("email not defined so no need to update accepted crypto")
+        elif encryption_software_list is None or len(encryption_software_list) <= 0:
+            self.log_message('no encryption programs defined for {}'.format(email))
+        else:
+            contact = contacts.get(email)
+            if contact is None:
+                # if the contact doesn't exist, then add them with the first encryption program
+                encryption_program = encryption_software_list[0]
+                contact = contacts.add(email, encryption_program, source=MESSAGE_HEADER)
+                self.log_message("added {} to contacts".format(email))
+
+            # associate each encryption program in the list with this contact
+            for encryption_program in encryption_software_list:
+                try:
+                    contacts_crypto = contacts.get_contacts_crypto(email, encryption_program)
+                    if contacts_crypto is None:
+                        encryption_software = crypto_software.get(encryption_program)
+                        if encryption_software is None:
+                            self.log_message('{} encryption software unknown'.format(encryption_program))
+                            self.log_message(
+                              'unable to add contacts crypt for {} using {} encryption software unknown'.format(email, encryption_program))
+                        else:
+                            contacts_crypto = contacts.add_contacts_crypto(
+                               contact=contact, encryption_software=encryption_software, source=MESSAGE_HEADER)
+                except Exception:
+                    record_exception()
+                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     def log_message(self, message):
         '''

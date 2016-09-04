@@ -2,8 +2,8 @@
     Signals from creating and deleting mail models
     with the associated crypto keys.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -100,10 +100,10 @@ def add_to_postfix_mta_queue(mail_server_address, goodcrypto_listen_port, mta_li
     '''
         Add a job to the postfix mta queue.
 
-        >>> add_to_postfix_mta_queue('123.456.789.0', 10025, 10026)
+        >>> add_to_postfix_mta_queue('123.456.789.0', 10027, 10028)
         True
 
-        >>> add_to_postfix_mta_queue('127.0.0.1', 10025, 10026)
+        >>> add_to_postfix_mta_queue('127.0.0.1', 10027, 10028)
         True
     '''
 

@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-01
+    Last modified: 2016-02-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -239,7 +239,7 @@ class Decrypt(object):
                 from_user = self.crypto_message.smtp_sender()
                 to_user = self.crypto_message.smtp_recipient()
                 encryption_software = get_encryption_software(to_user)
-                if encryption_software and len(encryption_software) > 0:
+                if len(encryption_software) > 0:
                     self.log_message("encryption software: {}".format(encryption_software))
                 elif email_in_domain(to_user) and options.create_private_keys():
                     add_private_key(to_user, encryption_software=encryption_software)

@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-02
+    Last modified: 2016-02-18
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -14,7 +14,6 @@ from goodcrypto.mail.message import history, tags, utils
 from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, CRLF, LF, SIGNER, SIGNER_VERIFIED
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.tags import add_verification_tag
-from goodcrypto.mail.utils import get_email
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import i18n, get_email
@@ -43,12 +42,14 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
         ...    email = 'mike@goodcrypto.remote'
         ...    crypto_message = CryptoMessage(email_message=EmailMessage(input_file))
         ...    verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO)
-        ...    crypto_message.get_tag()
-        'Warning: Content signed by an unknown user.'
+        ...    crypto_message.clear_signers_list()
+        [{'signer': 'unknown user', 'verified': False}]
     '''
 
     def extract_signers(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
         ''' Extract the signers if message is signed. '''
+
+        known_signers = False
 
         crypto = CryptoFactory.get_crypto(encryption_name, crypto_software.get_classname(encryption_name))
         log_message('checking if message signed by {}'.format(email))
@@ -58,16 +59,12 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
                     SIGNER: email,
                     SIGNER_VERIFIED: True,
                 }
+                known_signers = True
                 log_message('{} signed message'.format(email))
             else:
                 log_message('signature block\n{}'.format(signature_block))
                 signer = crypto.get_signer(signature_block)
-                log_message('{} signed message'.format(signer))
-                if signer is None:
-                    signer = 'unknown user'
-                else:
-                    signer = get_email(signer)
-
+                log_message('unverified signature by {}'.format(signer))
                 signer_dict = {
                     SIGNER: signer,
                     SIGNER_VERIFIED: False,
@@ -77,15 +74,18 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
 
         log_message('clear signers: {}'.format(crypto_message.clear_signers_list()))
 
+        return known_signers
+
     # if the message is signed, then verify the signature
     signature_blocks = crypto_message.get_email_message().get_pgp_signature_blocks()
     if len(signature_blocks) > 0:
         crypto_message.set_clear_signed(True)
         log_message('clear signed')
-        extract_signers(get_email(email), signature_blocks, encryption_name=encryption_name)
 
-        # remove the signature block; techies won't like this, but it makes the message more readable
-        crypto_message.get_email_message().remove_pgp_signature_blocks()
+        # remove the signature block if signer known
+        # techies won't like this, but it makes the message more readable
+        if extract_signers(get_email(email), signature_blocks, encryption_name=encryption_name):
+            crypto_message.get_email_message().remove_pgp_signature_blocks()
     else:
         log_message('no signature block found in this part of message')
 

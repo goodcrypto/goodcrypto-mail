@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-24
+    Last modified: 2016-02-14
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -150,10 +150,10 @@ class MailAPI(object):
                 self.log_message('status result: {}'.format(result))
 
             elif self.action == api_constants.IMPORT_KEY:
-                from goodcrypto.mail.views import import_key_now
+                from goodcrypto.mail.import_key import import_key_now
 
                 result_ok, status, fingerprint_ok = import_key_now(
-                    self.encryption_name, self.public_key, self.user_name, self.fingerprint)
+                    self.encryption_name, self.public_key, self.user_name, self.fingerprint, self.password)
                 if result_ok:
                     __, email = status.split(':')
                     result = self.format_message_result(api_constants.IMPORT_KEY, True, email)

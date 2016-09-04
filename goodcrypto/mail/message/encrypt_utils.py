@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-30
+    Last modified: 2016-02-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -320,7 +320,7 @@ def create_protected_message(from_user, to_user, data, message_id):
         encryption_names = get_encryption_software(to_metadata_address)
         log_message('{} encryption software for: {}'.format(encryption_names, to_metadata_address))
 
-        if encryption_names is None or len(encryption_names) < 1:
+        if len(encryption_names) < 1:
             error_message = i18n(
               'Unable to protect metadata because there are no encryption programs for {}.'.format(to_metadata_address))
             log_message(error_message)

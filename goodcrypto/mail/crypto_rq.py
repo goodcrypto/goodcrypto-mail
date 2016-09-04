@@ -1,8 +1,8 @@
 '''
     Manage crypto via RQ.
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-20
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -23,6 +23,9 @@ from goodcrypto.utils.log_file import LogFile
 from goodcrypto.utils.manage_rq import get_job_count, get_job_results
 
 
+ONE_MINUTE = 60 #  one minute, in seconds
+DEFAULT_TIMEOUT = 10 * ONE_MINUTE
+
 
 _log = None
 
@@ -31,6 +34,10 @@ def add_private_key_via_rq(contacts_encryption):
     '''
         Start the process of adding a private key.
         If one exists, then verify the info in the database matches.
+
+        Test extreme case.
+        >>> add_private_key_via_rq(None)
+        False
     '''
     try:
         if contacts_encryption is None:
@@ -40,7 +47,7 @@ def add_private_key_via_rq(contacts_encryption):
             from goodcrypto.mail.sync_db_with_keyring import sync_private_key
 
             email = contacts_encryption.contact.email
-            result = add_contacts_crypto_to_rq(contacts_encryption, sync_private_key)
+            result = add_contacts_crypto_via_rq(contacts_encryption, sync_private_key)
             log_message("queued sync of private key for {}".format(email, result))
 
     except Exception as exception:
@@ -53,6 +60,10 @@ def add_private_key_via_rq(contacts_encryption):
 def set_fingerprint_via_rq(contacts_encryption):
     '''
         Start the process of setting a fingerprint if there's a matching key in the database.
+
+        Test extreme case.
+        >>> set_fingerprint_via_rq(None)
+        False
     '''
 
     try:
@@ -63,7 +74,7 @@ def set_fingerprint_via_rq(contacts_encryption):
             from goodcrypto.mail.sync_db_with_keyring import sync_fingerprint
 
             email = contacts_encryption.contact.email
-            result = add_contacts_crypto_to_rq(contacts_encryption, sync_fingerprint)
+            result = add_contacts_crypto_via_rq(contacts_encryption, sync_fingerprint)
             log_message('queued syncing fingerprint for {}: {}'.format(email, result))
     except Exception as exception:
         result = False
@@ -75,6 +86,10 @@ def set_fingerprint_via_rq(contacts_encryption):
 def delete_contacts_crypto_via_rq(contacts_encryption):
     '''
         Delete the key(s) for the contact's encryption.
+
+        Test extreme case.
+        >>> delete_contacts_crypto_via_rq(None)
+        False
     '''
 
     try:
@@ -85,7 +100,7 @@ def delete_contacts_crypto_via_rq(contacts_encryption):
             from goodcrypto.mail.sync_db_with_keyring import sync_deletion
 
             email = contacts_encryption.contact.email
-            result = add_contacts_crypto_to_rq(contacts_encryption, sync_deletion)
+            result = add_contacts_crypto_via_rq(contacts_encryption, sync_deletion)
             log_message("queued delete key for {}: {}".format(email, result))
     except Exception as exception:
         result = False
@@ -94,9 +109,13 @@ def delete_contacts_crypto_via_rq(contacts_encryption):
 
     return result
 
-def add_contacts_crypto_to_rq(contacts_encryption, function):
+def add_contacts_crypto_via_rq(contacts_encryption, function):
     '''
         Add a job with the contact's encryption to the crypto RQ.
+
+        Test extreme case.
+        >>> add_contacts_crypto_via_rq(None, None)
+        False
     '''
 
     result_ok = False
@@ -107,9 +126,6 @@ def add_contacts_crypto_to_rq(contacts_encryption, function):
             result_ok = False
 
         else:
-            ONE_MINUTE = 60 #  one minute, in seconds
-            DEFAULT_TIMEOUT = 10 * ONE_MINUTE
-
             crypto_jobs = get_job_count(CRYPTO_RQ, CRYPTO_REDIS_PORT)
             redis_connection = Redis(REDIS_HOST, CRYPTO_REDIS_PORT)
             queue = Queue(name=CRYPTO_RQ, connection=redis_connection, async=True)
@@ -130,7 +146,13 @@ def add_contacts_crypto_to_rq(contacts_encryption, function):
     return result_ok
 
 def prep_action(contacts_crypto):
-    ''' Prepare a crypto action. '''
+    '''
+        Prepare a crypto action.
+
+        Test extreme case.
+        >>> prep_action(None)
+        (False, None, None, None)
+    '''
 
     result_ok = True
     crypto_name = email = key_plugin = None
@@ -161,6 +183,102 @@ def prep_action(contacts_crypto):
         result_ok = False
 
     return result_ok, crypto_name, email, key_plugin
+
+def search_keyservers_via_rq(email, first_contacted_by, interactive=False):
+    '''
+        Start the process of searching and retrieving a key from the keyservers.
+
+        # Test extreme cases
+        # In honor of Syrian teenager who refused to be a suicide bomber.
+        >>> search_keyservers_via_rq('syrian.teenager@goodcrypto.local', None)
+        False
+        >>> search_keyservers_via_rq('syrian.teenager@goodcrypto.local', None, interactive=True)
+        False
+        >>> search_keyservers_via_rq(None, 'julian@goodcrypto.local')
+        False
+    '''
+
+    try:
+        if email is None:
+            result_ok = False
+            log_message("cannot search keyservers without an email address")
+        elif first_contacted_by is None:
+            result_ok = False
+            log_message("require an email where we can send notification if successful")
+        else:
+            from goodcrypto.mail.keyservers import search_keyservers_for_key
+
+            crypto_jobs = get_job_count(CRYPTO_RQ, CRYPTO_REDIS_PORT)
+            redis_connection = Redis(REDIS_HOST, CRYPTO_REDIS_PORT)
+            queue = Queue(name=CRYPTO_RQ, connection=redis_connection, async=True)
+            secs_to_wait = DEFAULT_TIMEOUT * (queue.count + crypto_jobs + 1)
+            job = queue.enqueue_call(search_keyservers_for_key,
+                                     args=[
+                                       b64encode(pickle.dumps(email)),
+                                       b64encode(pickle.dumps(first_contacted_by)),
+                                       b64encode(pickle.dumps(interactive))],
+                                     timeout=secs_to_wait)
+
+            result_ok = get_job_results(queue, job, secs_to_wait, email)
+            if job.is_failed:
+                result_ok = False
+                log_message('job failed for {}'.format(email))
+            else:
+                log_message('queued searching keyservers for a key for {}'.format(email))
+    except Exception as exception:
+        result_ok = False
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return result_ok
+
+def retrieve_key_from_keyservers_via_rq(fingerprint, encryption_name, first_contacted_by):
+    '''
+        Start the process of retrieving a key from the keyservers.
+
+        # Test extreme cases
+        >>> retrieve_key_from_keyservers_via_rq('99C4 402C AE6F 09DB 604D  4A8A 8559 78CF 296D E1CD', 'GPG', None)
+        False
+        >>> retrieve_key_from_keyservers_via_rq(None, 'GPG', 'julian@goodcrypto.local')
+        False
+    '''
+
+    try:
+        if fingerprint is None:
+            result_ok = False
+            log_message("cannot retrieve key from keyservers without a fingerprint")
+        elif encryption_name is None:
+            result_ok = False
+            log_message("require an encryption_name")
+        elif first_contacted_by is None:
+            result_ok = False
+            log_message("require an email where we can send notification if successful")
+        else:
+            from goodcrypto.mail.keyservers import get_key_from_keyservers
+
+            crypto_jobs = get_job_count(CRYPTO_RQ, CRYPTO_REDIS_PORT)
+            redis_connection = Redis(REDIS_HOST, CRYPTO_REDIS_PORT)
+            queue = Queue(name=CRYPTO_RQ, connection=redis_connection, async=True)
+            secs_to_wait = DEFAULT_TIMEOUT * (queue.count + crypto_jobs + 1)
+            job = queue.enqueue_call(get_key_from_keyservers,
+                                     args=[
+                                       b64encode(pickle.dumps(fingerprint)),
+                                       b64encode(pickle.dumps(encryption_name)),
+                                       b64encode(pickle.dumps(first_contacted_by))],
+                                     timeout=secs_to_wait)
+
+            result_ok = get_job_results(queue, job, secs_to_wait, fingerprint)
+            if job.is_failed:
+                result_ok = False
+                log_message('job failed for {}'.format(fingerprint))
+            else:
+                log_message('queued searching keyservers for a key for {}'.format(fingerprint))
+    except Exception as exception:
+        result_ok = False
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return result_ok
 
 def log_message(message):
     '''

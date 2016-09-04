@@ -1,8 +1,8 @@
 '''
     Sync the django database and the encryption databases (i.e., keyrings).
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-12-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-11
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -19,7 +19,6 @@ from goodcrypto.mail import contacts, crypto_software, user_keys, utils
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message.metadata import is_metadata_address
 from goodcrypto.mail.options import create_private_keys
-from goodcrypto.mail.rq_crypto_settings import KEY_SUFFIX
 from goodcrypto.mail.utils import notices
 from goodcrypto.oce.key.constants import EXPIRES_IN, EXPIRATION_UNIT
 from goodcrypto.oce.key.key_factory import KeyFactory
@@ -29,6 +28,40 @@ from goodcrypto.utils.log_file import LogFile
 
 _log = None
 
+
+def sync_private_key(contacts_crypto_encoded):
+    '''
+        Sync a key pair, and its associated records, for an email address within our domain.
+
+        >>> sync_private_key(None)
+        False
+    '''
+
+    result_ok = False
+    if contacts_crypto_encoded is not None:
+        try:
+            contacts_crypto = pickle.loads(b64decode(contacts_crypto_encoded))
+            email = contacts_crypto.contact.email
+            try:
+                log_message('starting to sync_private_key for {}'.format(email))
+                sync_db_key_class = SyncDbWithKeyring(contacts_crypto)
+                if sync_db_key_class:
+                    result_ok = sync_db_key_class.configure()
+                    log_message('configure result for {} ok: {}'.format(email, result_ok))
+                else:
+                    result_ok = False
+            except Exception as exception:
+                record_exception()
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                result_ok = False
+            finally:
+                log_message('finished sync_private_key for {}'.format(email))
+        except Exception as exception:
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            result_ok = False
+
+    return result_ok
 
 class SyncDbWithKeyring(object):
     '''
@@ -117,6 +150,8 @@ class SyncDbWithKeyring(object):
     def _add_key(self):
         '''
             Add a key and the associated database records.
+
+            Test extreme case.
             >>> sync_db_key_class = SyncDbWithKeyring(None)
             >>> sync_db_key_class._add_key()
             False
@@ -175,26 +210,34 @@ class SyncDbWithKeyring(object):
     def _need_new_key(self):
         '''
             Determine if we need to create a new key.
+
+            Test extreme case.
+            >>> sync_db_key_class = SyncDbWithKeyring(None)
+            >>> sync_db_key_class._need_new_key()
+            False
         '''
 
         need_key = False
 
-        # if there's a matching private key
-        if self.key_plugin.private_key_exists(self.email):
-            self.user_key = user_keys.get(self.email, self.crypto_name)
-            need_key = False
-            log_message("found private {} key for {}: True".format(self.crypto_name, self.email))
-            log_message("found matching db user key record for {}: {}".format(
-                self.email, self.user_key is not None))
-
-        # if there is a matching public key, delete it
-        elif self.key_plugin.public_key_exists(self.email):
-            need_key = True
-            self.key_plugin.delete(self.email)
-            log_message("deleted old public {} key for {}".format(self.crypto_name, self.email))
-
-        else:
-            need_key = True
+        try:
+            # if there's a matching private key
+            if self.key_plugin.private_key_exists(self.email):
+                self.user_key = user_keys.get(self.email, self.crypto_name)
+                need_key = False
+                log_message("found private {} key for {}: True".format(self.crypto_name, self.email))
+                log_message("found matching db user key record for {}: {}".format(
+                    self.email, self.user_key is not None))
+    
+            # if there is a matching public key, delete it
+            elif self.key_plugin.public_key_exists(self.email):
+                need_key = True
+                self.key_plugin.delete(self.email)
+                log_message("deleted old public {} key for {}".format(self.crypto_name, self.email))
+    
+            else:
+                need_key = True
+        except:
+            record_exception()
 
         return need_key
 
@@ -202,6 +245,11 @@ class SyncDbWithKeyring(object):
     def _validate_passcode(self):
         '''
             Verify the passcode.
+
+            Test extreme case.
+            >>> sync_db_key_class = SyncDbWithKeyring(None)
+            >>> sync_db_key_class._validate_passcode()
+            False
         '''
 
         passcode_ok = False
@@ -268,6 +316,40 @@ class SyncDbWithKeyring(object):
                     else:
                         raise
 
+def sync_fingerprint(contacts_crypto_encoded):
+    '''
+        Sync the fingerprint in the contacts' crypto record.
+
+        >>> # Test extremes
+        >>> sync_fingerprint(None)
+        False
+    '''
+
+    result_ok = False
+    if contacts_crypto_encoded is not None:
+        try:
+            contacts_crypto = pickle.loads(b64decode(contacts_crypto_encoded))
+            email = contacts_crypto.contact.email
+            try:
+                log_message('starting to sync fingerprint for {}'.format(email))
+                set_fingerprint_class = SetFingerprint(contacts_crypto)
+                if set_fingerprint_class:
+                    result_ok = set_fingerprint_class.save()
+                else:
+                    result_ok = False
+            except Exception as exception:
+                record_exception()
+                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                result_ok = False
+            finally:
+                log_message('finished set_fingerprint for {}'.format(email))
+        except Exception as exception:
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            result_ok = False
+
+    return result_ok
+
 class SetFingerprint(object):
     '''
         Set the fingerprint in the crypto's record.
@@ -286,6 +368,11 @@ class SetFingerprint(object):
     def save(self):
         '''
             Save the fingerprint in the database.
+
+            Test extreme case.
+            >>> set_fingerprint_class = SetFingerprint(None)
+            >>> set_fingerprint_class.save()
+            False
         '''
 
         self.result_ok, self.crypto_name, self.email, self.key_plugin = prep_sync(self.contacts_encryption)
@@ -330,111 +417,6 @@ class SetFingerprint(object):
 
         return self.result_ok
 
-class DeleteKey(object):
-    '''
-        Delete database records and encryption key.
-    '''
-
-    def __init__(self, contacts_crypto):
-        '''
-            >>> # In honor of Philipp Winter, main developer of ScrambleSuit.
-            >>> from goodcrypto.mail import contacts
-            >>> email = 'philipp@goodcrypto.local'
-            >>> crypto_name = 'GPG'
-            >>> contacts_crypto = contacts.get_contacts_crypto(email, crypto_name)
-            >>> delete_key_class = DeleteKey(contacts_crypto)
-            >>> delete_key_class != None
-            True
-        '''
-
-        self.contacts_encryption = contacts_crypto
-
-    def delete(self):
-        '''
-            Delete the crypto key.
-        '''
-
-        self.result_ok, self.crypto_name, self.email, self.key_plugin = prep_sync(self.contacts_encryption)
-        if self.result_ok:
-            if utils.ok_to_modify_key(self.crypto_name, self.key_plugin):
-                log_message('deleting {} key for {}'.format(self.crypto_name, self.email))
-                self.result_ok = self.key_plugin.delete(self.email)
-                log_message('deleted {} keys result_ok: {}'.format(self.crypto_name, self.result_ok))
-            else:
-                self.result_ok = True
-                log_message('not ok to delete key')
-
-        return self.result_ok
-
-
-def sync_private_key(contacts_crypto_encoded):
-    '''
-        Sync a key pair, and its associated records, for an email address within our domain.
-
-        >>> sync_private_key(None)
-        False
-    '''
-
-    result_ok = False
-    if contacts_crypto_encoded is not None:
-        try:
-            contacts_crypto = pickle.loads(b64decode(contacts_crypto_encoded))
-            email = contacts_crypto.contact.email
-            try:
-                log_message('starting to sync_private_key for {}'.format(email))
-                sync_db_key_class = SyncDbWithKeyring(contacts_crypto)
-                if sync_db_key_class:
-                    result_ok = sync_db_key_class.configure()
-                    log_message('configure result for {} ok: {}'.format(email, result_ok))
-                else:
-                    result_ok = False
-            except Exception as exception:
-                record_exception()
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-                result_ok = False
-            finally:
-                log_message('finished sync_private_key for {}'.format(email))
-        except Exception as exception:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            result_ok = False
-
-    return result_ok
-
-def sync_fingerprint(contacts_crypto_encoded):
-    '''
-        Sync the fingerprint in the contacts' crypto record.
-
-        >>> # Test extremes
-        >>> sync_fingerprint(None)
-        False
-    '''
-
-    result_ok = False
-    if contacts_crypto_encoded is not None:
-        try:
-            contacts_crypto = pickle.loads(b64decode(contacts_crypto_encoded))
-            email = contacts_crypto.contact.email
-            try:
-                log_message('starting to sync fingerprint for {}'.format(email))
-                set_fingerprint_class = SetFingerprint(contacts_crypto)
-                if set_fingerprint_class:
-                    result_ok = set_fingerprint_class.save()
-                else:
-                    result_ok = False
-            except Exception as exception:
-                record_exception()
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-                result_ok = False
-            finally:
-                log_message('finished set_fingerprint for {}'.format(email))
-        except Exception as exception:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            result_ok = False
-
-    return result_ok
-
 def sync_deletion(contacts_crypto_encoded):
     '''
         Sync deleting the key associated with this contact's crypto.
@@ -468,8 +450,56 @@ def sync_deletion(contacts_crypto_encoded):
 
     return result_ok
 
+class DeleteKey(object):
+    '''
+        Delete database records and encryption key.
+    '''
+
+    def __init__(self, contacts_crypto):
+        '''
+            >>> # In honor of Philipp Winter, main developer of ScrambleSuit.
+            >>> from goodcrypto.mail import contacts
+            >>> email = 'philipp@goodcrypto.local'
+            >>> crypto_name = 'GPG'
+            >>> contacts_crypto = contacts.get_contacts_crypto(email, crypto_name)
+            >>> delete_key_class = DeleteKey(contacts_crypto)
+            >>> delete_key_class != None
+            True
+        '''
+
+        self.contacts_encryption = contacts_crypto
+
+    def delete(self):
+        '''
+            Delete the crypto key.
+
+            Test extreme case.
+            >>> delete_key_class = DeleteKey(None)
+            >>> delete_key_class.delete()
+            False
+        '''
+
+        self.result_ok, self.crypto_name, self.email, self.key_plugin = prep_sync(self.contacts_encryption)
+        if self.result_ok:
+            if utils.ok_to_modify_key(self.crypto_name, self.key_plugin):
+                log_message('deleting {} key for {}'.format(self.crypto_name, self.email))
+                self.result_ok = self.key_plugin.delete(self.email)
+                log_message('deleted {} keys result_ok: {}'.format(self.crypto_name, self.result_ok))
+            else:
+                self.result_ok = True
+                log_message('not ok to delete key')
+
+        return self.result_ok
+
+
 def prep_sync(contacts_crypto):
-    ''' Prepare to sync database and crypto keys. '''
+    '''
+        Prepare to sync database and crypto keys.
+
+        Test extreme case.
+        >>> prep_sync(None)
+        (False, None, None, None)
+    '''
 
     result_ok = True
     crypto_name = email = key_plugin = None
@@ -504,26 +534,6 @@ def prep_sync(contacts_crypto):
     log_message('finished preparing to sync db and keyring for {}'.format(email))
 
     return result_ok, crypto_name, email, key_plugin
-
-def log_message(message):
-    '''
-        Log the message to the local log.
-
-        >>> import os.path
-        >>> from syr.log import BASE_LOG_DIR
-        >>> from syr.user import whoami
-        >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.sync_db_with_keyring.log'))
-        True
-    '''
-
-    global _log
-
-    if _log is None:
-        _log = LogFile()
-
-    _log.write_and_flush(message)
-
 
 def _config_database_and_user(
         email_encoded, crypto_name_encoded, passcode_encoded, job_id_encoded, queue_key_encoded):
@@ -565,9 +575,11 @@ def _config_database_and_user(
         if job.is_finished:
             key_plugin = KeyFactory.get_crypto(
                 crypto_name, crypto_software.get_key_classname(crypto_name))
-            result_ok, timed_out = key_plugin.get_create_results(email, job)
+            result_ok, timed_out, gpg_output, gpg_error = key_plugin.get_background_job_results(email, job)
             log_message("results from adding {} key for {} result ok: {}; timed out: {}".format(
                 crypto_name, email, result_ok, timed_out))
+            if gpg_output: log_message(gpg_output)
+            if gpg_error: log_message(gpg_error)
         elif job.is_failed:
             log_message('add {} key for {} job failed'.format(crypto_name, email))
             result_ok = False
@@ -635,4 +647,22 @@ def _create_user(email):
 
     return password, error_message
 
+def log_message(message):
+    '''
+        Log the message to the local log.
+
+        >>> import os.path
+        >>> from syr.log import BASE_LOG_DIR
+        >>> from syr.user import whoami
+        >>> log_message('test')
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.sync_db_with_keyring.log'))
+        True
+    '''
+
+    global _log
+
+    if _log is None:
+        _log = LogFile()
+
+    _log.write_and_flush(message)
 

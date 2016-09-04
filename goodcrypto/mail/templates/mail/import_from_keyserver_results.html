@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% comment %}
+    Copyright 2016 GoodCrypto
+    Last modified: 2016-02-16
+{% endcomment %}
+{% load i18n custom %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="import, public key">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="Results of importing a key from a file.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}{{ page_title }}{% endblock %}
+
+{% block contentpane %}
+
+    <div class="row">
+        <h2>Starting Search for Key</h2>
+    </div>
+
+    <div class="row">&nbsp;</div>
+
+    <div class="row">
+        <p class="dropcap">{{ status }}</p>
+    </div>
+
+    {% if warnings %}
+        <div class="row">&nbsp;</div>
+
+        <div class="row">
+            <font color="red">{% trans 'Warning:' %}</font> {{ warnings }}
+        </div>
+    {% endif %}
+
+{% endblock contentpane %}
+

@@ -1,8 +1,8 @@
 '''
     GoodCrypto utilities.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-10-07
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-17
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -10,6 +10,9 @@ import os, re, sh
 from datetime import datetime, timedelta
 from email.utils import parseaddr
 from socket import inet_pton, AF_INET, AF_INET6
+
+from django.core.exceptions import ValidationError
+from django.core.validators import EmailValidator
 
 from goodcrypto.constants import TIMESTAMP_PATH
 from goodcrypto.utils.exception import record_exception
@@ -216,8 +219,7 @@ def parse_address(email, charset=None):
 
     try:
         if email is None:
-            name = None
-            address = None
+            name = address = None
         else:
             (name, address) = parseaddr(email)
             if charset is not None and name is not None:
@@ -225,10 +227,15 @@ def parse_address(email, charset=None):
                     name = name.decode(charset, 'replace')
                 except Exception:
                     record_exception()
+            try:
+                email_validator = EmailValidator()
+                email_validator(address)
+            except ValidationError as validator_error:
+                log('{} invalid: {}'.format(email, validator_error))
+                name = address = None
     except Exception:
         record_exception()
-        name = None
-        address = None
+        name = address = None
 
     return name, address
 

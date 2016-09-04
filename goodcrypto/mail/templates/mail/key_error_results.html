@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% comment %}
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-02-10
+    Last modified: 2016-02-14
 {% endcomment %}
 {% load i18n custom %}
 
@@ -13,18 +13,18 @@
   {% endblock meta_description %}
 
   {% block titlevar %}{{ page_title }}{% endblock %}
-  
+
 {% block contentpane %}
 
     <div class="row">
-        <h2>{{ page_title }}</h2> 
+        <h2>{{ page_title }}</h2>
     </div>
-    
+
     <div class="row">&nbsp;</div>
-    
+
     <div class="row">
         <p class="dropcap">
-        <font color="red">{% trans 'Error' %}:</font> {{ result }}
+        <font color="red">{% trans 'Error' %}:</font> {{ result|safe }}
         </p>
     </div>
 {% endblock contentpane %}

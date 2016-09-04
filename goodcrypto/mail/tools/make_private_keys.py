@@ -2,11 +2,12 @@
 '''
     Make private keys for all users in the supported domain.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-09-20
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-21
 '''
 import os, sys
 from goodcrypto.mail import contacts, crypto_software
+from goodcrypto.mail.constants import AUTO_GENERATED
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -49,7 +50,7 @@ def make_key(line, domain, crypto_name):
             full_address = email
         else:
             full_address = '{} <{}>'.format(user_name, email)
-        contacts.add(full_address, crypto_name)
+        contacts.add(full_address, crypto_name, source=AUTO_GENERATED)
     else:
         print('{} not in the domain: {}'.format(line, domain))
 

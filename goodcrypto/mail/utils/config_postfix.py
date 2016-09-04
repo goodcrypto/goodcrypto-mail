@@ -1,8 +1,9 @@
 '''
-    Configure postfix to work with the main MTA
+    Configure the GoodCrypto private server's postfix 
+    to work with the domain's MTA.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-07
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-19
     IMPORTANT: The doc tests in this module can only be run as root.
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
@@ -148,7 +149,7 @@ def master_needs_configuration(goodcrypto_listen_port):
         >>> new_config, __ = master_needs_configuration(10023)
         >>> new_config
         True
-        >>> new_config, __ = master_needs_configuration(10026)
+        >>> new_config, __ = master_needs_configuration(10028)
         >>> new_config
         False
     '''

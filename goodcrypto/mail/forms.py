@@ -2,10 +2,11 @@
     Mail app forms.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-27
+    Last modified: 2016-02-17
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+import re
 from django import forms
 from django.forms.models import BaseInlineFormSet
 from django.forms.widgets import HiddenInput
@@ -13,12 +14,14 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address
 
 from goodcrypto import api_constants
+from goodcrypto.mail.constants import DEFAULT_KEYSERVER_STATUS, PASSCODE_MAX_LENGTH
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.options import mta_listen_port
 from goodcrypto.mail.utils import config_dkim
 from goodcrypto.oce.crypto_factory import CryptoFactory
+from goodcrypto.oce.utils import strip_fingerprint
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils import i18n, is_mta_ok
+from goodcrypto.utils import i18n, is_mta_ok, parse_address
 from reinhardt.admin_extensions import ShowOneFormSet
 
 _log = LogFile()
@@ -55,6 +58,30 @@ class PrepPostfixForm(forms.Form):
        label='aliases content',
        help_text=i18n("Paste the full content of your mail server's aliases file. Leave blank if you don't use aliases."),)
 
+class PrepEximForm(forms.Form):
+    '''
+        Prepare exim for GoodCrypto.
+    '''
+
+    def clean(self):
+        cleaned_data = super(PrepEximForm, self).clean()
+
+        # clean up simple errors
+        goodcrypto_private_server_ip = cleaned_data.get('goodcrypto_private_server_ip')
+        if goodcrypto_private_server_ip is not None:
+            goodcrypto_private_server_ip = goodcrypto_private_server_ip.strip()
+        validate_ipv46_address(goodcrypto_private_server_ip)
+        self.cleaned_data['goodcrypto_private_server_ip'] = goodcrypto_private_server_ip
+
+        return cleaned_data
+
+    goodcrypto_private_server_ip = forms.CharField(required=True,
+        help_text=i18n("The IP address for your GoodCrypto private server. For example, 194.10.34.1"),)
+    config_file = forms.CharField(required=False,
+       widget=forms.Textarea(attrs={'rows':5, 'cols':100, 'class': "input-xlarge"}),
+       label='aliases content',
+       help_text=i18n("Paste the full content of your mail server's aliases file. Leave blank if you don't use aliases."),)
+
 class EncryptionSoftwareForm(forms.ModelForm):
 
     def clean(self):
@@ -75,6 +102,26 @@ class EncryptionSoftwareForm(forms.ModelForm):
 
         model = EncryptionSoftware
         fields = ['name', 'active', 'classname']
+
+    class Media:
+        js = ('/static/js/admin_js.js',)
+
+class KeyserverAdminForm(forms.ModelForm):
+
+    def clean(self):
+        cleaned_data = super(KeyserverAdminForm, self).clean()
+
+        status = cleaned_data.get('last_status')
+        if status is None or len(status) < 0:
+            cleaned_data['last_status'] = DEFAULT_KEYSERVER_STATUS
+
+        return cleaned_data
+
+    class Meta:
+        from goodcrypto.mail.models import Keyserver
+
+        model = Keyserver
+        fields = ['name', 'active', 'last_date', 'last_status']
 
     class Media:
         js = ('/static/js/admin_js.js',)
@@ -105,8 +152,6 @@ class OptionsAdminForm(forms.ModelForm):
 
     def clean(self):
         '''Verify there is only 1 general info record.'''
-
-        error = None
 
         cleaned_data = super(OptionsAdminForm, self).clean()
 
@@ -254,12 +299,12 @@ class ExportKeyForm(forms.Form):
        help_text=i18n('Select the type of encryption software associated with the key.'),)
 
 MAX_PUBLIC_KEY_FILEZISE = 500000
-class ImportKeyForm(forms.Form):
+class ImportKeyFromFileForm(forms.Form):
 
     from goodcrypto.mail.models import EncryptionSoftware
 
-    public_key_file = forms.FileField(max_length=MAX_PUBLIC_KEY_FILEZISE,
-       help_text=i18n('Select the file that contains the public key.'),)
+    key_file = forms.FileField(max_length=MAX_PUBLIC_KEY_FILEZISE,
+       help_text=i18n('Select the file that contains the key.'),)
     encryption_software = forms.ModelChoiceField(
        queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the type of encryption software associated with the key.'),)
@@ -267,6 +312,41 @@ class ImportKeyForm(forms.Form):
        help_text='Printable name of the contact in case the key does not contain it. Optional.')
     fingerprint = forms.CharField(max_length=100, required=False,
        help_text="The fingerprint for the contact's public key, if known. Optional.")
+    passcode = forms.CharField(max_length=PASSCODE_MAX_LENGTH, required=False,
+       help_text="If you're importing a private key, then you must enter its passphrase.")
+
+class ImportKeyFromKeyserverForm(forms.Form):
+
+    def clean(self):
+        '''Verify there is only 1 general info record.'''
+
+        error_message = None
+        cleaned_data = super(ImportKeyFromKeyserverForm, self).clean()
+
+        email_or_fingerprint = cleaned_data.get('email_or_fingerprint')
+        __, email = parse_address(email_or_fingerprint)
+        if email is None:
+            fingerprint = strip_fingerprint(email_or_fingerprint)
+            m = re.match('^[0-9A-Fa-f]+$', fingerprint)
+            if m:
+                if len(fingerprint) < 16:
+                    error_message = i18n('Either enter a valid email address or a fingerprint that is least 16 characters')
+            else:
+                error_message = i18n('Either enter a valid email address or a fingerprint which must contain only numbers and the letters A through F.')
+
+            if error_message is not None:
+                _log.write(error_message)
+                raise forms.ValidationError(error_message, code='invalid')
+
+        return cleaned_data
+
+    from goodcrypto.mail.models import EncryptionSoftware
+
+    email_or_fingerprint = forms.CharField(max_length=100, required=True,
+       help_text="The email for the contact or the fingerprint for the contact's key.")
+    encryption_software = forms.ModelChoiceField(
+       queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
+       help_text=i18n('Select the type of encryption software associated with the key.'),)
 
 API_Actions = (
     (api_constants.STATUS, api_constants.STATUS),

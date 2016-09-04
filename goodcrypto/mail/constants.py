@@ -2,7 +2,7 @@
     Constants for GoodCrypto Mail.
 
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2016-01-24
+    Last modified: 2016-02-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -26,7 +26,7 @@ WEEKS_CODE = 'w'
 MONTHS_CODE = 'm'
 YEARS_CODE = 'y'
 
-# outbound encrypt policy
+# outbound encrypt policy (max 10 characters)
 USE_GLOBAL_OUTBOUND_SETTING = 'global'
 ALWAYS_ENCRYPT_OUTBOUND = 'always'
 NEVER_ENCRYPT_OUTBOUND = 'never'
@@ -35,6 +35,16 @@ ACTIVE_ENCRYPT_POLICIES = [
     USE_GLOBAL_OUTBOUND_SETTING,
     ALWAYS_ENCRYPT_OUTBOUND
 ]
+
+# keyserver status (max 50 characters)
+KEYSERVER_CONNECTION_OK = 'OK'
+DEFAULT_KEYSERVER_STATUS = 'No attempt to contact yet'
+
+# source of key (max 10 characters)
+AUTO_GENERATED = 'automatic'
+MESSAGE_HEADER = 'header'
+KEYSERVER = 'keyserver'
+MANUALLY_IMPORTED = 'manual'
 
 # clear sign policies
 CLEAR_SIGN_WITH_DOMAIN_KEY = 'domain'

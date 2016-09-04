@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto.
-    Last modified: 2016-01-27
+    Last modified: 2016-02-21
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -32,11 +32,12 @@
 '''
 from string import capwords
 from goodcrypto.mail import constants, crypto_software
-from goodcrypto.mail.i18n_constants import PUBLIC_KEY_INVALID
-from goodcrypto.mail.models import Contact, ContactsCrypto
+from goodcrypto.mail.i18n_constants import KEYBLOCK_INVALID
+from goodcrypto.mail.models import Contact, ContactsCrypto, UserKey
+from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
-from goodcrypto.oce.utils import strip_fingerprint
+from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
 from goodcrypto.utils import i18n, parse_address, get_email
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
@@ -130,7 +131,7 @@ def get(email):
 
     return contact
 
-def add(email, encryption_program, fingerprint=None):
+def add(email, encryption_program, fingerprint=None, passcode=None, source=None):
     '''
         Add a contact and related settings.
 
@@ -168,12 +169,14 @@ def add(email, encryption_program, fingerprint=None):
     '''
 
     try:
+        new_contact = True
         user_name, email_address = parse_address(email)
         if email_address is None:
             contact = None
         else:
             try:
                 contact = Contact.objects.get(email=email_address)
+                new_contact = False
 
                 # update the user name if it's been given and it differs from the name in the DB
                 if user_name is not None and contact.user_name != user_name:
@@ -220,12 +223,24 @@ def add(email, encryption_program, fingerprint=None):
                       contact=contact, encryption_software=encryption_software)
                     if (fingerprint is not None and
                         strip_fingerprint(contacts_crypto.fingerprint) != strip_fingerprint(fingerprint)):
-                        contacts_crypto.fingerprint = strip_fingerprint(fingerprint)
+                        contacts_crypto.fingerprint = format_fingerprint(fingerprint)
                         contacts_crypto.save()
                 except ContactsCrypto.DoesNotExist:
-                    contacts_crypto = ContactsCrypto.objects.create(
-                        contact=contact, encryption_software=encryption_software,
-                        fingerprint=strip_fingerprint(fingerprint))
+                    # if the contact existed, but was set to never encrypt and now we have a key,
+                    # then change the outbound encrypt policy to the default
+                    if (not new_contact and
+                        contact.outbound_encrypt_policy == constants.NEVER_ENCRYPT_OUTBOUND):
+                        contact.outbound_encrypt_policy = constants.DEFAULT_OUTBOUND_ENCRYPT_POLICY
+                        contact.save()
+
+                    contacts_crypto = add_contacts_crypto(contact, encryption_software, 
+                        fingerprint=fingerprint, source=source)
+
+                    if passcode is not None and contacts_crypto is not None:
+                        user_key = UserKey.objects.create(
+                          contacts_encryption=contacts_crypto, passcode=passcode)
+                        log_message('created a user key with the passcode predefined')
+
                     log_message("created {} crypto record for {} with {} fingerprint: {}".format(
                         encryption_software, email, fingerprint, contacts_crypto is not None))
                 except:
@@ -277,6 +292,94 @@ def delete(email_or_address):
         result_ok = False
         record_exception()
         log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    return result_ok
+
+def get_contacts_crypto(email, encryption_name=None):
+    '''
+        Get the ContactsCrypto record that matches the encryption_name for this email.
+        If the encryption_name is None, then get the query results of all the ContactsCrypto for this email.
+
+        # Test extreme case. See unittests to see how to use this function.
+        >>> get_contacts_crypto(None) == None
+        True
+    '''
+
+    query_results = None
+    try:
+        address = get_email(email)
+        if email is not None and len(address) > 0:
+            if encryption_name is None:
+                query_results = ContactsCrypto.objects.filter(
+                  contact__email=address, encryption_software__active=True)
+            else:
+                query_results = ContactsCrypto.objects.get(contact__email=address,
+                  encryption_software__name=encryption_name)
+
+            if query_results is None:
+                log_message("{} does not have any active encryption software defined".format(address))
+            else:
+                from django.db.models.query import QuerySet
+
+                if isinstance(query_results, QuerySet):
+                    log_message("{} has {} encryption software defined".format(email, len(query_results)))
+        else:
+            log_message("{} is not parseable".format(email))
+    except ContactsCrypto.DoesNotExist:
+        log_message('{} does not use {}'.format(email, encryption_name))
+    except Contact.DoesNotExist:
+        log_message('{} does not use the exist in the contacts table'.format(email))
+    except Exception:
+        record_exception()
+        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    log_message("get_contacts_crypto results: {}".format(query_results))
+
+    return query_results
+
+def add_contacts_crypto(contact, encryption_software, fingerprint=None, source=None):
+    '''
+        Add a contact's crypto record.
+        
+        >>> add_contacts_crypto(None, None)
+        None
+    '''
+    if contact is None or encryption_software is None:
+        contacts_crypto = None
+    else:
+        if fingerprint is None:
+            formatted_fingerprint = None
+        else:
+            formatted_fingerprint = format_fingerprint(fingerprint)
+
+        contacts_crypto = ContactsCrypto.objects.create(
+                           contact=contact, encryption_software=encryption_software,
+                           fingerprint=formatted_fingerprint, source=source)
+
+    return contacts_crypto
+    
+def delete_contacts_crypto(email, encryption_name):
+    '''
+        Delete the ContactsCrypto record that matches the encryption_name for this email.
+
+        >>> # In honor of Mark Smith, one of the developers for Tor Browser.
+        >>> delete_contacts_crypto('mark@goodcrypto.local', 'GPG')
+        False
+    '''
+
+    contacts_crypto = get_contacts_crypto(email, encryption_name=encryption_name)
+    if contacts_crypto is None:
+        result_ok = False
+    else:
+        try:
+            contacts_crypto.delete()
+            result_ok = True
+        except Exception:
+            result_ok = False
+            record_exception()
+            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+
+    log_message("deleted {} crypto for {}: {}".format(encryption_name, email, result_ok))
 
     return result_ok
 
@@ -356,73 +459,6 @@ def set_outbound_encrypt_policy(email, policy):
 
     return ok
 
-def get_contacts_crypto(email, encryption_name=None):
-    '''
-        Get the ContactsCrypto record that matches the encryption_name for this email.
-        If the encryption_name is None, then get the query results of all the ContactsCrypto for this email.
-
-        # Test extreme case. See unittests to see how to use this function.
-        >>> get_contacts_crypto(None) == None
-        True
-    '''
-
-    query_results = None
-    try:
-        address = get_email(email)
-        if email is not None and len(address) > 0:
-            if encryption_name is None:
-                query_results = ContactsCrypto.objects.filter(
-                  contact__email=address, encryption_software__active=True)
-            else:
-                query_results = ContactsCrypto.objects.get(contact__email=address,
-                  encryption_software__name=encryption_name)
-
-            if query_results is None:
-                log_message("{} does not have any active encryption software defined".format(address))
-            else:
-                from django.db.models.query import QuerySet
-
-                if isinstance(query_results, QuerySet):
-                    log_message("{} has {} encryption software defined".format(email, len(query_results)))
-        else:
-            log_message("{} is not parseable".format(email))
-    except ContactsCrypto.DoesNotExist:
-        log_message('{} does not use {}'.format(email, encryption_name))
-    except Contact.DoesNotExist:
-        log_message('{} does not use the exist in the contacts table'.format(email))
-    except Exception:
-        record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    log_message("get_contacts_crypto results: {}".format(query_results))
-
-    return query_results
-
-def delete_contacts_crypto(email, encryption_name):
-    '''
-        Delete the ContactsCrypto record that matches the encryption_name for this email.
-
-        >>> # In honor of Mark Smith, one of the developers for Tor Browser.
-        >>> delete_contacts_crypto('mark@goodcrypto.local', 'GPG')
-        False
-    '''
-
-    contacts_crypto = get_contacts_crypto(email, encryption_name=encryption_name)
-    if contacts_crypto is None:
-        result_ok = False
-    else:
-        try:
-            contacts_crypto.delete()
-            result_ok = True
-        except Exception:
-            result_ok = False
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    log_message("deleted {} crypto for {}: {}".format(encryption_name, email, result_ok))
-
-    return result_ok
-
 def get_fingerprint(email, encryption_name):
     '''
         Get the fingerprint for the encryption software for this email.
@@ -466,56 +502,6 @@ def get_fingerprint(email, encryption_name):
             log_message("{} verified: {} active: {}".format(email, verified, active))
 
     return fingerprint, verified, active
-
-def update_fingerprint(email, encryption_name, new_fingerprint, verified=False):
-    '''
-        Set the fingerprint for the encryption software for this email.
-        If the fingerprint doesn't match the crypto's fingerprint, it won't
-        be saved in the database.
-
-        >>> # In honor of Linus Nordberg, Swedish advocate for Tor.
-        >>> email = 'linus@goodcrypto.remote'
-        >>> update_fingerprint(email, KeyFactory.DEFAULT_ENCRYPTION_NAME, '1234')
-        True
-        >>> delete(email)
-        True
-    '''
-
-    if email is None or encryption_name is None:
-        result_ok = False
-        log_message("missing data to save {} fingerprint for {}".format(encryption_name, email))
-    else:
-        log_message('updating {} fingerprint for {}'.format(encryption_name, email))
-        contacts_crypto = get_contacts_crypto(email, encryption_name=encryption_name)
-        if contacts_crypto is None:
-            contact = add(email, encryption_name)
-            contacts_crypto = get_contacts_crypto(email, encryption_name=encryption_name)
-
-        if contacts_crypto is None:
-            result_ok = False
-            log_message("unable to save contact's {} fingerprint".format(encryption_name))
-        else:
-            try:
-                need_update = False
-                if new_fingerprint != contacts_crypto.fingerprint:
-                    contacts_crypto.fingerprint = new_fingerprint
-                    need_update = True
-                    log_message("contacts_crypto fingerprint: {}".format(contacts_crypto.fingerprint))
-                if contacts_crypto.verified != verified:
-                    contacts_crypto.verified = verified
-                    need_update = True
-                    log_message('Updated verification status: {}'.format(verified))
-                if need_update:
-                    contacts_crypto.save()
-                    log_message('saved changes')
-
-                result_ok = True
-            except:
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-                record_exception()
-                result_ok = False
-
-    return result_ok
 
 def is_key_ok(email, encryption_name):
     '''
@@ -628,19 +614,19 @@ def get_public_key(email, encryption_software):
 
     return public_key
 
-def import_public_key(email, encryption_software, public_key):
+def import_crypto_key(email, encryption_software, public_key):
     '''
         Import a public key and add an associated contact record.
 
         >>> # Test extreme cases
-        >>> result_ok, status = import_public_key(None, None, None)
+        >>> result_ok, status = import_crypto_key(None, None, None)
         >>> result_ok
         False
 
         >>> # In honor of First Sergeant Eden, who publicly denounced and refused to serve in operations
         >>> # involving the occupied Palestinian territories because of the widespread surveillance of
         >>> # innocent residents.
-        >>> result_ok, status = import_public_key('eden@goodcrypto.remote', None, None)
+        >>> result_ok, status = import_crypto_key('eden@goodcrypto.remote', None, None)
         >>> result_ok
         False
     '''
@@ -691,16 +677,17 @@ def import_public_key(email, encryption_software, public_key):
             log_message('user ids and fingerprints: {}'.format(id_fingerprint_pairs))
             if id_fingerprint_pairs is None:
                 result_ok = False
-                status = PUBLIC_KEY_INVALID
+                status = KEYBLOCK_INVALID
             elif len(id_fingerprint_pairs) > 0:
                 result_ok, status = import_key(
                   email, encryption_software.name, public_key, id_fingerprint_pairs, plugin)
                 for (user_id, fingerprint) in id_fingerprint_pairs:
-                    contact = add(user_id, encryption_software.name, fingerprint=fingerprint)
+                    contact = add(
+                      user_id, encryption_software.name, fingerprint=fingerprint, source=constants.MANUALLY_IMPORTED)
                     log_message('added contact for: {}'.format(contact))
             else:
                 result_ok = False
-                status = PUBLIC_KEY_INVALID
+                status = KEYBLOCK_INVALID
 
         log_message("Imported public {} key for {} ok: {}".format(encryption_software, email, result_ok))
 
@@ -708,42 +695,6 @@ def import_public_key(email, encryption_software, public_key):
         log_message(status)
 
     return result_ok, status
-
-def update_accepted_crypto(email, encryption_software_list):
-    ''' Update the list of encryption software accepted by user.
-
-        # Test extreme case. See unittests to see how to use this function.
-        >>> update_accepted_crypto(None, None)
-    '''
-
-    if email is None:
-        log_message("email not defined so no need to update accepted crypto")
-    elif encryption_software_list is None or len(encryption_software_list) <= 0:
-        log_message('no encryption programs defined for {}'.format(email))
-    else:
-        contact = get(email)
-        if contact is None:
-            # if the contact doesn't exist, then add them with the first encryption program
-            encryption_program = encryption_software_list[0]
-            contact = add(email, encryption_program)
-            log_message("added {} to contacts".format(email))
-
-        # associate each encryption program in the list with this contact
-        for encryption_program in encryption_software_list:
-            try:
-                contacts_crypto = get_contacts_crypto(email, encryption_program)
-                if contacts_crypto is None:
-                    encryption_software = crypto_software.get(encryption_program)
-                    if encryption_software is None:
-                        log_message('{} encryption software unknown'.format(encryption_program))
-                        log_message(
-                          'unable to add contacts crypt for {} using {} encryption software unknown'.format(email, encryption_program))
-                    else:
-                        ContactsCrypto.objects.create(
-                            contact=contact, encryption_software=encryption_software)
-            except Exception:
-                record_exception()
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
 def get_encryption_names(email):
     '''

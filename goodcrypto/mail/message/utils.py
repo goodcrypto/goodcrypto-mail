@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-13
+    Last modified: 2016-02-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -8,6 +8,7 @@ import os, time
 from random import choice
 
 from goodcrypto.mail import contacts, options, user_keys
+from goodcrypto.mail.constants import AUTO_GENERATED
 from goodcrypto.mail.crypto_rq import add_private_key_via_rq, set_fingerprint_via_rq
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants
@@ -101,7 +102,7 @@ def add_private_key(email, encryption_software=None):
                 if user_key is None or user_key.passcode is None:
                     contacts_crypto = contacts.get_contacts_crypto(email, encryption_name=encryption_software)
                     if contacts_crypto is None:
-                        contacts.add(email, encryption_software)
+                        contacts.add(email, encryption_software, source=AUTO_GENERATED)
                         log_message('add {} key for {}'.format(encryption_software, email))
                     else:
                         log_message('adding private {} key for {}'.format(encryption_software, email))

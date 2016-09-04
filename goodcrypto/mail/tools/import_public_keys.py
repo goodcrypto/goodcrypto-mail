@@ -5,8 +5,8 @@
     Each file must contain one public key and
     the filename must match the key's email address.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-07
 '''
 import os, sys
 
@@ -15,7 +15,7 @@ from goodcrypto.utils import gc_django
 gc_django.setup()
 
 from goodcrypto.mail import crypto_software
-from goodcrypto.mail.contacts import import_public_key
+from goodcrypto.mail.contacts import import_crypto_key
 from goodcrypto.oce import gpg_constants
 from syr.log import get_log
 
@@ -49,7 +49,7 @@ def import_all_keys(parent_dir, extension, crypto_name):
             email = filename[:len(filename) - len(extension)]
             with open(os.path.join(parent_dir, filename), 'rt') as f:
                 public_key = f.read()
-                result_ok, status = import_public_key(email, crypto, public_key)
+                result_ok, status = import_crypto_key(email, crypto, public_key)
                 if not result_ok:
                     print(status)
 

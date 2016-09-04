@@ -1,8 +1,8 @@
 '''
     Admin for GoodCrypto Mail.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2016-01-24
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -18,13 +18,13 @@ from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline
 class ContactsCryptoInline(CustomStackedInline):
 
     extra = 0
-    readonly_fields = ('fingerprint',)
+    readonly_fields = ('fingerprint', 'source',)
 
     staff_fieldsets = (
         (None, {
             'classes': ('wide',),
             'fields': (('encryption_software',),
-                       ('fingerprint',), ('verified',),
+                       ('fingerprint',), ('verified',), ('source',),
                       )
         }),
     )
@@ -58,6 +58,27 @@ class Contact(CustomModelAdmin):
     superuser_fieldsets = staff_fieldsets
 
 admin.site.register(models.Contact, Contact)
+
+class Keyserver(CustomModelAdmin):
+    form = forms.KeyserverAdminForm
+    search_fields = ['name', 'active', 'last_date', 'last_status']
+
+    list_display = ('name', 'active', 'last_date', 'last_status',)
+    staff_list_display = list_display
+    superuser_list_display = list_display
+    list_display_links = ('name',)
+
+    ordering = ['-active', 'name']
+
+    staff_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': (('name', 'active'), ('last_date', 'last_status'),)
+        }),
+    )
+    superuser_fieldsets = staff_fieldsets
+
+admin.site.register(models.Keyserver, Keyserver)
 
 class Options(SingletonAdmin):
     # indent the labels
@@ -103,6 +124,7 @@ class Options(SingletonAdmin):
         }),
         (misc_label, {
             'fields': (
+                       'use_keyservers',
                        'debugging_enabled',
                       )
         }),

@@ -1,28 +1,14 @@
-{% extends "base.html" %}
 {% comment %}
-    Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-02-04
+
+    Copyright 2016 GoodCrypto
+    Last modified: 2016-02-14
+
 {% endcomment %}
 {% load i18n bootstrap custom %}
 
-  {% block meta_keywords %}
-  <meta name="Keywords" content="integrate, configure, postfix">
-  {% endblock meta_keywords %}
-  {% block meta_description %}
-  <meta name="Description" content="Generate your Postfix configuration updates.">
-  {% endblock meta_description %}
-
-  {% block titlevar %}{% trans 'Generate your Postfix configuration updates' %}{% endblock %}
-
-{% block contentpane %}
-
-    <div class="row">
-        <h2>{% trans 'Generate your Postfix configuration updates' %}</h2>
-    </div>
-
     <div class="row">&nbsp;</div>
 
-    <form method="POST" action="/mail/prep_postfix/" class="form-horizontal" role="form">{% csrf_token %}
+    <form method="POST" action="/mail/prep_mail_server/" class="form-horizontal" role="postfix_form">{% csrf_token %}
 
         <div class="form-group">
             <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
@@ -40,11 +26,11 @@
         </div>
         {% endif %}
 
-        {{ form|bootstrap_horizontal }}
+        {{ postfix_form|bootstrap_horizontal }}
         <div class="form-group">
             <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
             <div class=" col-sm-10 col-lg-10 ">
-                <input class="btn btn-primary" type="submit" value="{% trans 'Generate config changes' %}" name="submit">
+                <input class="btn btn-primary" type="submit" value="{% trans 'Generate changes' %}" name="submit">
             </div>
         </div>
     </form>
@@ -60,5 +46,4 @@
         serverInput[0].setSelectionRange(strLength, strLength);
 
     </script>
-{% endblock contentpane %}
 

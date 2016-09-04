@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-26
+    Last modified: 2016-02-10
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -23,7 +23,7 @@ from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.utils.constants import REDIS_HOST
 from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils.manage_rq import get_job_count, get_job_results
+from goodcrypto.utils.manage_rq import get_job_count
 
 
 

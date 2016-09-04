@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-04
+    Last modified: 2016-02-22
 
 {% endcomment %}
 {% load i18n custom %}
@@ -79,6 +79,10 @@
                         </a>
                         <p>&nbsp;</p>
                     </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <p>&nbsp;</p>
+                    </td>
                 </tr>
                 <tr>
                     <th>
@@ -110,7 +114,7 @@
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/import_key/" title="{% trans 'Import a public key for a contact. You must be signed in.' %}">
+                        <a href="/mail/import_key/" title="{% trans 'Import a key for a contact. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Import' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -120,6 +124,10 @@
                         <a href="/mail/show_metadata_domains/" title="{% trans 'Show which domains are ready to protect metadata. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Metadata' %}</button>
                         </a>
+                        <p>&nbsp;</p>
+                    </td>
+                    <td>
+                        <p>&nbsp;</p>
                         <p>&nbsp;</p>
                     </td>
                 </tr>
@@ -153,8 +161,15 @@
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/prep_postfix/" title="{% trans 'Generate the changes you need to make to your mail server to work with your GoodCrypto private server.' %}">
-                            <button type="button" class="btn btn-primary btn-block">&nbsp;&nbsp;{% trans 'Postfix changes' %}&nbsp;&nbsp;</button>
+                        <a href="/admin/mail/keyserver/" title="{% trans 'Manage the keyservers you want to use to find keys for contacts.' %}">
+                            <button type="button" class="btn btn-primary btn-block">&nbsp;&nbsp;{% trans 'Keyservers' %}&nbsp;&nbsp;</button>
+                        </a>
+                        <p>&nbsp;</p>
+                    </td>
+                    <td>
+                        <p>&nbsp;</p>
+                        <a href="/mail/prep_mail_server/" title="{% trans 'Generate the changes you need to make to your mail server to work with your GoodCrypto private server.' %}">
+                            <button type="button" class="btn btn-primary btn-block">&nbsp;&nbsp;{% trans 'MTA configuration' %}&nbsp;&nbsp;</button>
                         </a>
                         <p>&nbsp;</p>
                     </td>
@@ -165,6 +180,9 @@
                     <th>
                         &nbsp;
                     </th>
+                    <td>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </td>
                     <td>
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </td>

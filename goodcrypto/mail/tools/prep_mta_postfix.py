@@ -1,8 +1,9 @@
 #! /usr/bin/python
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2016-01-24
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-02-19
 
+    Prepare domain's postfix config to work with GoodCrypto private server.
     Run tools/goodcrypto/prep_postfix_config_tgz.py
     after making any changes to this file.
 '''
@@ -194,7 +195,7 @@ def config_main_conf(lines, private_server_ip):
     if not set_xforward_hosts:
         lines.append('smtpd_authorized_xforward_hosts = $mynetworks\n')
     if not set_content_filter:
-        lines.append('content_filter = scan:{}:10025\n'.format(private_server_ip))
+        lines.append('content_filter = scan:{}:10027\n'.format(private_server_ip))
     if aliases_filename is None:
         aliases_filename = os.path.join(POSTFIX_DIR, 'aliases')
         lines.append('alias_maps = hash:{}\n'.format(aliases_filename))
@@ -294,7 +295,7 @@ def config_master_lines(lines, mta_ip, private_server_ip, ssl_cert_file, ssl_key
     lines.append('    -o receive_override_options=no_address_mappings\n')
     lines.append('    -o smtpd_tls_cert_file={}\n'.format(ssl_cert_file))
     lines.append('    -o smtpd_tls_key_file={}\n'.format(ssl_key_file))
-    lines.append('{}:10026 inet  n       -       n       -       10      smtpd\n'.format(mta_ip))
+    lines.append('{}:10028 inet  n       -       n       -       10      smtpd\n'.format(mta_ip))
     lines.append('    -o content_filter= \n')
     lines.append('    -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks,no_milters\n')
     lines.append('    -o mynetworks={}\n'.format(private_server_ip))

@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-24
+    Last modified: 2016-02-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,6 +17,7 @@ from django.db.models.signals import pre_delete, post_save
 
 from goodcrypto.mail import constants, model_signals
 from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils import i18n
 # do not use LogFile because it references models.Options
 from syr.log import get_log
@@ -53,7 +54,7 @@ class EncryptionSoftware(models.Model):
 
     classname = models.CharField(i18n('Classname'),
        max_length=100, blank=True, null=True,
-       help_text=i18n("Leave blank unless you are using encryption software not supplied by GoodCrypto. See GoodCrypto's OCE docs for more details."))
+       help_text=i18n("Leave blank unless you are using encryption software not supplied by GoodCrypto."))
 
     def __unicode__(self):
         return '{}'.format(self.name)
@@ -62,6 +63,31 @@ class EncryptionSoftware(models.Model):
         verbose_name = i18n('encryption software')
         verbose_name_plural = verbose_name
 
+
+class Keyserver(models.Model):
+    '''
+        List of keyservers to obtain public keys.
+
+    '''
+
+    name = models.CharField(i18n('Name'),max_length=100,
+       help_text=i18n('Name of keyserver.'))
+
+    encryption_software = models.ForeignKey(EncryptionSoftware, default=1,
+       help_text=i18n('Type of encryption software for this keyserver.'))
+
+    active = models.BooleanField(i18n('Active?'), default=True,
+       help_text=i18n('Should this keyserver be used to find keys?'))
+
+    last_date = models.DateField(i18n('Last attempt'), blank=True, null=True,
+       help_text=i18n('The last date attempted to use this keyserver.'))
+
+    last_status = models.CharField(i18n('Status'),max_length=50,
+       default=constants.DEFAULT_KEYSERVER_STATUS,
+       help_text=i18n('The status of the last contact to this keyserver.'))
+
+    def __unicode__(self):
+        return '{}'.format(self.name)
 
 class Contact(models.Model):
     '''
@@ -112,10 +138,9 @@ class Contact(models.Model):
        max_length=100, blank=True, null=True,
        help_text=i18n('Printable name for the contact. Strongly recommended.'))
 
-    # radio button options: Use global setting / Always / Never
-    outbound_encrypt_policy = models.CharField(i18n('Encrypt to contact'), max_length=10, 
+    outbound_encrypt_policy = models.CharField(i18n('Encrypt to contact'), max_length=10,
        choices=Outbound_Encrypt_Policies, default=constants.DEFAULT_OUTBOUND_ENCRYPT_POLICY,
-       help_text=i18n('"Always" means encrypt or bounce. "Never" means plain text only. See Mail Protection for the global setting.'))
+       help_text=i18n('<br/>"Always" means encrypt or bounce. "Never" means plain text only. See <a href="/admin/mail/options/">Mail Protection</a> for the global setting.'))
 
     def save(self, *args, **kwargs):
         # maintain all addresses in lower case
@@ -168,6 +193,13 @@ class ContactsCrypto(models.Model):
         >>> gpg.delete()
     '''
 
+    KEY_SOURCES = [
+        (constants.AUTO_GENERATED, i18n('Automatically generated')),
+        (constants.MESSAGE_HEADER, i18n('Message header')),
+        (constants.KEYSERVER, i18n('Keyserver')),
+        (constants.MANUALLY_IMPORTED, i18n('Manually imported')),
+    ]
+
     contact = models.ForeignKey(Contact,
        help_text=i18n('Email address.'))
 
@@ -181,10 +213,16 @@ class ContactsCrypto(models.Model):
     verified = models.BooleanField(i18n('Verified?'), default=False,
        help_text=i18n('We strongly recommend that you verify this fingerprint in a secure manner, not via email.'))
 
+    source = models.CharField(i18n('Source'),max_length=10,
+       choices=KEY_SOURCES, blank=True, null=True,
+       help_text=i18n('The way that the key was introduced into your GoodCrypto private server.'))
+
     def save(self, *args, **kwargs):
         # maintain all addresses in lower case
         if not self.encryption_software or self.encryption_software is None:
             self.encryption_software = EnryptionSoftware.objects.all()[0]
+        if self.fingerprint is not None:
+            self.fingerprint = format_fingerprint(self.fingerprint)
         super(ContactsCrypto, self).save(*args, **kwargs)
 
     def __unicode__(self):
@@ -308,17 +346,11 @@ class MessageHistory(models.Model):
     metadata_protected = models.BooleanField(default=False,
         help_text=i18n('True if the metadata was protected during transit.'))
 
-    private_signed = models.BooleanField(default=False,
-        help_text=i18n('True if the message was signed when encrypted.'))
+    private_signers = models.TextField(blank=True, null=True,
+        help_text=i18n('The signers of an encrypted message, if any. Also, shows whether the signer was digitally verified or not.'))
 
-    private_sig_verified = models.BooleanField(default=False,
-        help_text=i18n('True if the private signature was verified.'))
-
-    clear_signed = models.BooleanField(default=False,
-        help_text=i18n('True if the message contained a clear signature.'))
-
-    clear_sig_verified = models.BooleanField(default=False,
-        help_text=i18n('True if the clear signature was verified.'))
+    clear_signers = models.TextField(blank=True, null=True,
+        help_text=i18n('The clear signers of a message, if any. Also, shows whether the signer was digitally verified or not.'))
 
     dkim_signed = models.BooleanField(default=False,
         help_text=i18n('True if the message had a DKIM signature.'))
@@ -381,8 +413,8 @@ class Options(models.Model):
         True
     '''
 
-    DEFAULT_GOODCRYPTO_LISTEN_PORT = 10025
-    DEFAULT_MTA_LISTEN_PORT = 10026
+    DEFAULT_GOODCRYPTO_LISTEN_PORT = 10027
+    DEFAULT_MTA_LISTEN_PORT = 10028
 
     DEFAULT_PADDING_MESSAGE_KB = 1024
 
@@ -406,7 +438,7 @@ class Options(models.Model):
 
     mail_server_address = models.CharField(i18n('Mail server address'),
        max_length=100, blank=True, null=True,
-       help_text=i18n("The address for the domain's mail transport agent (e.g., postfix, sendmail)."))
+       help_text=i18n("The address for the domain's mail transport agent (e.g., postfix, exim)."))
 
     goodcrypto_listen_port = models.PositiveSmallIntegerField(i18n('MTA inbound port'),
        default=DEFAULT_GOODCRYPTO_LISTEN_PORT,
@@ -429,7 +461,7 @@ class Options(models.Model):
        blank=True, null=True,
        default=constants.DEFAULT_CLEAR_SIGN_POLICY, choices=CLEAR_SIGN_POLICY_CHOICES,
        help_text=i18n("What key to use to clear sign a message. The most private is the domain key."))
-    
+
     filter_html = models.BooleanField(i18n('Filter HTML'), default=True,
        help_text=i18n("Remove dangerous HTML that may compromise end users' computers."))
 
@@ -485,6 +517,12 @@ class Options(models.Model):
     dkim_public_key = models.CharField(i18n('DKIM public key'),
        max_length=1000, blank=True, null=True,
        help_text=i18n("The public key for DKIM. Enter this key into a TXT record for your DNS. <a href=\"https://goodcrypto.com/qna/knowledge-base/crypt-options#DkimPublicKey\">Learn more</a>"))
+
+    use_keyservers = models.BooleanField(i18n('Use keyservers'), default=True,
+       help_text=i18n("Use keyservers to find keys for contacts without keys."))
+
+    add_long_tags = models.BooleanField(i18n('Add long tags'), default=True,
+       help_text=i18n("Add long tags describing the security features of the message."))
 
     def __unicode__(self):
         if self.mail_server_address is not None and len(self.mail_server_address) > 0:

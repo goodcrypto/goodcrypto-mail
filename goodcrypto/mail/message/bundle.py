@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-29
+    Last modified: 2016-02-12
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -124,7 +124,6 @@ class Bundle(object):
         else:
             from_user = get_email(get_metadata_address(domain=get_domain()))
             to_user = get_email(get_metadata_address(domain=to_domain))
-            encryption_names = get_encryption_software(to_user)
 
             crypto_message = create_protected_message(
                 from_user, to_user, inner_message.as_string(), utils.get_message_id())
@@ -311,7 +310,7 @@ class Bundle(object):
                     original_message, addendum = parse_bundled_message(f.read())
                     self.log_message('addendum: {}'.format(addendum))
                     encrypted = get_addendum_value(addendum, constants.CRYPTED_KEYWORD)
-                    private_signed = get_addendum_value(addendum, constants.SIGNED_KEYWORD)
+                    private_signed = get_addendum_value(addendum, constants.PRIVATE_SIGNED_KEYWORD)
                     clear_signed = get_addendum_value(addendum, constants.CLEAR_SIGNED_KEYWORD)
                     dkim_signed = get_addendum_value(addendum, constants.DKIM_SIGNED_KEYWORD)
                     if encrypted or private_signed or clear_signed or dkim_signed:
@@ -326,15 +325,23 @@ class Bundle(object):
                         crypto_message.set_metadata_crypted(True)
                         crypto_message.set_metadata_crypted_with(self.crypted_with)
                         crypto_message.set_private_signed(private_signed)
-                        crypto_message.set_private_signers(
-                          [{constants.SIGNER: sender,
-                            constants.SIGNER_VERIFIED: get_addendum_value(addendum, constants.SIG_VERIFIED_KEYWORD)}])
+                        if private_signed:
+                            if encrypted:
+                                crypto_message.add_private_signer({
+                                 constants.SIGNER: sender, constants.SIGNER_VERIFIED: True})
+                            crypto_message.add_private_signer({
+                             constants.SIGNER: get_metadata_address(sender), constants.SIGNER_VERIFIED: True})
                         crypto_message.set_clear_signed(clear_signed)
-                        crypto_message.set_clear_signers(
-                          [{constants.SIGNER: sender,
-                            constants.SIGNER_VERIFIED: get_addendum_value(addendum, constants.CLEAR_SIG_VERIFIED_KEYWORD)}])
+                        if clear_signed:
+                            if encrypted:
+                                crypto_message.add_clear_signer({
+                                 constants.SIGNER: sender, constants.SIGNER_VERIFIED: True})
+                            else:
+                                crypto_message.add_clear_signer({
+                                 constants.SIGNER: get_metadata_address(sender), constants.SIGNER_VERIFIED: True})
                         crypto_message.set_dkim_signed(dkim_signed)
-                        crypto_message.set_dkim_sig_verified(get_addendum_value(addendum, constants.DKIM_SIG_VERIFIED_KEYWORD))
+                        if dkim_signed:
+                            crypto_message.set_dkim_sig_verified(True)
                         history.add_outbound_record(crypto_message, verification_code)
                         self.log_message('added outbound history record from {}'.format(sender))
                         if self.DEBUGGING:

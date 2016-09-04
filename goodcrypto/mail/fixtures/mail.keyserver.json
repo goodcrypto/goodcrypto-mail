@@ -1,0 +1,58 @@
+[
+  {
+    "model": "mail.keyserver",
+    "pk": 1,
+    "fields": {
+      "name": "pgp.mit.edu",
+      "active": 1,
+      "encryption_software": 1,
+      "last_date": null,
+      "last_status": "No attempt to contact yet"
+    }
+  },
+  {
+    "model": "mail.keyserver",
+    "pk": 2,
+    "fields": {
+      "name": "sks-keyservers.net",
+      "active": 1,
+      "encryption_software": 1,
+      "last_date": null,
+      "last_status": "No attempt to contact yet"
+    }
+  },
+  {
+    "model": "mail.keyserver",
+    "pk": 3,
+    "fields": {
+      "name": "subkeys.pgp.net",
+      "active": 1,
+      "encryption_software": 1,
+      "last_date": null,
+      "last_status": "No attempt to contact yet"
+    }
+  },
+  {
+    "model": "mail.keyserver",
+    "pk": 4,
+    "fields": {
+      "name": "keyserver.ubuntu.com",
+      "active": 1,
+      "encryption_software": 1,
+      "last_date": null,
+      "last_status": "No attempt to contact yet"
+    }
+  },
+  {
+    "model": "mail.keyserver",
+    "pk": 5,
+    "fields": {
+      "name": "zimmermann.mayfirst.org",
+      "active": 1,
+      "encryption_software": 1,
+      "last_date": null,
+      "last_status": "No attempt to contact yet"
+    }
+  }
+]
+

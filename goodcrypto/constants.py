@@ -1,13 +1,13 @@
 '''
     Constants for GoodCrypto app.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-01-25
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-22
 '''
 
 import os, os.path
 
-# set this to False to ship, True to test
+# set this to False to ship, or True to test
 # consider changing this to something easier to understand
 WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP = False
 if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
@@ -54,7 +54,7 @@ if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
 HTTP_PORT = 8080
 HTTPS_PORT = 8443
 
-POSTFIX_FILTER_PORT = 10025
+POSTFIX_FILTER_PORT = 10027
 
 # apps status
 STATUS_GREEN = 'green'

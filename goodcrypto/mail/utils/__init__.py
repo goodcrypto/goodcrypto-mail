@@ -493,24 +493,28 @@ def get_encryption_software(email):
 
     encryption_software_list = []
 
-    #  start with the encryption software for this email
-    address = get_email(email)
-
-    from goodcrypto.mail.contacts import get_encryption_names
-    encryption_names = get_encryption_names(address)
-    if encryption_names is None:
-        log_message("no encryption software names for {}".format(address))
-        #  make sure we have at least the default encryption
-        default_encryption_software = CryptoFactory.get_default_encryption_name()
-        log_message("  defaulting to {}".format(default_encryption_software))
-        encryption_names.append(default_encryption_software)
-
-    #  only include active encryption software
-    active_encryption_software = get_active_encryption_software()
-    if active_encryption_software:
-        for encryption_software in encryption_names:
-            if encryption_software in active_encryption_software:
-                encryption_software_list.append(encryption_software)
+    try:
+        #  start with the encryption software for this email
+        address = get_email(email)
+    
+        from goodcrypto.mail.contacts import get_encryption_names
+        encryption_names = get_encryption_names(address)
+        if encryption_names is None:
+            log_message("no encryption software names for {}".format(address))
+            #  make sure we have at least the default encryption
+            default_encryption_software = CryptoFactory.get_default_encryption_name()
+            log_message("  defaulting to {}".format(default_encryption_software))
+            encryption_names.append(default_encryption_software)
+    
+        #  only include active encryption software
+        active_encryption_software = get_active_encryption_software()
+        if active_encryption_software:
+            for encryption_software in encryption_names:
+                if encryption_software in active_encryption_software:
+                    encryption_software_list.append(encryption_software)
+    except:
+        encryption_software_list = []
+        record_exception()
 
     return encryption_software_list
 

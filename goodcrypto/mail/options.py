@@ -3,8 +3,8 @@
 
     Mail options are in a singleton Django Admin record.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-20
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-02-19
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -366,6 +366,42 @@ def set_dkim_public_key(key):
     record = get_options()
     try:
         record.dkim_public_key = key
+        save_options(record)
+    except:
+        pass
+
+def use_keyservers():
+    ''' Get whether to use keyservers to find keys for contacts. '''
+
+    try:
+        return get_options().use_keyservers
+    except:
+        return False
+
+def set_use_keyservers(use):
+    ''' Set whether to use keyservers to find keys for contacts. '''
+
+    record = get_options()
+    try:
+        record.use_keyservers = use
+        save_options(record)
+    except:
+        pass
+
+def add_long_tags():
+    ''' Get whether to add long tags to messages or not. '''
+
+    try:
+        return get_options().add_long_tags
+    except:
+        return True
+
+def set_use_keyservers(add):
+    ''' Set whether to add long tags to messages. '''
+
+    record = get_options()
+    try:
+        record.add_long_tags = add
         save_options(record)
     except:
         pass

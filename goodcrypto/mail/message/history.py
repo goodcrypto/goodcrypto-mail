@@ -1,13 +1,13 @@
 '''
     Copyright 2015-2016 GoodCrypto.
-    Last modified: 2016-02-04
+    Last modified: 2016-02-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
     Manage logging messages encrypted and decrypted by the GoodCrypto server to
     prevent others spoofing the security of a message.
 '''
-import os, re, urllib
+import os, pickle, re, urllib
 from datetime import datetime
 from time import gmtime, strftime
 
@@ -111,10 +111,8 @@ def add_record(crypto_message, direction, verification_code=None):
                 log_message("metadata_crypted: {}".format(metadata_crypted))
                 if encryption_programs: log_message("encryption_programs: {}".format(encryption_programs))
                 if crypto_message is not None:
-                    log_message("is_private_signed: {}".format(crypto_message.is_private_signed()))
-                    log_message("private_sig_verified: {}".format(crypto_message.is_private_sig_verified()))
-                    log_message("is_clear_signed: {}".format(crypto_message.is_clear_signed()))
-                    log_message("clear_sig_verified: {}".format(crypto_message.is_clear_sig_verified()))
+                    log_message("private_signers: {}".format(crypto_message.private_signers_list()))
+                    log_message("clear_signers: {}".format(crypto_message.clear_signers_list()))
                     log_message("is_dkim_signed: {}".format(crypto_message.is_dkim_signed()))
                     log_message("is_dkim_sig_verified: {}".format(crypto_message.is_dkim_sig_verified()))
 
@@ -128,10 +126,8 @@ def add_record(crypto_message, direction, verification_code=None):
                                           verification_code=verification_code[:MessageHistory.MAX_VERIFICATION_CODE],
                                           content_protected=crypted,
                                           metadata_protected=metadata_crypted,
-                                          private_signed=crypto_message.is_private_signed(),
-                                          private_sig_verified=crypto_message.is_private_sig_verified(),
-                                          clear_signed=crypto_message.is_clear_signed(),
-                                          clear_sig_verified=crypto_message.is_clear_sig_verified(),
+                                          private_signers=pickle_signers(crypto_message.private_signers_list()),
+                                          clear_signers=pickle_signers(crypto_message.clear_signers_list()),
                                           dkim_signed=crypto_message.is_dkim_signed(),
                                           dkim_sig_verified=crypto_message.is_dkim_sig_verified(),
                                           )
@@ -153,21 +149,40 @@ def add_record(crypto_message, direction, verification_code=None):
         if crypted: log_message("crypted: {}".format(crypted))
         if metadata_crypted: log_message("metadata_crypted: {}".format(metadata_crypted))
         if crypto_message is not None:
-            log_message("is_private_signed: {}".format(crypto_message.is_private_signed()))
-            log_message("is_clear_signed: {}".format(crypto_message.is_clear_signed()))
+            log_message("private_signers: {}".format(crypto_message.private_signers_list()))
+            log_message("clear_signers: {}".format(crypto_message.clear_signers_list()))
             log_message("is_dkim_signed: {}".format(crypto_message.is_dkim_signed()))
-            log_message("private_sig_verified: {}".format(crypto_message.is_private_sig_verified()))
-            log_message("clear_sig_verified: {}".format(crypto_message.is_clear_sig_verified()))
             log_message("is_dkim_sig_verified: {}".format(crypto_message.is_dkim_sig_verified()))
 
     return ok
 
-def sig_verified(signed, signers):
+def is_signed(raw_signers):
+    ''' 
+        Returns true if there is at least one signer. 
+    
+        If raw_signers are pickeled, unpickles and then checks.
+    '''
+
+    signed = False
+    try:
+        if type(raw_signers) is list:
+            signers = raw_signers
+        else:
+            signers = unpickel_signers(signers)
+
+        if len(signers) > 0:
+            signed = True
+    except:
+        record_exception()
+
+    return signed
+
+def is_sig_verified(signers):
     ''' Returns true if at least one signer was verified. '''
 
     verified_sig = False
     try:
-        if signed and len(signers) > 0:
+        if len(signers) > 0:
             for signer in signers:
                 if signer[SIGNER_VERIFIED]:
                     verified_sig = True
@@ -175,6 +190,26 @@ def sig_verified(signed, signers):
         record_exception()
 
     return verified_sig
+
+def pickle_signers(signers):
+    ''' Return a pickled version of the signers. '''
+
+    try:
+        picked_signers = pickle.dumps(signers)
+    except:
+        picked_signers = []
+
+    return picked_signers
+
+def unpickle_signers(pickled_signers):
+    ''' Return signers from pickled versions. '''
+
+    try:
+        return pickle.loads(pickled_signers)
+    except:
+        signers = []
+        
+    return signers
 
 def get_outbound_messages(email):
     ''' Get the encrypted messages when the email address was the sender. '''
@@ -235,7 +270,8 @@ def get_validated_messages(email, verification_code):
     if email is not None and verification_code is not None:
         address = get_email(email)
         try:
-            validated_records = MessageHistory.objects.filter(verification_code=urllib.unquote(verification_code))
+            validated_records = MessageHistory.objects.filter(
+                verification_code=urllib.unquote(verification_code))
             records = validated_records.filter(Q(sender=address) | Q(recipient=address) )
         except MessageHistory.DoesNotExist:
             records = []

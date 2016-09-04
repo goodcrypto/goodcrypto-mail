@@ -389,6 +389,32 @@ def report_mismatched_keys(to_user, from_user, encryption_name, crypto_message):
 
     return tag
 
+def report_no_matching_fingerprint_on_keyserver(to_user, fingerprint, encryption_name):
+    '''
+        Report unable to find a matching fingerprint on any of the active keyservers.
+
+        >>> report_no_matching_fingerprint_on_keyserver('chelsea@goodcrypto.local', '12345', 'GPG')
+    '''
+
+    subject = i18n("Unable to find key that matches the fingerprint.")
+    notify_user(to_user,
+       i18n("GoodCrypto - {}".format(subject)),
+       i18n("Your GoodCrypto server searched the active keyservers and was unable to find a {} key that matches {}.".format(
+           encryption_name, fingerprint)))
+
+def report_no_key_on_keyserver(to_user, email, encryption_name):
+    '''
+        Report unable to find a key for the email on any of the active keyservers.
+
+        >>> report_no_key_on_keyserver('chelsea@goodcrypto.local', 'joseph@goodcrypto.remote', 'GPG')
+    '''
+
+    subject = i18n("Unable to find key for {}".format(email))
+    notify_user(to_user,
+       i18n("GoodCrypto - {}".format(subject)),
+       i18n("Your GoodCrypto server searched the active keyservers and was unable to find a {} key. All messages to {} will be sent in plain text until they start using GoodCrypto or you import their key.".format(
+             encryption_name, email)))
+
 def report_error_verifying_key(to_user, from_user, encryption_name, crypto_message):
     '''
         Report the key comparison got an error during comparison.

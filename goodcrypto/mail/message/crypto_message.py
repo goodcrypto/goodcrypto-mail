@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-03
+    Last modified: 2016-02-18
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,7 +9,7 @@ from email.mime.nonmultipart import MIMENonMultipart
 from goodcrypto.mail import contacts, crypto_software, options
 from goodcrypto.mail.message import constants, inspect_utils, utils
 from goodcrypto.mail.message.email_message import EmailMessage
-from goodcrypto.mail.message.history import sig_verified
+from goodcrypto.mail.message.history import is_sig_verified
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import add_private_key
 from goodcrypto.mail.utils import email_in_domain, get_encryption_software
@@ -186,7 +186,7 @@ class CryptoMessage(object):
             encryption_software_list = get_encryption_software(from_user)
 
             # if no crypto and we're creating keys, then do so now
-            if ((encryption_software_list is None or len(encryption_software_list) <= 0) and
+            if (len(encryption_software_list) <= 0 and
                 email_in_domain(from_user) and
                 options.create_private_keys()):
 
@@ -194,7 +194,7 @@ class CryptoMessage(object):
                 self.log_message("started to create a new key for {}".format(from_user))
                 encryption_software_list = get_encryption_software(from_user)
 
-            if encryption_software_list is not None and len(encryption_software_list) > 0:
+            if len(encryption_software_list) > 0:
                 self.log_message("getting header with public keys for {}: {}".format(
                    from_user, encryption_software_list))
 
@@ -302,7 +302,7 @@ class CryptoMessage(object):
             self.log_message("attempted to add accepted encryption software to email_message that already has them")
         else:
             encryption_software_list = get_encryption_software(from_user)
-            if encryption_software_list == None or len(encryption_software_list) <= 0:
+            if len(encryption_software_list) <= 0:
                 self.log_message("No encryption software for {}".format(from_user))
             else:
                 self.email_message.add_header(
@@ -334,7 +334,7 @@ class CryptoMessage(object):
 
         try:
             encryption_software_list = get_encryption_software(from_user)
-            if encryption_software_list == None or len(encryption_software_list) <= 0:
+            if len(encryption_software_list) <= 0:
                 self.log_message("Not adding fingerprint for {} because no crypto software".format(from_user))
             else:
                 for encryption_name in encryption_software_list:
@@ -516,7 +516,7 @@ class CryptoMessage(object):
             False
         '''
 
-        return sig_verified(self.is_private_signed(), self.private_signers_list())
+        return is_sig_verified(self.private_signers_list())
 
     def set_private_signers(self, signers):
         '''
@@ -595,7 +595,7 @@ class CryptoMessage(object):
             False
         '''
 
-        return sig_verified(self.is_clear_signed(), self.clear_signers_list())
+        return is_sig_verified(self.clear_signers_list())
 
     def set_clear_signers(self, signers):
         '''
@@ -693,11 +693,18 @@ class CryptoMessage(object):
             Add who signed this email_message.
 
             >>> crypto_message = CryptoMessage()
-            >>> crypto_message.add_signer({'signer': 'edward@goodcrypto.local', 'verified': True})
+            >>> clear_signers = crypto_message.clear_signers_list()
+            >>> crypto_message.add_signer({'signer': 'edward@goodcrypto.local', 'verified': True}, clear_signers)
         '''
 
         if signer_dict is not None:
-            signer = get_email(signer_dict[constants.SIGNER])
+            signer = signer_dict[constants.SIGNER]
+            if signer is not None:
+                signer = get_email(signer)
+            # now make the signer readable if unknown
+            if signer == None:
+                signer = 'unknown user'
+
             signer_dict[constants.SIGNER] = signer
             if signer_dict not in signer_list:
                 if self.DEBUGGING: self.log_message("add signer: {}".format(signer_dict))
