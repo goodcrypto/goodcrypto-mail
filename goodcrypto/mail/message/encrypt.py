@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-17
+    Last modified: 2016-04-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -8,7 +8,7 @@ import copy, os
 from traceback import format_exc
 
 from goodcrypto.mail import contacts, options, user_keys, utils
-from goodcrypto.mail.constants import NEVER_ENCRYPT_OUTBOUND, TAG_WARNING
+from goodcrypto.mail.constants import NEVER_ENCRYPT_OUTBOUND
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX, WARNING_PREFIX
 from goodcrypto.mail.crypto_rq import search_keyservers_via_rq
 from goodcrypto.mail.crypto_software import get_classname, get_key_classname
@@ -19,6 +19,7 @@ from goodcrypto.mail.message.inspect_utils import get_charset, get_message_id, i
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.metadata import (is_metadata_address, is_ready_to_protect_metadata,
                                               packetize, get_metadata_address)
+from goodcrypto.mail.message.tags import add_tag_to_message, USE_ENCRYPTION_WARNING
 from goodcrypto.mail.message.utils import add_private_key, log_message_headers
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
@@ -51,6 +52,7 @@ class Encrypt(object):
     MUST_ENCRYPT_ALL_MAIL = i18n("Message not sent because all messages must be encrypted. Contact your mail administrator if you'd like to be able to send plain text messages to {to_email}.")
     MUST_ENCRYPT_MAIL_TO_USER = i18n("Message not sent because all messages to {to_email} must be encrypted. Contact your mail administrator if you'd like to be able to send plain text messages to this contact.")
     UNABLE_TO_ENCRYPT = i18n("Error while trying to encrypt message from {from_email} to {to_email} using {encryption}")
+    MESSAGE_TOO_LARGE = i18n('Message too large to send. The maximum size, including attachments, is {kb_size} KB.')
     POSSIBLE_ENCRYPT_SOLUTION = i18n("Report this error to your mail administrator.")
 
     def __init__(self, crypto_message):
@@ -77,7 +79,7 @@ class Encrypt(object):
             record_exception()
             self._log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             try:
-                self.crypto_message.add_tag_once('{} {}'.format(
+                self.crypto_message.add_error_tag_once('{} {}'.format(
                     SERIOUS_ERROR_PREFIX, error_message))
             except Exception:
                 record_exception()
@@ -174,8 +176,7 @@ class Encrypt(object):
 
                 elif contacts.never_encrypt_outbound(to_user):
                     self._log_message('{} not using encryption'.format(to_user))
-                    self.crypto_message.add_tag_once('{}: {}'.format(
-                      TAG_WARNING, i18n('Anyone could have read this message. Use encryption, it works.')))
+                    self.crypto_message.add_error_tag_once(USE_ENCRYPTION_WARNING)
 
                 elif options.require_outbound_encryption():
                     self._log_message('message not sent because global encryption required')
@@ -186,14 +187,12 @@ class Encrypt(object):
                     raise MessageException(value=self.MUST_ENCRYPT_MAIL_TO_USER.format(to_email=to_user))
 
                 else:
-                    self.crypto_message.add_tag_once('{}: {}'.format(
-                      TAG_WARNING, i18n('Anyone could have read this message. Use encryption, it works.')))
+                    self.crypto_message.add_error_tag_once(USE_ENCRYPTION_WARNING)
 
             if self.crypto_message.is_processed():
                 self._log_message('message processed and awaiting bundling')
             else:
-                tags = self.crypto_message.get_tag()
-                tags_added = self.crypto_message.add_tag_to_message(tags)
+                tags_added = add_tag_to_message(self.crypto_message)
                 self._log_message('tags added to message: {}'.format(tags_added))
 
                 # add the DKIM signature if user opted for it
@@ -202,7 +201,10 @@ class Encrypt(object):
                 self.crypto_message.set_filtered(True)
 
                 # finally save a record so the user can verify what security measures were added
-                if self.crypto_message.is_crypted() or self.crypto_message.is_signed():
+                if (self.crypto_message.is_crypted() or
+                    self.crypto_message.is_private_signed() or
+                    self.crypto_message.is_clear_signed()):
+
                     self._add_outbound_record(original_crypto_message, inner_encrypted_with)
                     self._log_message('added outbound history record')
 
@@ -221,11 +223,11 @@ class Encrypt(object):
 
     def _protect_metadata(self, from_user, to_user, inner_encrypted_with):
         '''
-            Protect the message's metadata and stop traffic analysis.
+            Protect the message's metadata and resist traffic analysis.
         '''
 
         if options.bundle_and_pad():
-            tags_added = self.crypto_message.add_tag_to_message(self.crypto_message.get_tag())
+            tags_added = add_tag_to_message(self.crypto_message)
             self._log_message('tags added to message before bundling: {}'.format(tags_added))
 
             # add the DKIM signature if user opted for it
@@ -237,10 +239,9 @@ class Encrypt(object):
                 self._log_message('Message too large to bundle so throwing MessageException')
                 if os.path.exists(message_name):
                     os.remove(message_name)
-                error_message = 'Message too large to send. The maximum size, including attachments, is {} KB.'.format(
-                     options.bundle_message_kb())
+                error_message = MESSAGE_TOO_LARGE.format(kb_size=options.bundle_message_kb())
                 self._log_message(error_message)
-                raise MessageException(value=i18n(error_message))
+                raise MessageException(value=error_message)
             else:
                 self._log_message('message waiting for bundling: {}'.format(
                   self.crypto_message.is_processed()))

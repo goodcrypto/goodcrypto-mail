@@ -521,8 +521,8 @@ class Options(models.Model):
     use_keyservers = models.BooleanField(i18n('Use keyservers'), default=True,
        help_text=i18n("Use keyservers to find keys for contacts without keys."))
 
-    add_long_tags = models.BooleanField(i18n('Add long tags'), default=True,
-       help_text=i18n("Add long tags describing the security features of the message."))
+    add_long_tags = models.BooleanField(i18n('Add long tags'), default=False,
+       help_text=i18n("Add detailed tags describing the security features of the message."))
 
     def __unicode__(self):
         if self.mail_server_address is not None and len(self.mail_server_address) > 0:

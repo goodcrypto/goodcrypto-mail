@@ -1,12 +1,13 @@
 '''
     Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-02-03
+    Last modified: 2016-04-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import base64, os, re
 
 from goodcrypto.mail import options
+from goodcrypto.mail.constants import DKIM_DROP_POLICY
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
 from goodcrypto.mail.message import decrypt_utils, utils
 from goodcrypto.mail.message.constants import ORIGINAL_FROM, ORIGINAL_TO
@@ -119,7 +120,12 @@ class Debundle(object):
         if options.verify_dkim_sig():
             # verify dkim sig before any changes to message happen
             self.crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(self.crypto_message)
-            self.log_message('verified metadata dkim signature ok: {}'.format(dkim_sig_verified))
+            if options.dkim_delivery_policy() == DKIM_DROP_POLICY:
+                self.log_message('verified metadata dkim signature ok: {}'.format(dkim_sig_verified))
+            elif dkim_sig_verified:
+                self.log_message('verified metadata dkim signature')
+            else:
+                self.log_message('unable to verify metadata dkim signature, but dkim policy is to just warn')
 
         # the metadata wrapper always includes its own pub key in the header
         # and it must be imported if we don't already have it
@@ -227,7 +233,7 @@ class Debundle(object):
             record_exception()
             self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             try:
-                self.crypto_message.add_tag(SERIOUS_ERROR_PREFIX)
+                self.crypto_message.add_error_tag_once(SERIOUS_ERROR_PREFIX)
             except Exception:
                 record_exception()
                 self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
@@ -253,7 +259,12 @@ class Debundle(object):
             if options.verify_dkim_sig():
                 # verify dkim sig before any changes to message happen
                 inner_crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(inner_crypto_message)
-                self.log_message('verified bundled dkim signature ok: {}'.format(dkim_sig_verified))
+                if options.dkim_delivery_policy() == DKIM_DROP_POLICY:
+                    self.log_message('verified bundled dkim signature ok: {}'.format(dkim_sig_verified))
+                elif dkim_sig_verified:
+                    self.log_message('verified bundled dkim signature')
+                else:
+                    self.log_message('unable to verify bundled dkim signature, but dkim policy is to just warn')
 
             if self.DEBUGGING:
                 self.log_message('DEBUG: logged bundled inner headers in goodcrypto.message.utils.log')

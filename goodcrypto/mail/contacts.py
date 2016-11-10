@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto.
-    Last modified: 2016-02-21
+    Last modified: 2016-03-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -233,7 +233,7 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
                         contact.outbound_encrypt_policy = constants.DEFAULT_OUTBOUND_ENCRYPT_POLICY
                         contact.save()
 
-                    contacts_crypto = add_contacts_crypto(contact, encryption_software, 
+                    contacts_crypto = add_contacts_crypto(contact, encryption_software,
                         fingerprint=fingerprint, source=source)
 
                     if passcode is not None and contacts_crypto is not None:
@@ -340,9 +340,10 @@ def get_contacts_crypto(email, encryption_name=None):
 def add_contacts_crypto(contact, encryption_software, fingerprint=None, source=None):
     '''
         Add a contact's crypto record.
-        
-        >>> add_contacts_crypto(None, None)
-        None
+
+        >>> contacts_crypto = add_contacts_crypto(None, None)
+        >>> contacts_crypto is None
+        True
     '''
     if contact is None or encryption_software is None:
         contacts_crypto = None
@@ -357,7 +358,7 @@ def add_contacts_crypto(contact, encryption_software, fingerprint=None, source=N
                            fingerprint=formatted_fingerprint, source=source)
 
     return contacts_crypto
-    
+
 def delete_contacts_crypto(email, encryption_name):
     '''
         Delete the ContactsCrypto record that matches the encryption_name for this email.

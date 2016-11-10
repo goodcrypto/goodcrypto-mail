@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-12
+    Last modified: 2016-04-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -14,7 +14,7 @@ from random import random
 from django.utils.timezone import utc
 
 from goodcrypto.mail import contacts, options, user_keys
-from goodcrypto.mail.constants import TAG_ERROR, TAG_WARNING
+from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.crypto_software import get_classname
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants, history, utils

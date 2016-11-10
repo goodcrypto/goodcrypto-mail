@@ -1,7 +1,7 @@
 #! /usr/bin/python
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-12-09
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-04-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -16,7 +16,6 @@ gc_django.setup()
 from django.utils.timezone import utc
 from goodcrypto.constants import WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP
 from goodcrypto.mail import options
-from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.internal_settings import get_date_queue_last_active, set_date_queue_last_active
 from goodcrypto.mail.message.bundle import Bundle
 from goodcrypto.mail.utils.notices import report_unable_to_send_bundled_messages

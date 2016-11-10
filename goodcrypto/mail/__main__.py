@@ -1,7 +1,7 @@
 #! /usr/bin/python
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-26
+    Last modified: 2016-04-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,7 +15,6 @@ gc_django.setup()
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 
-from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.message.filter import Filter
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.message_rq import rq_message
@@ -205,10 +204,11 @@ def get_address(argv):
 
     address = None
     try:
-        a = argv.strip('{').strip('}')
-        # make sure there aren't any system directives
-        if a.find('@') > 0 and a.find('<') != 0 and a.find('!') != 0:
-            address = get_email(a)
+        if argv:
+            a = argv.strip('{').strip('}')
+            # make sure there aren't any system directives
+            if a.find('@') > 0 and a.find('<') != 0 and a.find('!') != 0:
+                address = get_email(a)
     except Exception:
         record_exception()
 

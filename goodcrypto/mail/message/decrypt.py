@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-12
+    Last modified: 2016-04-04
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -10,6 +10,7 @@ from email.message import Message
 from traceback import format_exc
 
 from goodcrypto.mail import contacts, crypto_software, options, user_keys
+from goodcrypto.mail.constants import DKIM_DROP_POLICY
 from goodcrypto.mail.i18n_constants import SERIOUS_ERROR_PREFIX
 from goodcrypto.mail.utils import get_encryption_software
 from goodcrypto.mail.message import decrypt_utils, tags, utils
@@ -85,7 +86,12 @@ class Decrypt(object):
 
             if options.verify_dkim_sig():
                 self.crypto_message, dkim_sig_verified = decrypt_utils.verify_dkim_sig(self.crypto_message)
-                self.log_message('verified dkim signature ok: {}'.format(dkim_sig_verified))
+                if options.dkim_delivery_policy() == DKIM_DROP_POLICY:
+                    self.log_message('verified dkim signature ok: {}'.format(dkim_sig_verified))
+                elif dkim_sig_verified:
+                    self.log_message('verified dkim signature')
+                else:
+                    self.log_message('unable to verify dkim signature, but dkim policy is to just warn')
 
             self.log_message("checking if message from {} to {} needs decryption".format(from_user, to_user))
             if Decrypt.DEBUGGING:
@@ -133,7 +139,11 @@ class Decrypt(object):
             self.log_message('message content decrypted: {}'.format(decrypted))
 
             # finally save a record so the user can verify the message was received securely
-            if decrypted or self.crypto_message.is_metadata_crypted() or self.crypto_message.is_signed():
+            if (decrypted or
+                self.crypto_message.is_metadata_crypted() or
+                self.crypto_message.is_private_signed() or
+                self.crypto_message.is_clear_signed() ):
+
                 decrypt_utils.add_history_and_verification(self.crypto_message)
 
             if decrypted or self.crypto_message.is_metadata_crypted():
@@ -144,8 +154,9 @@ class Decrypt(object):
                 self.crypto_message.set_crypted(False)
 
             filtered = tags.add_tag_to_message(self.crypto_message)
-            self.crypto_message.set_filtered(filtered)
-            self.log_message("finished adding tags to message; filtered: {}".format(filtered))
+            if filtered and not self.crypto_message.is_filtered():
+                self.crypto_message.set_filtered(True)
+            self.log_message("finished adding tags to message; filtered: {}".format(self.crypto_message.is_filtered()))
             self.log_message("message encrypted with: {}".format(self.crypto_message.get_crypted_with()))
             self.log_message("metadata encrypted with: {}".format(self.crypto_message.get_metadata_crypted_with()))
 
@@ -202,7 +213,7 @@ class Decrypt(object):
                     record_exception(message=log_msg)
 
                     tag = i18n('Unable to decrypt message with {encryption}'.format(encryption=software))
-                    self.crypto_message.add_tag_once(tag)
+                    self.crypto_message.add_error_tag_once(tag)
 
                 # don't filter bundled messages; each message will be filtered separately
                 if filter_msg and options.filter_html():
@@ -246,12 +257,8 @@ class Decrypt(object):
                     self.log_message("started to create a new {} key for {}".format(encryption_software, to_user))
                 else:
                     self.log_message("no encryption software for {}".format(to_user))
-                    self.crypto_message.add_tag_once(
-                        i18n('{email} does not use any known encryption'.format(email=to_user)))
-                    """
-                    subject = i18n('{} Unable to decrypt message'.format(SERIOUS_ERROR_PREFIX))
-                    notify_user(to_user, subject, self.crypto_message.get_email_message().to_string())
-                    """
+                    self.crypto_message.add_error_tag_once(
+                        i18n('Message appears encrypted, but {email} does not use any known encryption'.format(email=to_user)))
                     report_unable_to_decrypt(to_user, self.crypto_message.get_email_message().to_string())
             except CryptoException as crypto_exception:
                 raise CryptoException(crypto_exception.value)
@@ -260,7 +267,7 @@ class Decrypt(object):
                 record_exception()
                 self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
                 try:
-                    self.crypto_message.add_tag(SERIOUS_ERROR_PREFIX)
+                    self.crypto_message.add_error_tag_once(SERIOUS_ERROR_PREFIX)
                 except Exception:
                     record_exception()
                     self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
@@ -324,7 +331,7 @@ class Decrypt(object):
         if passcode == None or len(passcode) <= 0:
             tag = '{email} does not have a private key configured.'.format(email=to_user)
             self.log_message(tag)
-            self.crypto_message.add_tag_once(tag)
+            self.crypto_message.add_error_tag_once(tag)
         else:
             # make sure that the key for the recipient is ok; if it's not, a CryptoException is thrown
             __, verified, __ = contacts.is_key_ok(to_user, encryption_name)
@@ -511,8 +518,8 @@ class Decrypt(object):
                             self.crypto_message.add_prefix_to_tag_once(tag)
                             self.log_message('decrypt tag: {}'.format(tag))
                     elif result_code == 2:
-                        self.crypto_message.add_tag_once(
-                          i18n("Can't verify signature. Ask the sender to use GoodCrypto with auto-key exchange, or you can manually import their public key."))
+                        self.crypto_message.add_error_tag_once(
+                          i18n("Can't verify signature because the message was encrypted using an unknown key. Ask the sender to send their key if they aren't using GoodCrypto."))
                     if isinstance(decrypted_data, str):
                         self.log_message('plaintext length: {}'.format(len(decrypted_data)))
                     if self.DEBUGGING: self.log_message('plaintext:\n{}'.format(decrypted_data))

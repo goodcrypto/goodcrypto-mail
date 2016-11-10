@@ -4,7 +4,7 @@
     Mail options are in a singleton Django Admin record.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-19
+    Last modified: 2016-04-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -396,8 +396,8 @@ def add_long_tags():
     except:
         return True
 
-def set_use_keyservers(add):
-    ''' Set whether to add long tags to messages. '''
+def set_add_long_tags(add):
+    ''' Set whether to add long tags to messages or not. '''
 
     record = get_options()
     try:

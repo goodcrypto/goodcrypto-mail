@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-18
+    Last modified: 2016-03-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -68,6 +68,7 @@ class CryptoMessage(object):
         self.drop(False)
         self.set_processed(False)
         self.set_tag('')
+        self.set_error_tag('')
         self.set_private_signed(False)
         self.set_private_signers([])
         self.set_clear_signed(False)
@@ -1015,29 +1016,6 @@ class CryptoMessage(object):
                 else:
                     self.tags.append(new_tag)
 
-    def add_prefix_to_tag(self, new_tag):
-        '''
-            Add prefix to email_message tag.
-
-            >>> crypto_message = CryptoMessage()
-            >>> crypto_message.add_prefix_to_tag(None)
-            >>> crypto_message.get_tag()
-            ''
-        '''
-
-        if new_tag is None or len(new_tag) <= 0:
-            if self.DEBUGGING: self.log_message("tried to add empty prefix tag")
-        else:
-            new_tag = new_tag.strip('\n')
-            if self.DEBUGGING: self.log_message("adding prefix to tag:\n{}".format(new_tag))
-            if self.tags == None or len(self.tags) <= 0:
-                self.tags = [new_tag]
-            else:
-                old_tags = self.tags
-                self.tags = [new_tag]
-                for tag in old_tags:
-                    self.tags.append(tag)
-
     def add_tag_once(self, new_tag):
         '''
             Add new tag only if it isn't already in the tag.
@@ -1064,8 +1042,95 @@ class CryptoMessage(object):
 
         if new_tag is None:
             pass
-        elif self.tags == None or new_tag not in self.tags:
-            self.add_prefix_to_tag(new_tag)
+        elif self.tags is None or new_tag not in self.tags:
+            new_tag = new_tag.strip('\n')
+            if self.DEBUGGING: self.log_message("adding prefix to tag:\n{}".format(new_tag))
+            if self.tags == None or len(self.tags) <= 0:
+                self.tags = [new_tag]
+            else:
+                old_tags = self.tags
+                self.tags = [new_tag]
+                for tag in old_tags:
+                    self.tags.append(tag)
+
+    def get_error_tags(self):
+        '''
+            Returns the list of error tags to be added to the email_message text.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_error_tag('test error tag')
+            >>> crypto_message.get_error_tags()
+            ['test error tag']
+        '''
+
+        if self.DEBUGGING: self.log_message("error tags:\n{}".format(self.error_tags))
+
+        return self.error_tags
+
+    def get_error_tag(self):
+        '''
+            Returns the error tags as a string to be added to the email_message text.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_error_tag('test error tag')
+            >>> crypto_message.get_error_tag()
+            'test error tag'
+        '''
+
+        if self.error_tags is None:
+            error_tag = ''
+        else:
+            error_tag = '\n'.join(self.error_tags)
+            if self.DEBUGGING: self.log_message("error tag:\n{}".format(error_tag))
+
+        return error_tag
+
+    def set_error_tag(self, new_tag):
+        '''
+            Sets the error tag to be added to the email_message text.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.set_error_tag(None)
+            >>> crypto_message.get_error_tag()
+            ''
+        '''
+
+        if new_tag is None:
+            if self.DEBUGGING: self.log_message("tried to set blank error tag")
+        elif new_tag == '':
+            self.error_tags = []
+            if self.DEBUGGING: self.log_message("reset error tags")
+        else:
+            if type(new_tag) is str:
+                new_tag = new_tag.strip('\n')
+                self.error_tags = [new_tag]
+            else:
+                self.error_tags = new_tag
+            if self.DEBUGGING: self.log_message("new tag:\n{}".format(self.error_tags))
+
+
+    def add_error_tag_once(self, new_tag):
+        '''
+            Add new error tag only if it isn't already in the error tag.
+
+            >>> crypto_message = CryptoMessage()
+            >>> crypto_message.add_error_tag_once(None)
+            >>> crypto_message.get_error_tag().strip()
+            ''
+        '''
+        if new_tag is None:
+            pass
+        elif self.error_tags is None or new_tag not in self.error_tags:
+            new_tag = new_tag.strip('\n')
+            if len(self.error_tags) <= 0:
+                if self.DEBUGGING: self.log_message("adding to an empty error tag:\n{}".format(new_tag))
+                self.error_tags = [new_tag]
+            else:
+                self.log_message("adding to error tag:\n{}".format(new_tag))
+                if new_tag.startswith('.'):
+                    self.error_tags[len(self.tags) - 1] += new_tag
+                else:
+                    self.error_tags.append(new_tag)
 
     def log_exception(self, exception):
         '''

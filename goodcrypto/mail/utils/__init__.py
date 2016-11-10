@@ -2,7 +2,7 @@
     Mail utilities.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-26
+    Last modified: 2016-03-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -33,16 +33,13 @@ def get_mail_status():
     '''
         Return whether Mail is running.
 
-        >>> # This test frequently fails even though all apps are running,
-        >>> # but it never seems to fail in a real environment
         >>> get_mail_status()
         'green'
     '''
 
     programs_running = (is_program_running('postfix/master') and
                         is_program_running('redis') and
-                        is_program_running('supervisord.crypto.conf') and
-                        is_program_running('supervisord.gpg.conf'))
+                        is_program_running('rqworker'))
     domain = get_domain()
     mta = mail_server_address()
     app_configured = (domain is not None and len(domain.strip()) > 0 and
@@ -58,8 +55,7 @@ def get_mail_status():
 
     if status != STATUS_GREEN:
         log_message('is postfix running: {}'.format(is_program_running('postfix/master')))
-        log_message('is supervisord.crypto running: {}'.format(is_program_running('supervisord.crypto.conf')))
-        log_message('is supervisord.gpg running: {}'.format(is_program_running('supervisord.gpg.conf')))
+        log_message('is rqworker running: {}'.format(is_program_running('rqworker')))
         log_message('is redis running: {}'.format(is_program_running('redis')))
         log_message('programs running: {}'.format(programs_running))
         log_message('domain ok: {}'.format(domain is not None and len(domain.strip()) > 0))
@@ -496,7 +492,7 @@ def get_encryption_software(email):
     try:
         #  start with the encryption software for this email
         address = get_email(email)
-    
+
         from goodcrypto.mail.contacts import get_encryption_names
         encryption_names = get_encryption_names(address)
         if encryption_names is None:
@@ -505,7 +501,7 @@ def get_encryption_software(email):
             default_encryption_software = CryptoFactory.get_default_encryption_name()
             log_message("  defaulting to {}".format(default_encryption_software))
             encryption_names.append(default_encryption_software)
-    
+
         #  only include active encryption software
         active_encryption_software = get_active_encryption_software()
         if active_encryption_software:

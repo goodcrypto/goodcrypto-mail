@@ -284,10 +284,6 @@ def i18n(raw_message):
 
         >>> i18n('Test message')
         'Test message'
-        >>> i18n('Test with variable: {variable}'.format(variable='test variable'))
-        'Test with variable: test variable'
-        >>> i18n(u'Test with variable: {variable}'.format(variable='test variable'))
-        u'Test with variable: test variable'
     '''
 
     """

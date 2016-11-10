@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-01-26
+    Last modified: 2016-03-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -235,12 +235,13 @@ class Filter(object):
 
     def reject_message(self, error_message, message=None):
         '''
-            Reject a message that had an unexpected error.
+            Reject a message that had an unexpected error and return the to address.
 
             >>> # This message will fail if testing on dev system
+            >>> to_address = get_admin_email()
             >>> filter = Filter('root', 'root', 'bad message')
-            >>> filter.reject_message('Unknown message')
-            u'support@goodcrypto.local'
+            >>> filter.reject_message('Unknown message') == to_address
+            True
         '''
         try:
             if message is None:
@@ -283,8 +284,15 @@ class Filter(object):
         body = error_message
         try:
             processed_message = debundled_message.crypto_message
-            for tag in processed_message.get_tags():
-                body += '\n{}'.format(tag)
+            error_tags = processed_message.get_error_tags()
+            if error_tags and len(error_tags) > 0:
+                for tag in error_tags:
+                    body += '\n{}'.format(tag)
+            if options.add_long_tags():
+                long_tags = processed_message.get_tags()
+                if long_tags and len(long_tags) > 0:
+                    for tag in long_tags:
+                        body += '\n{}'.format(tag)
         except:
             pass
 

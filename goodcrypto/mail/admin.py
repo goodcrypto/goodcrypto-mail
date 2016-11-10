@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-12
+    Last modified: 2016-04-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -125,6 +125,7 @@ class Options(SingletonAdmin):
         (misc_label, {
             'fields': (
                        'use_keyservers',
+                       'add_long_tags',
                        'debugging_enabled',
                       )
         }),

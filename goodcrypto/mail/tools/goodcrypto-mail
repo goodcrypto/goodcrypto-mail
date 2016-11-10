@@ -1,10 +1,11 @@
 #! /bin/bash
 #   GoodCrypto Mail
-#   Copyright 2014-2015 GoodCrypto
-#   Last modified: 2015-11-22
+#   Copyright 2014-2016 GoodCrypto
+#   Last modified: 2016-03-05
 
 logdir=/var/local/log/goodcrypto
 goodcrypto_server=/var/local/projects/goodcrypto/server
+goodcrypto_mail_tools=$goodcrypto_server/src/mail/tools
 
 function start() {
     redis-server /etc/redis/redis_message.conf >/var/log/redis.log &
@@ -12,20 +13,20 @@ function start() {
     redis-server /etc/redis/redis_crypto.conf >/var/log/redis.log &
     redis-server /etc/redis/redis_special.conf >/var/log/redis.log &
 
-    /usr/local/bin/supervisord -c $goodcrypto_server/src/mail/tools/supervisord.special.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_server/src/mail/tools/supervisord.message.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_server/src/mail/tools/supervisord.gpg.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_server/src/mail/tools/supervisord.crypto.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_server/src/mail/tools/supervisord.bundle.conf
+    /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.special.conf
+    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.message.conf
+    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.gpg.conf
+    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.crypto.conf
+    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.bundle.conf
 }
 
 function stop() {
     # remove any jobs that were in rq but didn't finish
-    sudo -u goodcrypto python $goodcrypto_server/src/mail/tools/clear_failed_mail_queues.py
-    sudo -u goodcrypto python $goodcrypto_server/src/mail/tools/clear_failed_crypto_queue.py GPG
+    sudo -u goodcrypto python $goodcrypto_mail_tools/clear_failed_mail_queues.py
+    sudo -u goodcrypto python $goodcrypto_mail_tools/clear_failed_crypto_queue.py GPG
 
     # remove the redis files
-    rm -fr /var/local/projects/goodcrypto/server/data/redis/*
+    rm -fr $goodcrypto_server/data/redis/*
 
     killmatch supervisord.special.conf
     killmatch supervisord.message.conf

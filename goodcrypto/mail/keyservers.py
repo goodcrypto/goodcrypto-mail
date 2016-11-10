@@ -417,9 +417,12 @@ def get_key_from_keyservers(fingerprint_encoded, encryption_name_encoded, first_
             else:
                 result_ok = False
 
-            current_keyserver += 1
             if result_ok and current_keyserver < len(keyservers):
 
+                key_plugin = KeyFactory.get_crypto(
+                   encryption_name, crypto_software.get_key_classname(encryption_name))
+
+                current_keyserver += 1
                 remaining_servers = len(keyservers) - current_keyserver
                 if key_retrieved(fingerprint, encryption_name, keyserver, key_plugin, remaining_servers):
                     found_key = True
@@ -454,7 +457,7 @@ def key_retrieved(fingerprint, encryption_name, keyserver, key_plugin, remaining
         sleep(5 * 60)
 
         # don't keep looking if we got a key from the keyserver
-        user_ids = plugin.get_user_ids_from_fingerprint(fingerprint)
+        user_ids = key_plugin.get_user_ids_from_fingerprint(fingerprint)
         if len(user_ids) > 0:
             found_key = True
             log_message('found key for {} on {} keyserver'.format(fingerprint, keyserver))

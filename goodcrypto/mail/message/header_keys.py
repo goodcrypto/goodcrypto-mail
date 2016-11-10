@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-21
+    Last modified: 2016-02-29
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -49,6 +49,7 @@ class HeaderKeys(object):
     '''
 
     DEBUGGING = False
+    UNEXPECTED_ERROR = i18n('An unexpected error ocurred while processing this message')
 
     def __init__(self):
         '''
@@ -112,7 +113,7 @@ class HeaderKeys(object):
             record_exception()
             self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             if crypto_message is not None:
-                crypto_message.add_tag_once(i18n('An unexpected error ocurred while processing this message'))
+                crypto_message.add_error_tag_once(self.UNEXPECTED_ERROR)
 
         self.log_message('header_contains_key_info: {}'.format(header_contains_key_info))
 
@@ -150,7 +151,7 @@ class HeaderKeys(object):
             record_exception()
             self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
             if crypto_message is not None:
-                crypto_message.add_tag_once(i18n('An unexpected error ocurred while processing this message'))
+                crypto_message.add_error_tag_once(self.UNEXPECTED_ERROR)
 
         return header_contains_key_info
 
