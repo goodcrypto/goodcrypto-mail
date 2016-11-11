@@ -8,21 +8,22 @@
          classname = get_classname('GPG')
          key_classname = get_key_classname('GPG')
     </pre>
-    
+
     or
     <pre>
         classname = get_classname('GPG')
         active = is_active('GPG')
     </pre>
-    
-    Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-07-27
+
+    Copyright 2014-2016 GoodCrypto.
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from goodcrypto.mail.models import EncryptionSoftware
+from syr.exception import record_exception
+from syr.python import is_string
 
 _log = None
 
@@ -64,7 +65,7 @@ def is_ok():
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -94,7 +95,7 @@ def get(name):
         Test the extreme case.
         >>> get(None) is None
         True
-    '''    
+    '''
 
     if name is None:
         software = None
@@ -107,7 +108,7 @@ def get(name):
         except Exception:
             software = None
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     return software
 
@@ -134,7 +135,7 @@ def set(updated_software):
         software = get(updated_software.name)
         if software is None:
             software = EncryptionSoftware(
-               name=updated_software.name, active=updated_software.active, 
+               name=updated_software.name, active=updated_software.active,
                   classname=updated_software.classname)
             software.save()
             log_message("added encryption program: {}".format(updated_software.name))
@@ -147,7 +148,7 @@ def set(updated_software):
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -164,11 +165,11 @@ def delete(name_or_software):
 
     result_ok = True
     try:
-        if isinstance(name_or_software, str):
+        if is_string(name_or_software):
             software = get(name_or_software)
         else:
             software = name_or_software
-            
+
         if software is None:
             log_message('nothing to delete')
         else:
@@ -181,7 +182,7 @@ def delete(name_or_software):
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -204,7 +205,7 @@ def is_any_encryption_active():
     except Exception:
         active = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return active
 
@@ -223,7 +224,7 @@ def get_active_names():
             active_names.append(program.name)
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     log_message("active programs: {}".format(active_names))
 
@@ -244,25 +245,25 @@ def get_encryption_names():
             names.append(program.name)
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     log_message("encryption software: {}".format(names))
 
     return names
 
 def is_active(name):
-    ''' 
+    '''
         Determine if the encryption software is active.
-        
+
         >>> is_active('unknown')
         False
-        
+
         >>> is_active(None)
         False
     '''
-    
+
     active = False
-    
+
     software = get(name)
     if software:
         active = software.active
@@ -271,15 +272,15 @@ def is_active(name):
 
 
 def get_classname(name):
-    ''' 
+    '''
         Get the classname associated with this encryption software.
 
         >>> get_classname('unknown') is None
         True
     '''
-    
+
     classname = None
-    
+
     software = get(name)
     if software is not None:
         classname = software.classname
@@ -290,27 +291,27 @@ def get_classname(name):
             classname = None
 
     return classname
-    
+
 def get_key_classname(name):
-    ''' 
+    '''
         Get the classname for keys associated with this encryption software.
 
         >>> get_key_classname('unknown') is None
         True
     '''
-    
+
     key_classname = get_classname(name)
     if key_classname is not None:
         module_name, __, classname = key_classname.rpartition('.')
         prefix, __, suffix = module_name.rpartition('.')
         key_classname = '{}.key.{}.{}'.format(prefix, suffix, classname)
-            
+
     return key_classname
 
 def log_message(message):
     '''
         Log a message to the local log.
-        
+
         >>> import os.path
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
@@ -318,9 +319,9 @@ def log_message(message):
         >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.crypto_software.log'))
         True
     '''
-    
+
     global _log
-    
+
     if _log is None:
         _log = LogFile()
 

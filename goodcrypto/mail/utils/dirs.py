@@ -1,15 +1,15 @@
 '''
     Basic for data, messages, etc. directories.
-    
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-29
+
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-08-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 
 from goodcrypto.constants import GOODCRYPTO_DATA_DIR
-from goodcrypto.utils.exception import record_exception
+from syr.exception import record_exception
 
 
 MAIL_DATA_DIR = os.path.join(GOODCRYPTO_DATA_DIR, 'mail')
@@ -18,8 +18,8 @@ NoErrors = 1
 DataDirBadPermissions = -1
 BadPermissionsMessage = "Set the permissions on the directory so GoodCrypto can read, write, and create subdirectories."
 
-#  Safe unix permissions for dirs. 
-SafeDirPermissions = 0700
+#  Safe unix permissions for dirs.
+SafeDirPermissions = 0o700
 
 NOTICES_DIRECTORY = "notices"
 PACKETS_DIRECTORY = 'packets'
@@ -30,18 +30,18 @@ def dirs_ready():
     '''
         Verify that the data directory is set up
         so Mail can read/write to it.
-        
+
         >>> bool(dirs_ready())
         True
         >>> os.path.exists(MAIL_DATA_DIR)
         True
     '''
-    
+
     def show_error(data_dir):
         error_code = DataDirBadPermissions
         print("Create a directory named: {}".format(data_dir))
         print(BadPermissionsMessage)
-        
+
         return error_code
 
 
@@ -54,10 +54,10 @@ def dirs_ready():
 
         if not os.path.exists(data_dir):
             result_ok = _create_data_directory()
-            
+
         if result_ok:
             result_ok = _set_dir_writeable(data_dir)
-            
+
         if result_ok:
             error_code = NoErrors
         else:
@@ -153,14 +153,14 @@ def _create_data_directory():
     '''
 
     result_ok = True
-    
+
     # create GoodCrypto's data directory, if it doesn't already exist
     data_dir = get_data_directory()
     if not os.path.exists(data_dir):
         os.makedirs(data_dir, SafeDirPermissions)
 
     result_ok = os.path.exists(data_dir)
-    
+
     return result_ok
 
 def _set_dir_writeable(dirname):
@@ -175,7 +175,7 @@ def _set_dir_writeable(dirname):
     if not result_ok:
         _set_permissions(dirname)
         result_ok = _test_subdir_ok(dirname)
-        
+
     return result_ok
 
 def _test_subdir_ok(dirname):
@@ -196,13 +196,13 @@ def _test_subdir_ok(dirname):
         os.rmdir(test_dir)
     else:
         result_ok = False
-        
+
     return result_ok
 
 def _set_permissions(dirname):
     '''
         Set safe permissions for the dir.
-        
+
         >>> dirname = os.path.join(MAIL_DATA_DIR, 'test')
         >>> if os.path.exists(dirname):
         ...     filenames = os.listdir(dirname)
@@ -217,7 +217,7 @@ def _set_permissions(dirname):
         ...         os.remove(os.path.join(dirname, filename))
         >>> os.rmdir(dirname)
     '''
-    
+
     os.chmod(dirname, SafeDirPermissions)
 
 

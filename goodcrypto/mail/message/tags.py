@@ -1,19 +1,20 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-04-06
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, re, urllib
+import os, re
+from urllib.parse import quote as url_quote
 
 from goodcrypto.mail import options
 from goodcrypto.mail.constants import TAG_PREFIX
 from goodcrypto.mail.contacts import get_fingerprint
 from goodcrypto.mail.message import constants
-from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
+from goodcrypto.mail.message.utils import log_message_headers
 from goodcrypto.utils import get_email, i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 DEBUGGING = False
 
@@ -48,8 +49,9 @@ def set_tagline_delimiter(delimiter):
 
         >>> tag_delimiter = get_tagline_delimiter()
         >>> set_tagline_delimiter('test')
-        >>> get_tagline_delimiter()
-        'test'
+        >>> tagline = get_tagline_delimiter()
+        >>> tagline == 'test'
+        True
         >>> set_tagline_delimiter(tag_delimiter)
     '''
     global _tagline_delimiter
@@ -70,31 +72,102 @@ def get_tagline_delimiter():
 
     return _tagline_delimiter
 
-def add_tag_to_message(crypto_message):
+def add_decrypted_tags_to_message(crypto_message):
     '''
-        Add tag to a message.
+        Add decrypted tags to a message.
 
-        >>> add_tag_to_message(None)
+        >>> add_decrypted_tags_to_message(None)
+        False
+    '''
+
+    tags, __ = get_decrypted_tags(crypto_message)
+
+    return add_tags_to_message(crypto_message, tags)
+
+def add_encrypted_tags_to_message(crypto_message):
+    '''
+        Add encrypted tags to a message.
+
+        >>> add_encrypted_tags_to_message(None)
         False
     '''
 
     # update the tags
-    tags, __ = get_tags(crypto_message)
+    tags, __ = get_encrypted_tags(crypto_message)
+
+    return add_tags_to_message(crypto_message, tags)
+
+def add_tags_to_message(crypto_message, tags):
+    '''
+        Add tags to a message.
+
+        >>> add_tags_to_message(None, None)
+        False
+    '''
+
+    # update the tags
     if tags is None or len(tags) <= 0:
         tags_added = False
-        log_message('No tags need to be added to message')
+        log_message('no tags need to be added to message')
     else:
-        tags_added = crypto_message.add_tag_to_message(tags)
-        log_message('Tags added to message: {}'.format(tags_added))
+        tags_added = crypto_message.add_tags_to_message(tags)
+        log_message('tags added to message: {}'.format(tags_added))
         if tags_added:
             log_message(tags)
             if DEBUGGING:
                 log_message('DEBUG: logged taggged message headers in goodcrypto.message.utils.log')
-                utils.log_message_headers(crypto_message, tag='tagged message headers')
+                log_message_headers(crypto_message, tag='tagged message headers')
 
     return tags_added
 
-def get_tags(crypto_message):
+def get_decrypted_tags(crypto_message):
+    '''
+        Get tags to add to a decrypted message.
+
+        Test extreme cases.
+        >>> tags, filtered = get_decrypted_tags(None)
+        >>> tags is None
+        True
+        >>> filtered
+        False
+    '''
+
+    try:
+        crypt_tags = None
+        filtered = False
+        if crypto_message.is_crypted():
+            add_crypted_tags(crypto_message)
+            filtered = True
+        if crypto_message.is_clear_signed():
+            add_clear_signed_tags(crypto_message)
+            filtered = True
+        if crypto_message.is_dkim_signed():
+            add_dkim_tags(crypto_message)
+            filtered = True
+
+        crypt_tags, filtered = get_tags(crypto_message, filtered=filtered)
+
+    except Exception:
+        record_exception()
+        log_message('EXCEPTION - see syr.exception.log for details')
+
+    return crypt_tags, filtered
+
+def get_encrypted_tags(crypto_message):
+    '''
+        Get tags to add to an encrypted message.
+
+        Test extreme cases.
+        >>> tags, filtered = get_encrypted_tags(None)
+        >>> tags is None
+        True
+        >>> filtered
+        False
+    '''
+
+    return get_tags(crypto_message)
+
+def get_tags(crypto_message, filtered=False):
     '''
         Get tags to add to message.
 
@@ -128,28 +201,17 @@ def get_tags(crypto_message):
 
         return tags
 
-    decrypt_tags = None
-    filtered = False
+    crypt_tags = None
     add_long_tags = options.add_long_tags()
 
     try:
-        if crypto_message.is_crypted():
-            add_crypted_tags(crypto_message)
-            filtered = True
-        if crypto_message.is_clear_signed():
-            add_clear_signed_tags(crypto_message)
-            filtered = True
-        if crypto_message.is_dkim_signed():
-            add_dkim_tags(crypto_message)
-            filtered = True
-
         #  if we have something to say, it's still been filtered
         if filtered and not crypto_message.is_filtered():
             crypto_message.set_filtered(True)
         log_message("filtered: {}".format(crypto_message.is_filtered()))
         if DEBUGGING:
             log_message('DEBUG: logged tagged and filtered headers in goodcrypto.message.utils.log')
-            utils.log_message_headers(crypto_message, tag='tagged and filtered headers')
+            log_message_headers(crypto_message, tag='tagged and filtered headers')
 
         tags = crypto_message.get_error_tags()
         if add_long_tags:
@@ -201,17 +263,17 @@ def get_tags(crypto_message):
             new_tag = ''
 
         if len(new_tag) > 0:
-            decrypt_tags = new_tag
+            crypt_tags = new_tag
 
         filtered = crypto_message.is_filtered()
 
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
-    log_message('decrypt tags: {}'.format(decrypt_tags))
+    log_message('crypt tags: {}'.format(crypt_tags))
 
-    return decrypt_tags, filtered
+    return crypt_tags, filtered
 
 def add_metadata_tag(crypto_message):
     ''' Add metadata tag. '''
@@ -228,7 +290,7 @@ def add_verification_tag(crypto_message, verification_code):
 
     goodcrypto_server_url = options.goodcrypto_server_url()
     if goodcrypto_server_url and len(goodcrypto_server_url) > 0:
-        quoted_code = urllib.quote(verification_code)
+        quoted_code = url_quote(verification_code)
         tag = '{} {}mail/msg-decrypted/{}'.format(
            MESSAGE_VERIFY_PREFIX, goodcrypto_server_url, quoted_code)
     else:
@@ -242,7 +304,6 @@ def add_crypted_tags(crypto_message):
 
     log_message("crypted: {}".format(crypto_message.is_crypted()))
 
-    analyzer = OpenPGPAnalyzer()
     content = crypto_message.get_email_message().get_content()
     tags = crypto_message.get_tags()
     if tags is None:
@@ -277,10 +338,6 @@ def add_crypted_tags(crypto_message):
         else:
             log_message('added prefix to tag: {}'.format(received_privately))
             crypto_message.add_prefix_to_tag_once('{}.'.format(received_privately))
-
-    if analyzer.is_encrypted(content):
-        crypto_message.add_error_tag_once(EXTRA_LAYER_WARNING)
-        if DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
 
 def add_clear_signed_tags(crypto_message):
     ''' Add tags about the clear signer. '''
@@ -318,11 +375,25 @@ def add_unencrypted_warning(crypto_message):
     ''' Add a warning about unencrypted mail. '''
 
     tag = UNENCRYPTED_WARNING
+    content = crypto_message.get_email_message().get_content()
+    log_message('content type: {}'.format(type(content)))
+    if tag in crypto_message.get_email_message().get_content():
+        log_message('not adding tag because it is already in crypto message content: {}'.format(tag))
+    else:
+        crypto_message.add_error_tag_once(tag)
+        crypto_message.set_filtered(True)
+
+def add_extra_layer_warning(crypto_message):
+    ''' Add a warning that there's still a layer of encryption. '''
+
+    tag = EXTRA_LAYER_WARNING
 
     if tag in crypto_message.get_email_message().get_content():
         log_message('not adding tag because it is already in crypto message content: {}'.format(tag))
     else:
         crypto_message.add_error_tag_once(tag)
+        log_message(EXTRA_LAYER_WARNING)
+        if DEBUGGING: log_message("message:\n{}".format(crypto_message.get_email_message().to_string()))
 
 def get_decrypt_signature_tag(crypto_message, from_user, signed_by, crypto_name):
     ''' Get the tag when the encrypted message was signed. '''

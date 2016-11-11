@@ -1,9 +1,10 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-28
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 import os
 from email.message import Message
 from email.mime.multipart import MIMEMultipart
@@ -12,9 +13,9 @@ from email.parser import Parser
 
 from goodcrypto.mail.message.inspect_utils import get_charset, get_multientry_header
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
 
 DEBUGGING = False
 
@@ -59,7 +60,7 @@ def add_multientry_header(message, header_name, multiline_value):
                     message.add_header('{}-{}'.format(header_name, count), value)
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return count
 
@@ -116,7 +117,6 @@ def alt_to_text_message(original_message):
 def plaintext_to_message(old_message, plaintext):
     '''
         Create a new Message with only the plain text.
-
 
         >>> # Test extreme cases
         >>> plaintext_to_message(None, None) == None

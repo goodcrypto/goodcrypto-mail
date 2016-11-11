@@ -1,10 +1,51 @@
+{% extends "base.html" %}
 {% comment %}
 
     Copyright 2016 GoodCrypto
-    Last modified: 2016-02-22
+    Last modified: 2016-11-06
 
 {% endcomment %}
-{% load i18n bootstrap custom %}
+{% load i18n custom bootstrap3 %}
+
+  {% block meta_keywords %}
+  <meta name="Keywords" content="mail server, mta">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="How to configure your mail server to work with your GoodCrypto private server.">
+  {% endblock meta_description %}
+
+  {% block titlevar %}Generate Configuration Updates{% endblock %}
+
+{% block contentpane %}
+<h1 class="headline">
+    {% trans 'Generate Configuration Updates' %}
+</h1>
+
+<div id="tabs">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation">
+            <a href="/mail/prep_postfix/" role="tab" aria-control="tab1" data-toggle="tab">
+                {% trans 'For your Postfix server' %}
+            </a>
+        </li>
+        <li role="presentation" class="active">
+            <a href="#prep_exim_tab" role="tab" aria-control="tab2" data-toggle="tab">
+                {% trans 'For your Exim server' %}
+            </a>
+        </li>
+    </ul>
+</div>
+
+<div class="row">&nbsp;</div>
+
+<div class="row">
+    <p class="dropcap">
+    Follow the <a href="https://goodcrypto.com/qna/knowledge-base/config-exim/">step-by-step</a> instructions.
+    </p>
+</div>
+
+{% endblock contentpane %}
+
 
             <div class="row">&nbsp;</div>
 

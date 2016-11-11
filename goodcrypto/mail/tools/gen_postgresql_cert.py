@@ -1,19 +1,24 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-07-08
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-10-26
 '''
+
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sh, sys
 from syr.openssl import generate_certificate, move_private_key
 
 def main(domain='goodcrypto.private.server.website'):
     '''
         Generate postgresql certficate.
-        
+
         >>> main(domain='test.domain.com')
         New certificate(s) generated
     '''
-    
+
     # generate a key for postgres and be sure the ownship is correct
     dirname = '/var/local/projects/goodcrypto/server/data/db/postgresql'
     if os.path.exists(dirname) and not os.path.islink(dirname):

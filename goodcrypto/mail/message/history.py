@@ -1,15 +1,16 @@
 '''
     Copyright 2015-2016 GoodCrypto.
-    Last modified: 2016-02-06
+    Last modified: 2016-10-30
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
     Manage logging messages encrypted and decrypted by the GoodCrypto server to
     prevent others spoofing the security of a message.
 '''
-import os, pickle, re, urllib
+import json, os, re
 from datetime import datetime
 from time import gmtime, strftime
+from urllib.parse import unquote
 
 from django.db.models import Q
 
@@ -18,8 +19,8 @@ from goodcrypto.mail.utils import gen_password
 from goodcrypto.mail.message.constants import SIGNER_VERIFIED
 from goodcrypto.mail.message.inspect_utils import get_message_id
 from goodcrypto.utils import get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 from syr.mime_constants import DATE_KEYWORD, SUBJECT_KEYWORD
 
 _log = None
@@ -34,7 +35,7 @@ def add_outbound_record(crypto_message, verification_code):
         log_message('added outbound history record from {}'.format(crypto_message.smtp_sender()))
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION 1 - see syr.exception.log for details')
 
 def add_inbound_record(crypto_message, verification_code):
     '''
@@ -45,7 +46,7 @@ def add_inbound_record(crypto_message, verification_code):
         log_message('added inbound history record to {}'.format(crypto_message.smtp_recipient()))
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION 2 - see syr.exception.log for details')
 
 def add_record(crypto_message, direction, verification_code=None):
     ''' Add the message's summary details about its security measures. '''
@@ -64,9 +65,9 @@ def add_record(crypto_message, direction, verification_code=None):
 
         # use the encryption for the inner message if possible
         if crypted_with is not None and len(crypted_with) > 0:
-            encryption_programs = crypto_message.get_crypted_with()
+            encryption_programs = crypted_with
         else:
-            encryption_programs = crypto_message.get_metadata_crypted_with()
+            encryption_programs = metadata_crypted_with
 
         timestamp = get_isoformat(message_date)
         sender_email = get_email(sender)
@@ -108,7 +109,9 @@ def add_record(crypto_message, direction, verification_code=None):
                 log_message("message_id: {}".format(message_id))
                 log_message("verification_code: {}".format(verification_code))
                 log_message("crypted: {}".format(crypted))
+                log_message("crypted with: {}".format(crypted_with))
                 log_message("metadata_crypted: {}".format(metadata_crypted))
+                log_message("metadatacrypted with: {}".format(metadata_crypted_with))
                 if encryption_programs: log_message("encryption_programs: {}".format(encryption_programs))
                 if crypto_message is not None:
                     log_message("private_signers: {}".format(crypto_message.private_signers_list()))
@@ -126,8 +129,8 @@ def add_record(crypto_message, direction, verification_code=None):
                                           verification_code=verification_code[:MessageHistory.MAX_VERIFICATION_CODE],
                                           content_protected=crypted,
                                           metadata_protected=metadata_crypted,
-                                          private_signers=pickle_signers(crypto_message.private_signers_list()),
-                                          clear_signers=pickle_signers(crypto_message.clear_signers_list()),
+                                          private_signers=pack_signers(crypto_message.private_signers_list()),
+                                          clear_signers=pack_signers(crypto_message.clear_signers_list()),
                                           dkim_signed=crypto_message.is_dkim_signed(),
                                           dkim_sig_verified=crypto_message.is_dkim_sig_verified(),
                                           )
@@ -137,7 +140,7 @@ def add_record(crypto_message, direction, verification_code=None):
     except:
         ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION 3 - see syr.exception.log for details')
         if sender: log_message("sender: {}".format(sender))
         if recipient: log_message("recipient: {}".format(recipient))
         if direction: log_message("direction: {}".format(direction))
@@ -157,9 +160,9 @@ def add_record(crypto_message, direction, verification_code=None):
     return ok
 
 def is_signed(raw_signers):
-    ''' 
-        Returns true if there is at least one signer. 
-    
+    '''
+        Returns true if there is at least one signer.
+
         If raw_signers are pickeled, unpickles and then checks.
     '''
 
@@ -168,7 +171,7 @@ def is_signed(raw_signers):
         if type(raw_signers) is list:
             signers = raw_signers
         else:
-            signers = unpickel_signers(signers)
+            signers = unpack_signers(raw_signers)
 
         if len(signers) > 0:
             signed = True
@@ -177,11 +180,16 @@ def is_signed(raw_signers):
 
     return signed
 
-def is_sig_verified(signers):
+def is_sig_verified(raw_signers):
     ''' Returns true if at least one signer was verified. '''
 
     verified_sig = False
     try:
+        if type(raw_signers) is list:
+            signers = raw_signers
+        else:
+            signers = unpack_signers(raw_signers)
+
         if len(signers) > 0:
             for signer in signers:
                 if signer[SIGNER_VERIFIED]:
@@ -191,24 +199,28 @@ def is_sig_verified(signers):
 
     return verified_sig
 
-def pickle_signers(signers):
-    ''' Return a pickled version of the signers. '''
+def pack_signers(signers):
+    ''' Return a packed (i.e., json) version of the signers. '''
 
     try:
-        picked_signers = pickle.dumps(signers)
+        log_message('signers: {}'.format(signers))
+        packed_signers = json.dumps(signers)
+        log_message('pickled signers: {}'.format(packed_signers))
     except:
-        picked_signers = []
+        record_exception()
+        packed_signers = []
 
-    return picked_signers
+    return packed_signers
 
-def unpickle_signers(pickled_signers):
+def unpack_signers(packed_signers):
     ''' Return signers from pickled versions. '''
 
     try:
-        return pickle.loads(pickled_signers)
+        return json.loads(packed_signers)
     except:
+        record_exception()
         signers = []
-        
+
     return signers
 
 def get_outbound_messages(email):
@@ -227,7 +239,7 @@ def get_outbound_messages(email):
         except Exception:
             records = []
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION 4 - see syr.exception.log for details')
     else:
         address = email
 
@@ -250,7 +262,7 @@ def get_inbound_messages(email):
         except Exception:
             records = []
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION 5 - see syr.exception.log for details')
     else:
         address = email
 
@@ -271,14 +283,14 @@ def get_validated_messages(email, verification_code):
         address = get_email(email)
         try:
             validated_records = MessageHistory.objects.filter(
-                verification_code=urllib.unquote(verification_code))
+                verification_code=unquote(verification_code))
             records = validated_records.filter(Q(sender=address) | Q(recipient=address) )
         except MessageHistory.DoesNotExist:
             records = []
         except Exception:
             records = []
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION 6 - see syr.exception.log for details')
 
         if len(records) <= 0:
             try:
@@ -289,7 +301,7 @@ def get_validated_messages(email, verification_code):
             except Exception:
                 records = []
                 record_exception()
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                log_message('EXCEPTION 7 - see syr.exception.log for details')
 
     log_message("{} has {} crypted messages".format(email, len(records)))
 
@@ -315,8 +327,9 @@ def get_direction(direction_code):
     '''
         Get the direction in words.
 
-        >>> get_direction(1)
-        'Inbound'
+        >>> direction = get_direction(1)
+        >>> direction == 'Inbound'
+        True
     '''
     try:
         code = int(direction_code)
@@ -360,30 +373,34 @@ def get_isoformat(message_date):
         message_date = strftime("%a, %d %b %Y %H:%M:%S", gmtime())
 
     try:
-        Date_Format = re.compile(r'''(?P<wk_day>.*,)?\s+(?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*)\s+(?P<gmt_offset>.*)''')
+        Date_Format = re.compile(r'''(?P<wk_day>.*,)?\s+(?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*)\s*(?P<gmt_offset>.*)''')
         m = Date_Format.search(message_date)
         if not m:
-            Date_Format = re.compile(r'''(?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*)\s+(?P<gmt_offset>.*)''')
+            Date_Format = re.compile(r'''(?P<day>\d*) (?P<month>.*) (?P<year>\d*) (?P<hour>\d*):(?P<min>\d*):(?P<sec>\d*)\s*(?P<gmt_offset>.*)''')
             m = Date_Format.search(message_date)
 
         if m:
             day = int(m.group('day'))
-            month = MONTH_MAP[m.group('month')]
+            month = int(MONTH_MAP[m.group('month')])
             year = get_year(m.group('year'))
             hour = int(m.group('hour'))
             minutes = int(m.group('min'))
             seconds = int(m.group('sec'))
-            timestamp = datetime(year, month, day, hour, minutes, seconds).isoformat(' ')
+            timestamp = datetime(year, month, day, hour, minutes, seconds).isoformat(str(' '))
             if m.group('gmt_offset'):
                 gmt_offset = m.group('gmt_offset')
                 if gmt_offset.lower() == 'gmt' or gmt_offset.lower() == 'utc':
                     gmt_offset = '+0000'
                 timestamp += ' {}'.format(gmt_offset)
         else:
-            timestamp = message_date
-            log_message('unable to format date: {}'.format(timestamp))
+            log_message('unable to format date: {}'.format(message_date))
+            timestamp = message_date.decode()
     except:
-        timestamp = message_date
+        try:
+            timestamp = message_date.decode()
+        except:
+            timestamp = datetime.today().isoformat(str(' '))
+            log_message('unable to format date ({}) so defaulting to today'.format(message_date))
 
     return timestamp
 

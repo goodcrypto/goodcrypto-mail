@@ -1,7 +1,7 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-02-19
+    Last modified: 2016-10-20
 
     Prepare domain's postfix config to work with GoodCrypto private server.
     Run tools/goodcrypto/prep_postfix_config_tgz.py
@@ -56,7 +56,7 @@ def main(private_server_ip):
 
     print('')
     print('GoodCrypto.com')
-    response = raw_input('Integrate postfix with your GoodCrypto private server (y/N)? ')
+    response = input('Integrate postfix with your GoodCrypto private server (y/N)? ')
 
     if response.lower().startswith('y'):
         configure(private_server_ip)
@@ -362,7 +362,7 @@ def how_it_works():
 
     print('Error - unable to configure your MTA for GoodCrypto')
     print('You must pass the IP address of your GoodCrypto private server')
-    print('For example, config_postfix.py 192.128.0.10')
+    print('For example, prep_mta_postfix.py 192.128.0.10')
 
 if __name__ == "__main__":
 

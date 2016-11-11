@@ -1,15 +1,15 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2016-02-06
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, time
+import os, pickle, time
 from random import choice
 
 from goodcrypto.mail import contacts, options, user_keys
 from goodcrypto.mail.constants import AUTO_GENERATED
-from goodcrypto.mail.crypto_rq import add_private_key_via_rq, set_fingerprint_via_rq
+from goodcrypto.mail.crypto_queue import queue_sync
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants
 from goodcrypto.mail.utils import email_in_domain, is_multiple_encryption_active
@@ -17,8 +17,8 @@ from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.key.key_factory import KeyFactory
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 DEBUGGING = False
 
@@ -29,8 +29,9 @@ def get_public_key_header_name(encryption_name):
     '''
         Get the public key header's name.
 
-        >>> get_public_key_header_name('GPG')
-        'X-OpenPGP-PublicKey'
+        >>> header_name = get_public_key_header_name('GPG')
+        >>> header_name == 'X-OpenPGP-PublicKey'
+        True
     '''
 
     if (is_multiple_encryption_active() and
@@ -99,17 +100,20 @@ def add_private_key(email, encryption_software=None):
                     encryption_software = CryptoFactory.DEFAULT_ENCRYPTION_NAME
 
                 user_key = user_keys.get(email, encryption_software)
-                if user_key is None or user_key.passcode is None:
+                if user_key is None:
                     contacts_crypto = contacts.get_contacts_crypto(email, encryption_name=encryption_software)
                     if contacts_crypto is None:
+                        # a private user key will automatically be created
+                        # when the contact's crypto record is created after the contact is created
                         contacts.add(email, encryption_software, source=AUTO_GENERATED)
                         log_message('add {} key for {}'.format(encryption_software, email))
                     else:
-                        log_message('adding private {} key for {}'.format(encryption_software, email))
-                        add_private_key_via_rq(contacts_crypto)
+                        log_message('adding private {} user key for {}'.format(encryption_software, email))
+                        sync_private_key_via_queue(contacts_crypto)
+
                 elif user_key.contacts_encryption.fingerprint is None:
                     log_message('setting private {} key fingerprint for {}'.format(encryption_software, email))
-                    set_fingerprint_via_rq(user_key.contacts_encryption)
+                    sync_fingerprint_via_queue(user_key.contacts_encryption)
                 else:
                     log_message('{} already has crypto software defined'.format(email))
             else:
@@ -119,7 +123,31 @@ def add_private_key(email, encryption_software=None):
 
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
+
+def sync_private_key_via_queue(contacts_encryption):
+    '''
+        Sync the private key with the database via queue.
+
+        >>> sync_private_key_via_queue(None)
+    '''
+
+    if contacts_encryption is not None:
+        from goodcrypto.mail.sync_db_with_keyring import sync_private_key
+
+        queue_sync(pickle.dumps(contacts_encryption), sync_private_key)
+
+def sync_fingerprint_via_queue(contacts_encryption):
+    '''
+        Sync the fingerprint in database via queue.
+
+        >>> sync_fingerprint_via_queue(None)
+    '''
+
+    if contacts_encryption is not None:
+        from goodcrypto.mail.sync_db_with_keyring import sync_fingerprint
+
+        queue_sync(pickle.dumps(contacts_encryption), sync_fingerprint)
 
 def bounce_message(original_message, user, subject, error_message):
     '''
@@ -146,7 +174,7 @@ def bounce_message(original_message, user, subject, error_message):
             log_message('unable to send note to {} about error.'.format(user))
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return notified_user
 
@@ -175,7 +203,7 @@ def drop_message(original_message, recipient, subject, error_message):
             log_message('unable to send note to {} about error.'.format(recipient))
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return notified_user
 
@@ -212,7 +240,7 @@ def log_message_headers(original_message, tag='message headers'):
         for key in message.keys():
             log_message('{}: {}'.format(key, message.get(key)))
     except:
-        log_message('EXCEPTION - See goodcrypto.utils.exception.log')
+        log_message('EXCEPTION - See syr.exception.log')
         record_exception()
 
 def log_crypto_exception(exception, message=None):

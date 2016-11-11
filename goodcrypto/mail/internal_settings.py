@@ -1,16 +1,16 @@
 '''
     Manage Mail's internal settings.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-20
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from datetime import datetime
 
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from reinhardt.singleton import get_singleton, save_singleton
+from syr.exception import record_exception
 from syr.lock import locked
 
 _log = None
@@ -34,7 +34,7 @@ def set_date_queue_last_active(new_date_queue_last_active):
         save_internal_settings(record)
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
 def get_domain():
     ''' Get the domain that GoodCrypto private server manages. '''

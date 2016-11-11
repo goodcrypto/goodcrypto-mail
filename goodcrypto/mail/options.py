@@ -4,14 +4,15 @@
     Mail options are in a singleton Django Admin record.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-04-03
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 from goodcrypto.mail.constants import HOURS_CODE, DAYS_CODE, WEEKS_CODE, DEFAULT_DKIM_POLICY
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from reinhardt.singleton import get_singleton, save_singleton
+from syr.exception import record_exception
 from syr.lock import locked
 
 log = LogFile()

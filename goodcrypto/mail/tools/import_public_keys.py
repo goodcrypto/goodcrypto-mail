@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Import all public keys from a directory.
 
@@ -6,8 +6,12 @@
     the filename must match the key's email address.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-07
+    Last modified: 2016-10-26
 '''
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sys
 
 # set up django early

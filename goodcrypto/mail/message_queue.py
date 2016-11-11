@@ -1,14 +1,14 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-10
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, os.path, pickle
-from base64 import b64decode, b64encode
+import os, os.path
 from redis import Redis
-from rq import Connection, Queue
+from rq.connections import Connection
 from rq.job import Job
+from rq.queue import Queue
 from rq.timeouts import JobTimeoutException
 from time import sleep
 
@@ -16,20 +16,19 @@ from time import sleep
 from goodcrypto.utils import gc_django
 gc_django.setup()
 
+from goodcrypto.mail.crypto_queue_settings import CRYPTO_RQ, CRYPTO_REDIS_PORT
 from goodcrypto.mail.message.filter import Filter
-from goodcrypto.mail.message.rq_message_settings import MESSAGE_RQ, MESSAGE_REDIS_PORT
-from goodcrypto.mail.rq_crypto_settings import CRYPTO_RQ, CRYPTO_REDIS_PORT
+from goodcrypto.mail.message_queue_settings import MESSAGE_RQ, MESSAGE_REDIS_PORT
 from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.utils.constants import REDIS_HOST
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils.manage_rq import get_job_count
+from syr.exception import record_exception
 
 
 
 _log = None
 
-def rq_message(sender, recipients, in_message):
+def queue_message(sender, recipients, in_message):
     ''' RQ the message for encrypting or decrypting.
 
         # In honor of Senior Academic Officer Tomer, who publicly denounced and refused to serve in operations involving
@@ -37,7 +36,7 @@ def rq_message(sender, recipients, in_message):
         >>> sender = 'tomer@goodcrypto.local'
         >>> recipients = ['joseph@goodcrypto.remote']
         >>> in_message = 'test message'
-        >>> rq_message(sender, recipients, in_message)
+        >>> queue_message(sender, recipients, in_message)
         True
      '''
 
@@ -72,15 +71,15 @@ def rq_message(sender, recipients, in_message):
                   'passing through a local message from {} to {}'.format (sender, recipient))
             else:
                 log_message('about to queue message for {}'.format(recipient))
-                queue = Queue(name=MESSAGE_RQ, connection=redis_connection, async=True)
+                queue = Queue(name=MESSAGE_RQ, connection=redis_connection)
                 # each job needs to wait for the jobs ahead of it so when
                 # calculating the timeout include the jobs already in the queue
                 secs_to_wait = DEFAULT_TIMEOUT * (queue.count + 1)
                 log_message('jobs waiting in message queue {}'.format(queue.count))
                 log_message('secs to wait for job {}'.format(secs_to_wait))
                 job = queue.enqueue_call(
-                        filter_rq_message,
-                        args=[b64encode(sender), b64encode(recipient), b64encode(in_message)],
+                        filter_queued_message,
+                        args=[sender, recipient, in_message],
                         timeout=secs_to_wait)
 
                 if job is None:
@@ -95,7 +94,7 @@ def rq_message(sender, recipients, in_message):
 
                     if job.is_failed:
                         result_code = False
-                        job_dump = job.dump()
+                        job_dump = job.to_dict()
                         if 'exc_info' in job_dump:
                             log_message('{} job exc info: {}'.format(job_id, job_dump['exc_info']))
                         elif 'status' in job_dump:
@@ -116,29 +115,29 @@ def rq_message(sender, recipients, in_message):
     except Exception as exception:
         result_code = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_code
 
 
-def filter_rq_message(from_user, to_user, message):
+def filter_queued_message(from_user, to_user, message):
     '''
-        Filter a message in RQ to one of the encrypt/decrypt filters.
+        Filter a message in the queue to one of the encrypt/decrypt filters.
 
         # In honor of Sergeant Sheri, who publicly denounced and refused to serve in operations involving
         # the occupied Palestinian territories because of the widespread surveillance of innocent residents.
         >>> sender = 'sheri@goodcrypto.local'
         >>> recipient = 'laura@goodcrypto.remote'
         >>> in_message = 'test message'
-        >>> filter_rq_message(b64encode(sender), b64encode(recipient), b64encode(in_message))
+        >>> filter_queued_message(sender, recipient, in_message)
         True
     '''
 
     crypt_email = None
     try:
-        sender = b64decode(from_user)
-        recipient = b64decode(to_user)
-        in_message = b64decode(message)
+        sender = from_user
+        recipient = to_user
+        in_message = message
 
         filter = Filter(sender, recipient, in_message)
         log_message('filter message: {}'.format(filter))
@@ -147,13 +146,13 @@ def filter_rq_message(from_user, to_user, message):
         log_message('result code: {}'.format(result_code))
     except Exception as exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         result_code = False
         if filter is not None:
             filter.reject_message(sender, recipient, in_message, str(exception))
     except IOError as io_error:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         result_code = False
         if filter is not None:
             filter.reject_message(sender, recipient, in_message, str(io_error))
@@ -163,10 +162,28 @@ def filter_rq_message(from_user, to_user, message):
 def is_local_message(sender, recipient):
     '''
         Determine if the message is from the localhost.
+
+        >>> sender = 'test@localhost'
+        >>> recipient = 'test@test.com'
+        >>> is_local_message(sender, recipient)
+        True
+        >>> sender = 'test@test.com'
+        >>> recipient = 'test@localhost'
+        >>> is_local_message(sender, recipient)
+        True
+        >>> sender = None
+        >>> recipient = 'test@test.com'
+        >>> is_local_message(sender, recipient)
+        False
+        >>> sender = None
+        >>> recipient = 'test@localhost'
+        >>> is_local_message(sender, recipient)
+        True
     '''
 
     def is_local_host_domain(user):
-        return user is not None and isinstance(user, str) and user.endswith('@localhost')
+        is_text = isinstance(user, str)
+        return user is not None and is_text and user.endswith('@localhost')
 
     return  (is_local_host_domain(sender) or
              is_local_host_domain(recipient) or
@@ -180,7 +197,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.message_rq.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message_queue.log'))
         True
     '''
 

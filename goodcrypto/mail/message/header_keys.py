@@ -1,9 +1,10 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-29
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 import os
 
 from goodcrypto.mail import contacts, crypto_software
@@ -18,8 +19,8 @@ from goodcrypto.mail.utils import notices
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import strip_fingerprint
 from goodcrypto.utils import i18n, parse_address
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 
 class HeaderKeys(object):
@@ -83,7 +84,7 @@ class HeaderKeys(object):
                 self.log_message('   crypto message: {}'.format(crypto_message))
                 if crypto_message is not None: self.log_message('   email message: {}'.format(crypto_message.get_email_message()))
             else:
-                accepted_crypto_packages = self._import_accepted_crypto_software(from_user, crypto_message)
+                accepted_crypto_packages = crypto_message.get_accepted_crypto_software()
                 if accepted_crypto_packages is None or len(accepted_crypto_packages) <= 0:
                     self.log_message("checking for default key for {} <{}>".format(name, address))
                     tag = self._manage_key_header(address, crypto_message,
@@ -105,13 +106,15 @@ class HeaderKeys(object):
                         tag = self._manage_key_header(
                           address, crypto_message, encryption_name, key_block)
                     header_contains_key_info = True
+                    self.update_accepted_crypto(from_user, accepted_crypto_packages)
 
         except MessageException as message_exception:
+            self.log_message(message_exception.value)
             raise MessageException(value=message_exception.value)
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             if crypto_message is not None:
                 crypto_message.add_error_tag_once(self.UNEXPECTED_ERROR)
 
@@ -125,8 +128,10 @@ class HeaderKeys(object):
         '''
         header_contains_key_info = False
         try:
+            good_key = True
             from_user = crypto_message.smtp_sender()
-            accepted_crypto_packages = self._import_accepted_crypto_software(from_user, crypto_message)
+
+            accepted_crypto_packages = crypto_message.get_accepted_crypto_software()
             if accepted_crypto_packages is not None and len(accepted_crypto_packages) > 0:
                 self.log_message("checking for {} keys".format(accepted_crypto_packages))
                 for encryption_name in accepted_crypto_packages:
@@ -140,16 +145,42 @@ class HeaderKeys(object):
                         self.log_message("no {} public key in header so trying generic header".format(encryption_name))
                         key_block = get_multientry_header(
                           crypto_message.get_email_message().get_message(), PUBLIC_KEY_HEADER)
+
                     if key_block is not None and len(key_block) > 0:
                         header_contains_key_info = True
-                        break
+
+                        user_ids = []
+                        key_crypto = KeyFactory.get_crypto(
+                          encryption_name, crypto_software.get_key_classname(encryption_name))
+                        if key_crypto is None:
+                            id_fingerprint_pairs = None
+                            self.log_message('no key crypto for {}'.format(encryption_name))
+                        else:
+                            id_fingerprint_pairs = key_crypto.get_id_fingerprint_pairs(key_block)
+                            for (user_id, __) in id_fingerprint_pairs:
+                                user_ids.append(user_id)
+                            self.log_message("key block includes key for {}".format(user_ids))
+
+                        # don't consider a key valid if it's not from the sender
+                        if from_user not in user_ids:
+                            tag = notices.report_bad_header_key(
+                                self.recipient_to_notify, from_user, user_ids,
+                                encryption_name, crypto_message)
+                            self.log_message('tag: {}'.format(tag))
+
+                            if crypto_message.get_email_message().is_probably_pgp():
+                                crypto_message.drop(dropped=True)
+                                self.log_message('serious error in header so original message sent as attchment')
+                                raise MessageException(value=i18n(tag))
+
+                self.update_accepted_crypto(from_user, accepted_crypto_packages)
 
         except MessageException as message_exception:
             raise MessageException(value=message_exception.value)
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             if crypto_message is not None:
                 crypto_message.add_error_tag_once(self.UNEXPECTED_ERROR)
 
@@ -199,7 +230,7 @@ class HeaderKeys(object):
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return tag
 
@@ -340,7 +371,7 @@ class HeaderKeys(object):
                 self.log_message('Unable to import new public key for {}; probably taking longer than expected; check Contacts later'.format(from_user))
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         self.log_message('import new key ok: {}'.format(result_ok))
 
@@ -394,7 +425,7 @@ class HeaderKeys(object):
                 error = True
                 matches = False
                 record_exception()
-                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return matches, error
 
@@ -407,6 +438,39 @@ class HeaderKeys(object):
         self.update_accepted_crypto(from_user, accepted_crypto_packages)
 
         return accepted_crypto_packages
+
+    def update_accepted_crypto(self, email, encryption_software_list):
+        ''' Update the list of encryption software accepted by user.
+        '''
+
+        if email is None:
+            self.log_message("email not defined so no need to update accepted crypto")
+        elif encryption_software_list is None or len(encryption_software_list) <= 0:
+            self.log_message('no encryption programs defined for {}'.format(email))
+        else:
+            contact = contacts.get(email)
+            if contact is None:
+                # if the contact doesn't exist, then add them with the first encryption program
+                encryption_program = encryption_software_list[0]
+                contact = contacts.add(email, encryption_program, source=MESSAGE_HEADER)
+                self.log_message("added {} to contacts".format(email))
+
+            # associate each encryption program in the list with this contact
+            for encryption_program in encryption_software_list:
+                try:
+                    contacts_crypto = contacts.get_contacts_crypto(email, encryption_program)
+                    if contacts_crypto is None:
+                        encryption_software = crypto_software.get(encryption_program)
+                        if encryption_software is None:
+                            self.log_message('{} encryption software unknown'.format(encryption_program))
+                            self.log_message(
+                              'unable to add contacts crypt for {} using {} encryption software unknown'.format(email, encryption_program))
+                        else:
+                            contacts_crypto = contacts.add_contacts_crypto(
+                               contact=contact, encryption_software=encryption_software, source=MESSAGE_HEADER)
+                except Exception:
+                    record_exception()
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
 
     def update_fingerprint(self, email, encryption_name, new_fingerprint, verified=False):
         '''
@@ -445,44 +509,11 @@ class HeaderKeys(object):
 
                     result_ok = True
                 except:
-                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
                     record_exception()
                     result_ok = False
 
         return result_ok
-
-    def update_accepted_crypto(self, email, encryption_software_list):
-        ''' Update the list of encryption software accepted by user.
-        '''
-
-        if email is None:
-            self.log_message("email not defined so no need to update accepted crypto")
-        elif encryption_software_list is None or len(encryption_software_list) <= 0:
-            self.log_message('no encryption programs defined for {}'.format(email))
-        else:
-            contact = contacts.get(email)
-            if contact is None:
-                # if the contact doesn't exist, then add them with the first encryption program
-                encryption_program = encryption_software_list[0]
-                contact = contacts.add(email, encryption_program, source=MESSAGE_HEADER)
-                self.log_message("added {} to contacts".format(email))
-
-            # associate each encryption program in the list with this contact
-            for encryption_program in encryption_software_list:
-                try:
-                    contacts_crypto = contacts.get_contacts_crypto(email, encryption_program)
-                    if contacts_crypto is None:
-                        encryption_software = crypto_software.get(encryption_program)
-                        if encryption_software is None:
-                            self.log_message('{} encryption software unknown'.format(encryption_program))
-                            self.log_message(
-                              'unable to add contacts crypt for {} using {} encryption software unknown'.format(email, encryption_program))
-                        else:
-                            contacts_crypto = contacts.add_contacts_crypto(
-                               contact=contact, encryption_software=encryption_software, source=MESSAGE_HEADER)
-                except Exception:
-                    record_exception()
-                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
 
     def log_message(self, message):
         '''

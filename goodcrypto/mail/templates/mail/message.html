@@ -2,10 +2,10 @@
 {% comment %}
 
     Copyright 2016 GoodCrypto
-    Last modified: 2016-02-04
+    Last modified: 2016-11-06
 
 {% endcomment %}
-{% load i18n bootstrap custom %}
+{% load i18n custom %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -150,6 +150,21 @@
             </p>
         {% endif %}
     </div>
+
+    {% if results %}
+        <div class="row"><p>&nbsp;</p></div>
+        <div class="row"><p>&nbsp;</p></div>
+        <div class="row">
+            <div class="table-responsive">
+                <table class="table table-responsive">
+                    {% include "mail/snippets/protect_header.html" %}
+                    {% include "mail/snippets/protect_metadata.html" %}
+                    {% include "mail/snippets/protect_content.html" %}
+                    {% include "mail/snippets/protect_signature.html" %}
+                </table>
+            </div>
+        </div>
+    {% endif %}
 
     {% if results %}
         {% if results|length > 1 %}

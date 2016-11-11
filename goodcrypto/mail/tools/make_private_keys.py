@@ -1,10 +1,15 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Make private keys for all users in the supported domain.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-21
+    Last modified: 2016-10-26
 '''
+
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sys
 from goodcrypto.mail import contacts, crypto_software
 from goodcrypto.mail.constants import AUTO_GENERATED
@@ -57,7 +62,7 @@ def make_key(line, domain, crypto_name):
 def print_usage():
     ''' Print the usage to the user. '''
 
-    print('usage: python make_private_keys.py [pathname]')
+    print('usage: python3 make_private_keys.py [pathname]')
     print('       pathname must include the full path to a file that contains 1 email per line.')
     print('       Only email addresses with matching domains to the one support by GoodCrypto will be used.')
     print('       A new key will be generated and the associated contact record added to the database.')

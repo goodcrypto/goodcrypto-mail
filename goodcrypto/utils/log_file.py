@@ -1,23 +1,15 @@
 # -*- coding: utf-8 -*-
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-13
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-08-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from __future__ import print_function
-
 import os, re, sh, sys, time
 
-from goodcrypto.utils.exception import record_exception
+from syr.exception import record_exception
 from syr.log import get_log, get_log_path, _debug
 from syr.python import caller_module_name
-
-# delete in python 3
-import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
-
 
 class LogFile(object):
     '''
@@ -46,7 +38,7 @@ class LogFile(object):
         try:
             from goodcrypto.utils import debug_logs_enabled
             self.logging_enabled = debug_logs_enabled()
-        except Exception, IOError:
+        except Exception as IOError:
             record_exception()
             self.logging_enabled = True
 
@@ -121,9 +113,23 @@ class LogFile(object):
             except:
                 _debug(message, force=True)
 
+    def error(self, message):
+        '''
+            Write an error message.
+
+            >>> log = LogFile('test.log')
+            >>> log.error('test')
+        '''
+
+        if self.logging_enabled:
+            try:
+                self.log.error(message)
+            except:
+                self.log.error(message)
+
     def debug(self, message):
         '''
-            Write a message.
+            Write a debug message.
 
             >>> log = LogFile('test.log')
             >>> log.debug('test')

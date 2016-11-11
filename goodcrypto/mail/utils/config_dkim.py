@@ -1,26 +1,26 @@
 '''
     Configure DKIM for the local domain.
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-10-31
     IMPORTANT: The doc tests in this module can only be run as root.
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os, re, sh
 from redis import Redis
-from rq import Queue
+from rq.queue import Queue
 
 # set up django early
 from goodcrypto.utils import gc_django
 gc_django.setup()
 
 from goodcrypto.mail.options import set_dkim_public_key
-from goodcrypto.mail.rq_special_settings import SPECIAL_RQ, SPECIAL_REDIS_PORT
+from goodcrypto.system.special_queue_settings import SPECIAL_RQ, SPECIAL_REDIS_PORT
 from goodcrypto.utils.constants import REDIS_HOST
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils.manage_rq import get_job_count, get_job_results
+from goodcrypto.utils.manage_queues import get_job_results
+from syr.exception import record_exception
 
 log = LogFile()
 
@@ -37,7 +37,7 @@ def start(domain):
             log.write_and_flush('configuring dkim for: {}'.format(domain))
 
             redis_connection = Redis(REDIS_HOST, SPECIAL_REDIS_PORT)
-            queue = Queue(name=SPECIAL_RQ, connection=redis_connection, async=True)
+            queue = Queue(name=SPECIAL_RQ, connection=redis_connection)
             secs_to_wait = DEFAULT_TIMEOUT * (queue.count + 1)
             job = queue.enqueue_call(configure,
                                      args=[domain],
@@ -228,11 +228,11 @@ def configure_key(domain):
 
                 # set the permissions
                 sh.chown('opendkim:goodcrypto', dirname)
-                os.chmod(dirname, 0750)
+                os.chmod(dirname, 0o750)
                 sh.chown('opendkim:goodcrypto', public_key_filename)
-                os.chmod(public_key_filename, 0640)
+                os.chmod(public_key_filename, 0o640)
                 sh.chown('opendkim:goodcrypto', private_key_filename)
-                os.chmod(private_key_filename, 0640)
+                os.chmod(private_key_filename, 0o640)
 
                 save_public_key(public_key_filename)
 
@@ -243,7 +243,7 @@ def configure_key(domain):
                 raise
 
         except:
-            log.write_and_flush('EXCEPTION - See goodcrypto.utils.exception.log for more details')
+            log.write_and_flush('EXCEPTION - See syr.exception.log for more details')
             record_exception()
             raise
     else:
@@ -278,7 +278,7 @@ def save_public_key(public_key_filename):
         else:
             log.write_and_flush('unable to parse the dkim public key from:\n{}'.format(lines))
     except:
-        log.write_and_flush('EXCEPTION - See goodcrypto.utils.exception.log for more details')
+        log.write_and_flush('EXCEPTION - See syr.exception.log for more details')
         record_exception()
 
 if __name__ == "__main__":

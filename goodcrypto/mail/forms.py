@@ -2,7 +2,7 @@
     Mail app forms.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-17
+    Last modified: 2016-08-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -17,11 +17,11 @@ from goodcrypto import api_constants
 from goodcrypto.mail.constants import DEFAULT_KEYSERVER_STATUS, PASSCODE_MAX_LENGTH
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.options import mta_listen_port
-from goodcrypto.mail.utils import config_dkim
+from goodcrypto.mail.utils import config_dkim, is_mta_ok
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.utils import strip_fingerprint
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils import i18n, is_mta_ok, parse_address
+from goodcrypto.utils import i18n, parse_address
 from reinhardt.admin_extensions import ShowOneFormSet
 
 _log = LogFile()
@@ -42,7 +42,7 @@ class PrepPostfixForm(forms.Form):
         self.cleaned_data['goodcrypto_private_server_ip'] = goodcrypto_private_server_ip
 
         return cleaned_data
-
+    
     goodcrypto_private_server_ip = forms.CharField(required=True,
         help_text=i18n("The IP address for your GoodCrypto private server. For example, 194.10.34.1"),)
     main_cf = forms.CharField(required=True,
@@ -199,27 +199,31 @@ class OptionsAdminForm(forms.ModelForm):
 
         model = Options
         fields = [
-                  'mail_server_address',
-                  'goodcrypto_server_url',
-                  #'auto_exchange',
-                  #'create_private_keys',
-                  'clear_sign',
-                  'clear_sign_policy',
-                  'require_outbound_encryption',
-                  'require_key_verified',
-                  'login_to_view_fingerprints',
-                  'login_to_export_keys',
-                  'filter_html',
-                  'debugging_enabled',
-                  'encrypt_metadata',
-                  'bundle_and_pad',
-                  'bundle_frequency',
-                  'bundle_message_kb',
-                  'add_dkim_sig',
-                  'verify_dkim_sig',
-                  'dkim_delivery_policy',
-                  'dkim_public_key',
+          'mail_server_address',
+          'goodcrypto_server_url',
+          #'auto_exchange',
+          #'create_private_keys',
+          'clear_sign',
+          'clear_sign_policy',
+          'require_outbound_encryption',
+          'require_key_verified',
+          'login_to_view_fingerprints',
+          'login_to_export_keys',
+          'filter_html',
+          'debugging_enabled',
+          'encrypt_metadata',
+          'bundle_and_pad',
+          'bundle_frequency',
+          'bundle_message_kb',
+          'add_dkim_sig',
+          'dkim_public_key',
         ]
+        """
+            fields = fields + [
+              'verify_dkim_sig',
+              'dkim_delivery_policy',
+            ]
+        """
 
     """
     class Media:
@@ -305,13 +309,17 @@ class ImportKeyFromFileForm(forms.Form):
 
     key_file = forms.FileField(max_length=MAX_PUBLIC_KEY_FILEZISE,
        help_text=i18n('Select the file that contains the key.'),)
+       
     encryption_software = forms.ModelChoiceField(
        queryset=EncryptionSoftware.objects.filter(active=True), empty_label=None,
        help_text=i18n('Select the type of encryption software associated with the key.'),)
+       
     user_name = forms.CharField(max_length=100, required=False,
        help_text='Printable name of the contact in case the key does not contain it. Optional.')
+       
     fingerprint = forms.CharField(max_length=100, required=False,
        help_text="The fingerprint for the contact's public key, if known. Optional.")
+       
     passcode = forms.CharField(max_length=PASSCODE_MAX_LENGTH, required=False,
        help_text="If you're importing a private key, then you must enter its passphrase.")
 

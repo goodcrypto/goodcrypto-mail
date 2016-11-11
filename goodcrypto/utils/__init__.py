@@ -2,20 +2,29 @@
     GoodCrypto utilities.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-17
+    Last modified: 2016-11-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, re, sh
+from __future__ import unicode_literals
+
+# goodcrypto.specs still runs under python2
+import sys
+IS_PY2 = sys.version_info[0] == 2
+
+import os, re
 from datetime import datetime, timedelta
 from email.utils import parseaddr
-from socket import inet_pton, AF_INET, AF_INET6
+if IS_PY2:
+    from urlparse import urljoin, urlparse
+else:
+    from urllib.parse import urlparse
 
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 
 from goodcrypto.constants import TIMESTAMP_PATH
-from goodcrypto.utils.exception import record_exception
+from syr.exception import record_exception
 from syr.net import hostaddress
 from syr.times import one_month_before
 from syr.utils import trim
@@ -26,7 +35,22 @@ log = get_log()
 def show_template(request, original_url, prefix='', params={}):
     '''Render a plain html file and cache the results.'''
 
-    def show_url(base_url, suffix=''):
+    def show_regular_url(base_url, params):
+        try:
+            response = show_url(base_url, params=params)
+        except:
+            if base_url.find('.html') > 0:
+                response = None
+                record_exception()
+            else:
+                try:
+                    response = show_url(base_url, '.html', params=params)
+                except TemplateDoesNotExist:
+                    response = try_home_index(base_url, params=params)
+
+        return response
+
+    def show_url(base_url, suffix='', params={}):
 
         template = base_url + suffix
         if template.endswith('.log') or template.endswith('.java'):
@@ -34,16 +58,18 @@ def show_template(request, original_url, prefix='', params={}):
         else:
             return render(request, template, params)
 
-    def try_home_index(base_url):
+    def try_home_index(base_url, params=params):
         try:
-            response = show_url(os.path.join(base_url, 'home.html'))
+            response = show_url(os.path.join(base_url, 'home.html'), params=params)
+            if response is None:
+                response = show_url(os.path.join(base_url, 'index.html'), params=params)
         except TemplateDoesNotExist:
-            response = show_url(os.path.join(base_url, 'index.html'))
+            response = show_url(os.path.join(base_url, 'index.html'), params=params)
         return response
 
     # import late so apps that don't require django, don't require
     # DJANGO_SETTINGS_MODULE just because this class is imported
-    from django.http import Http404
+    from django.http import Http404, HttpResponse
     from django.shortcuts import render
     from django.template import TemplateDoesNotExist
 
@@ -53,40 +79,41 @@ def show_template(request, original_url, prefix='', params={}):
         # some browsers add a slash, even to .html files
         if original_url.endswith('.html/'):
             orignal_url = original_url[:len(original_url)-1]
-        base_url = original_url
-        if len(prefix) > 0:
+
+        u = urlparse(original_url)
+        base_url = u.path
+        if params is None or len(params) < 1:
+            params = u.params
+
+        if prefix is not None and len(prefix) > 0:
             if not prefix.endswith('/'):
                 prefix += '/'
             if base_url.startswith('/'):
                 base_url = base_url[1:]
             base_url = prefix + base_url
         if base_url.startswith('/'):
-            base_url = original_url[1:]
+            base_url = base_url[1:]
 
         if base_url.endswith('/'):
             try:
-                response = try_home_index(base_url)
+                response = try_home_index(base_url, params=params)
             except TemplateDoesNotExist:
                 url = base_url[:-1]
-                response = show_url(url, '.html')
+                response = show_url(url, '.html', params=params)
 
         else:
-            try:
-                response = show_url(base_url)
-            except:
-                if base_url.find('.html') > 0:
-                    record_exception()
-                else:
-                    try:
-                        response = show_url(base_url, '.html')
-                    except TemplateDoesNotExist:
-                        response = try_home_index(base_url)
+            # ignore font urls
+            m = re.match('.*?fonts/(.*)', base_url)
+            if m:
+                response = HttpResponse('')
+            else:
+                response = show_regular_url(base_url, params)
     except:
         record_exception()
 
     if response is None:
         log('unable to find template for: %r' % original_url)
-        raise Http404, original_url
+        raise Http404(original_url)
 
     return response
 
@@ -110,67 +137,6 @@ def debug_logs_enabled():
         debugging_enabled = True
 
     return debugging_enabled
-
-def is_mta_ok(mail_server_address):
-    '''
-        Verify the MTA is ok.
-
-        Test extreme cases
-        >>> is_mta_ok(None)
-        False
-    '''
-
-    """
-    from smtplib import SMTP, SMTP_SSL
-    def smtp_connection_ok(self, mta):
-        '''
-            Try to connect to the MTA via SMTP and SMTP_SSL.
-        '''
-
-        connection_ok = False
-        try:
-            smtp = SMTP(host=mta)
-            smtp.quit()
-            connection_ok = True
-        except:
-            connection_ok = False
-
-        if not connection_ok:
-            try:
-                smtp = SMTP_SSL(host=mta)
-                smtp.quit()
-                connection_ok = True
-            except:
-                connection_ok = False
-
-        return connection_ok
-    """
-
-    ok = False
-
-    # the mail_server_address should either be an ip address or a domain
-    if mail_server_address is not None:
-        mail_server_address = mail_server_address.strip()
-        try:
-            inet_pton(AF_INET, mail_server_address)
-            ok = True
-            log('mail server address IP4 compliant: {}'.format(ok))
-        except:
-            ok = False
-            record_exception()
-
-        if not ok:
-            try:
-                inet_pton(AF_INET6, mail_server_address)
-                ok = True
-                log('mail server address IP6 compliant: {}'.format(ok))
-            except:
-                match = re.search("^[\u00c0-\u01ffa-zA-Z0-9'\-\.]+$", mail_server_address)
-                if match:
-                    ok = True
-                log('mail server address ok: {}'.format(ok))
-
-    return ok
 
 def get_ip_address(request=None):
     ''' Get the ip address from the request or return None. '''
@@ -213,8 +179,11 @@ def parse_address(email, charset=None):
 
         >>> # In honor of Lieutenant Yonatan, who publicly denounced and refused to serve in operations involving
         >>> # the occupied Palestinian territories because of the widespread surveillance of innocent residents.
-        >>> parse_address('Lieutenant <lieutenant@goodcrypto.local>')
-        ('Lieutenant', 'lieutenant@goodcrypto.local')
+        >>> name, address = parse_address('Lieutenant <lieutenant@goodcrypto.local>')
+        >>> name == 'Lieutenant'
+        True
+        >>> address == 'lieutenant@goodcrypto.local'
+        True
     '''
 
     try:
@@ -239,28 +208,6 @@ def parse_address(email, charset=None):
 
     return name, address
 
-def parse_domain(email):
-    '''
-        Get the domain from the email address.
-
-        >>> domain = parse_domain(None)
-        >>> domain is None
-        True
-    '''
-
-    domain = None
-
-    if email is None:
-        log('email not defined so no domain')
-    else:
-        try:
-            address = get_email(email)
-            __, __, domain = address.partition('@')
-        except:
-            record_exception()
-
-    return domain
-
 def get_email(address):
     '''
         Get just the email address.
@@ -268,10 +215,13 @@ def get_email(address):
         >>> # In honor of First Sergeant Nadav, who publicly denounced and refused to serve in
         >>> # operations involving the occupied Palestinian territories because of the widespread
         >>> # surveillance of innocent residents.
-        >>> get_email('Nadav <nadav@goodcrypto.remote>')
-        'nadav@goodcrypto.remote'
+        >>> email = get_email('Nadav <nadav@goodcrypto.remote>')
+        email == 'nadav@goodcrypto.remote'
+        True
     '''
     try:
+        if not isinstance(address, str):
+            address = address.decode()
         __, email = parse_address(address)
     except Exception:
         email = address
@@ -282,8 +232,9 @@ def i18n(raw_message):
     '''
         Convert a raw message to an internationalized string.
 
-        >>> i18n('Test message')
-        'Test message'
+        >>> msg = i18n('Test message')
+        msg == 'Test message'
+        True
     '''
 
     """
@@ -320,7 +271,7 @@ def get_iso_timestamp():
             iso_timestamp = f.read()
 
     if iso_timestamp is None:
-        iso_timestamp = one_month_before(datetime.utcnow()).isoformat(' ')
+        iso_timestamp = one_month_before(datetime.utcnow()).isoformat(str(' '))
 
     return iso_timestamp.strip()
 

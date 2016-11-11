@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-02-04
+    Last modified: 2016-10-30
 
 {% endcomment %}
 {% load i18n custom %}
@@ -23,8 +23,8 @@
                             {% block signatures %}
                                 <td scope="col">
                                    <center>
-                                    {% if result.record.private_signed or result.record.clear_signed or result.record.dkim_signed %}
-                                        {% if result.record.private_sig_verified or result.record.clear_sig_verified or result.record.dkim_sig_verified %}
+                                    {% if result.private_signed or result.clear_signed or result.record.dkim_signed %}
+                                        {% if result.private_signed or result.clear_signed or result.record.dkim_sig_verified %}
                                             <abbr title="Digital signature verified">
                                                 <img alt="Yes" src="/static/images/general/check_mark_small.png">
                                             </abbr>

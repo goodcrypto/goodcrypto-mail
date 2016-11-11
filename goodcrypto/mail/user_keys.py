@@ -25,17 +25,19 @@
             email = user_key.contacts_encryption.contact.email
     </pre>
 
-    Copyright 2014-2015 GoodCrypto.
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto.
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 import os
 from datetime import datetime, timedelta
 
 # set up django early
 from goodcrypto.utils import gc_django
 gc_django.setup()
+from django.db import IntegrityError
 
 from goodcrypto.mail import contacts
 from goodcrypto.mail.crypto_software import get_key_classname
@@ -43,8 +45,8 @@ from goodcrypto.mail.models import Contact, ContactsCrypto, EncryptionSoftware, 
 from goodcrypto.mail.utils import email_in_domain, gen_user_passcode
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import parse_address, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 from syr.times import now, get_short_date_time
 
 log = None
@@ -83,7 +85,7 @@ def is_ok():
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -139,7 +141,7 @@ def get(email, encryption_name):
                     contacts_encryption = contacts_encryption[0]
                 except:
                     record_exception()
-                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    log_message('EXCEPTION - see syr.exception.log for details')
 
             fingerprint = contacts_encryption.fingerprint or 'no'
             log_message("getting {} private key record for {} ({} fingerprint)".format(
@@ -151,11 +153,11 @@ def get(email, encryption_name):
         log_message('{} does not have a matching private key record'.format(email))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return user_key
 
-def add(email, encryption_software, passcode=None):
+def add(email, encryption_name, passcode=None):
     '''
         Add a user key to the database, but do not add a key the crypto keyring.
 
@@ -170,39 +172,34 @@ def add(email, encryption_software, passcode=None):
     try:
         user_key = None
 
-        contacts_encryption = contacts.get_contacts_crypto(email, encryption_software)
-        if contacts_encryption is None:
+        if email is None or encryption_name is None:
             log_message("unable to add user {} key record for {} because no matching contact's crypto record".format(
-                encryption_software, email))
+                encryption_nam, email))
         else:
-            email = contacts_encryption.contact.email
-            encryption_name = contacts_encryption.encryption_software
-            if passcode is None:
-                user_passcode = gen_user_passcode(email)
+            log_message('adding private {} user key for {}'.format(encryption_name, email))
+            contacts_encryption = contacts.get_contacts_crypto(email, encryption_name=encryption_name)
+            if contacts_encryption is None:
+                result_ok = False
+                log_message('unable to add user key because no associated contact {} crypto for {}'.format(
+                    encryption_name, email))
             else:
-                user_passcode = passcode
+                if passcode is None:
+                    user_passcode = gen_user_passcode(email)
+                else:
+                    user_passcode = passcode
+                    log_message('using predefined passcode {}'.format(email))
 
-            user_key = get(email, encryption_name)
-            if user_key is None:
-                user_key = UserKey.objects.create(
-                  contacts_encryption=contacts_encryption, passcode=user_passcode)
-                result_ok = user_key is not None
-                log_message("added private {} user key for {} result ok: {}".format(
-                    encryption_name, email, result_ok))
-            else:
-                result_ok = True
-                log_message("found private {} key for {}".format(encryption_name, email))
-
-                if user_key.passcode is None:
-                    user_key.passcode = user_passcode
-                    user_key.save()
-                    log_message("saved private {} key's record for {}".format(encryption_name, email))
-                elif passcode is not None and passcode != user_key.passcode:
-                    log_message('database passcode does not match passcode passed to "add()"')
+                try:
+                    user_key = UserKey.objects.create(
+                      contacts_encryption=contacts_encryption, passcode=user_passcode)
+                    log_message('added private {} user key for {} result ok: {}'.format(
+                        encryption_name, email, user_key is not None))
+                except IntegrityError:
+                    user_key = get(email, encryption_name)
 
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return user_key
 
@@ -233,7 +230,7 @@ def delete(email, encryption_name, passcode):
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -266,7 +263,7 @@ def get_passcode(email, encryption_name):
             log_message('{} not part of managed domain so no private user key'.format(email))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return passcode
 
@@ -279,8 +276,8 @@ def get_all_user_keys(email):
         >>> # In honor of Nick Mathewson, one of the three original designers of Tor.
         >>> from time import sleep
         >>> from django.db.models.query import QuerySet
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQ, GPG_REDIS_PORT
-        >>> from goodcrypto.utils.manage_rq import wait_until_queue_empty
+        >>> from goodcrypto.oce.gpg_queue_settings import GPG_RQ, GPG_REDIS_PORT
+        >>> from goodcrypto.utils.manage_queues import wait_until_queue_empty
         >>> email = 'nick@goodcrypto.local'
         >>> contact = Contact.objects.create(user_name='Nick', email=email)
         >>> encryption_software = EncryptionSoftware.objects.get(name='GPG')
@@ -312,7 +309,7 @@ def get_all_user_keys(email):
         log_message('{} does not have any encryption programs with private keys defined'.format(email))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return query_set
 
@@ -365,7 +362,7 @@ def get_contact_list(encryption_name=None):
         log_message("no passcodes defined for any contacts")
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     contacts = []
     if query_set is None:

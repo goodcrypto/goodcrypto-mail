@@ -1,87 +1,155 @@
-#! /bin/bash
-#   GoodCrypto Mail
-#   Copyright 2014-2016 GoodCrypto
-#   Last modified: 2016-03-05
+#! /usr/bin/python3
+# -*- coding: utf-8 -*-
+'''
+    Control Goodcrypto Mail
 
-logdir=/var/local/log/goodcrypto
-goodcrypto_server=/var/local/projects/goodcrypto/server
-goodcrypto_mail_tools=$goodcrypto_server/src/mail/tools
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-31
+'''
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
-function start() {
-    redis-server /etc/redis/redis_message.conf >/var/log/redis.log &
-    redis-server /etc/redis/redis_gpg.conf >/var/log/redis.log &
-    redis-server /etc/redis/redis_crypto.conf >/var/log/redis.log &
-    redis-server /etc/redis/redis_special.conf >/var/log/redis.log &
+PYTHON = '/usr/bin/python3'
 
-    /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.special.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.message.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.gpg.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.crypto.conf
-    sudo -u goodcrypto /usr/local/bin/supervisord -c $goodcrypto_mail_tools/supervisord.bundle.conf
-}
+import argparse, os, sh, traceback
+from time import sleep
 
-function stop() {
+# set up django early
+from goodcrypto.utils import gc_django
+gc_django.setup()
+
+from goodcrypto.mail.crypto_queue_settings import CRYPTO_RQ, CRYPTO_REDIS_PORT
+from goodcrypto.mail.message_queue_settings import MESSAGE_RQ, MESSAGE_REDIS_PORT
+from goodcrypto.mail.utils import is_mail_running
+from goodcrypto.system.special_queue_settings import SPECIAL_RQ, SPECIAL_REDIS_PORT
+from goodcrypto.utils.manage_queues import clear_failed_queue
+import syr.log
+
+log = syr.log.get_log()
+
+NAME = 'goodcrypto mail'
+GOODCRYPTO_SERVER = '/var/local/projects/goodcrypto/server'
+GOODCRYPTO_SERVER_SRC = os.path.join(GOODCRYPTO_SERVER, 'src')
+GOODCRYPTO_MAIL_TOOLS = os.path.join(GOODCRYPTO_SERVER_SRC, 'mail', 'tools')
+GOODCRYPTO_OCE_TOOLS = os.path.join(GOODCRYPTO_SERVER_SRC, 'oce', 'tools')
+GOODCRYPTO_SYSTEM_TOOLS = os.path.join(GOODCRYPTO_SERVER_SRC, 'system', 'tools')
+GOODCRYPTO_LOGS = '/var/local/log/goodcrypto/*'
+
+def show_stderr(line):
+    line = line.rstrip()
+    print(line)
+    log.error(line)
+
+def start():
+    sh.redis_server('/etc/redis/redis_message.conf', _bg=True)
+    sh.redis_server('/etc/redis/redis_gpg.conf', _bg=True)
+    sh.redis_server('/etc/redis/redis_crypto.conf', _bg=True)
+    sh.redis_server('/etc/redis/redis_special.conf', _bg=True)
+
+    os.chdir(GOODCRYPTO_MAIL_TOOLS)
+    sh.supervise('goodcrypto_crypto', _bg=True)
+    sh.supervise('goodcrypto_message', _bg=True)
+    sh.supervise('goodcrypto_bundle', _bg=True)
+
+    os.chdir(GOODCRYPTO_OCE_TOOLS)
+    sh.supervise('goodcrypto_gpg', _bg=True)
+
+    os.chdir(GOODCRYPTO_SYSTEM_TOOLS)
+    sh.supervise('goodcrypto_special', _bg=True)
+    sh.supervise('goodcrypto_updates', _bg=True)
+
+    # make sure all of the goodcrypto logs are owned by goodcrypto
+    sh.chown('--recursive', 'goodcrypto:goodcrypto', sh.glob(GOODCRYPTO_LOGS))
+    
+    sleep(5)
+    if is_mail_running():
+        status()
+    else:
+        output('could not start {}'.format(NAME))
+
+def stop():
     # remove any jobs that were in rq but didn't finish
-    sudo -u goodcrypto python $goodcrypto_mail_tools/clear_failed_mail_queues.py
-    sudo -u goodcrypto python $goodcrypto_mail_tools/clear_failed_crypto_queue.py GPG
+    clear_failed_queue(MESSAGE_RQ, MESSAGE_REDIS_PORT)
+    clear_failed_queue(CRYPTO_RQ, CRYPTO_REDIS_PORT)
+    clear_failed_queue(SPECIAL_RQ, SPECIAL_REDIS_PORT)
+    #sh.sudo('-u', 'goodcrypto', PYTHON, os.path.join(GOODCRYPTO_OCE_TOOLS, 'clear_failed_crypto_queue.py'), 'GPG')
 
-    # remove the redis files
-    rm -fr $goodcrypto_server/data/redis/*
+    stop_supervise('goodcrypto_special', GOODCRYPTO_SYSTEM_TOOLS)
+    stop_supervise('goodcrypto_updates', GOODCRYPTO_SYSTEM_TOOLS)
+    stop_supervise('goodcrypto_bundle', GOODCRYPTO_MAIL_TOOLS)
+    stop_supervise('goodcrypto_message', GOODCRYPTO_MAIL_TOOLS)
+    stop_supervise('goodcrypto_crypto', GOODCRYPTO_MAIL_TOOLS)
+    stop_supervise('goodcrypto_gpg', GOODCRYPTO_OCE_TOOLS)
+    sh.killmatch('"/usr/local/bin/rq worker"')
 
-    killmatch supervisord.special.conf
-    killmatch supervisord.message.conf
-    killmatch supervisord.gpg.conf
-    killmatch supervisord.crypto.conf
-    killmatch supervisord.bundle.conf
-    sudoifnot goodcrypto killmatch supervisord &>/dev/null
-    sudoifnot goodcrypto killmatch rqworker
-    killmatch redis
-}
+    # remove redis and its data files
+    sh.killmatch('redis')
+    sh.rm('-fr', sh.glob(os.path.join(GOODCRYPTO_SERVER, 'data/redis/*')))
 
-function restart() {
-    stop
-    start
-}
+    sleep(2)
+    if is_mail_running():
+        output('could not stop {}'.format(NAME))
+    else:
+        status()
 
-function status() {
-    if (psgrep rqworker > /dev/nul) ; then
-        echo "goodcrypto mail is running"
-        true
-    else
-        echo "goodcrypto mail is not running"
-        false
-    fi
-}
+def restart():
+    stop()
+    start()
 
-function usage() {
-    echo "usage: goodcrypto-mail [start | stop | restart | status]"
-}
+def status():
+    if is_mail_running():
+        output('{} is running'.format(NAME))
+    else:
+        output('{} stopped'.format(NAME))
 
+def stop_supervise(program, parent_dir):
 
-command=$1
-shift
+    sh.killmatch('"supervise {}"'.format(program))
 
-case $command in
+    lock_file = os.path.join(parent_dir, program, 'supervise', 'lock')
+    if os.path.exists(lock_file):
+        sh.rm(lock_file)
 
-    start)
-        start "$@"
-        ;;
+def kill(program):
+    try:
+        log('sh.pkill({})'.format(program))
+        sh.pkill('--full', '--signal', 'TERM', program)
+    # it's okay if the process is gone
+    except sh.ErrorReturnCode_1:
+        pass
+    # we just asked for Signal 15
+    except sh.SignalException_15:
+        pass
+    except:
+        log.debug(traceback.format_exc())
+        raise
 
-    stop)
-        stop "$@"
-        ;;
+def output(msg):
+    log.debug(msg)
+    print(msg)
 
-    restart)
-        restart "$@"
-        ;;
+def main ():
+    parser = argparse.ArgumentParser(description='Control Goodcrypto Mail.')
+    parser.add_argument('command', choices=['start', 'stop', 'restart', 'status'])
 
-    status)
-        status "$@"
-        ;;
+    args = parser.parse_args()
 
-    *)
-        usage
-        ;;
+    if 'start' == args.command:
+        start()
 
-esac
+    elif 'stop' == args.command:
+        stop()
+
+    elif 'restart' == args.command:
+        restart()
+
+    elif 'status' == args.command:
+        status()
+
+    else:
+        parser.print_help()
+
+if __name__ == '__main__':
+    main()
 

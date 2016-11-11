@@ -1,10 +1,12 @@
 '''
     Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-04-03
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import base64, os, re
+
+import os, re
+from base64 import b64decode
 
 from goodcrypto.mail import options
 from goodcrypto.mail.constants import DKIM_DROP_POLICY
@@ -22,9 +24,9 @@ from goodcrypto.mail.utils import get_admin_email, send_message
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.mail.utils.notices import report_message_undeliverable
 from goodcrypto.utils import i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
 
 
 class Debundle(object):
@@ -99,7 +101,7 @@ class Debundle(object):
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return self.crypto_message
 
@@ -231,12 +233,12 @@ class Debundle(object):
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             try:
                 self.crypto_message.add_error_tag_once(SERIOUS_ERROR_PREFIX)
             except Exception:
                 record_exception()
-                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                self.log_message('EXCEPTION - see syr.exception.log for details')
             raise MessageException()
 
     def get_bundled_message(self, crypto_message):
@@ -294,7 +296,7 @@ class Debundle(object):
         except Exception:
             record_exception()
             inner_crypto_message = None
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return inner_crypto_message
 
@@ -307,7 +309,7 @@ class Debundle(object):
             for part in message.walk():
                 try:
                     if part.get_content_type() == mime_constants.APPLICATION_ALT_TYPE:
-                        content = base64.b64decode(part.get_payload(decode=True))
+                        content = b64decode(part.get_payload(decode=True))
                         inner_crypto_message = self.create_inner_message(content)
 
                         if inner_crypto_message is not None:
@@ -325,7 +327,7 @@ class Debundle(object):
 
                 except:
                     self.log_message('bad part of message discarded')
-                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
                     record_exception()
             result_ok = True
             self.log_message('good bundled message contains {} inner message(s)'.format(self.messages_sent))
@@ -338,7 +340,7 @@ class Debundle(object):
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             result_ok = False
 
         return result_ok
@@ -373,7 +375,7 @@ class Debundle(object):
         except:
             inner_crypto_message = None
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return inner_crypto_message
 
@@ -404,7 +406,7 @@ class Debundle(object):
         except:
             result_ok = False
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         if not result_ok:
             report_message_undeliverable(message, sender)

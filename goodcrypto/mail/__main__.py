@@ -1,12 +1,15 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-04-06
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os, sh, sys
+import codecs, os, sh, sys
 from traceback import format_exc
+
+# Set the PATH to a list of directories where only root can write.
+os.environ['PATH'] = '/usr/local/bin:/usr/bin:/bin'
 
 # set up django early
 from goodcrypto.utils import gc_django
@@ -17,12 +20,12 @@ from django.core.validators import EmailValidator
 
 from goodcrypto.mail.message.filter import Filter
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.message.message_rq import rq_message
+from goodcrypto.mail.message_queue import queue_message
 from goodcrypto.mail.utils import email_in_domain, get_admin_email
 from goodcrypto.mail.utils.notices import report_unexpected_ioerror, report_unexpected_named_error
 from goodcrypto.utils import i18n, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 from syr.lock import locked
 
 
@@ -36,8 +39,8 @@ class Main(object):
 
     def __init__(self):
         '''
-            >>> main = Main()
-            >>> main is not None
+            <<< main = Main()
+            <<< main is not None
             True
         '''
         self.log = None
@@ -71,7 +74,7 @@ class Main(object):
                 with locked():
                     self.log_message(
                        'rqueueing message from {} to {}'.format (self.sender, self.recipients))
-                    rqueued = rq_message(self.sender, self.recipients, self.in_message)
+                    rqueued = queue_message(self.sender, self.recipients, self.in_message)
                     self.log_message(
                        'message rqueued from {} to {}: {}'.format (self.sender, self.recipients, rqueued))
 
@@ -87,26 +90,18 @@ class Main(object):
                 self.log_message('bad email for sender {} or recipients {}'.format(sender, recipients))
                 exit_result = self.ERROR_EXIT
 
+        except ValidationError as ve:
+            # there's no need to do anything with a
+            # message that has validation errors in the sender or recipient
+            record_exception()
+            self.log_message('EXCEPTION - see syr.exception.log for details')
+            pass
+
         except Exception as exception:
-            # don't set the exit code because we don't want to reveal too much to the sender
-            record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            if len(self.recipients) > 0:
-                to_address = self.recipients[0]
-            else:
-                to_address = get_admin_email()
-            filter = Filter(self.sender, to_address, self.in_message)
-            filter.reject_message(str(exception), message=self.in_message)
+            self.reject_message(exception)
+
         except IOError as io_error:
-            # don't set the exit code because we don't want to reveal too much to the sender
-            record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-            if len(self.recipients) > 0:
-                to_address = self.recipients[0]
-            else:
-                to_address = get_admin_email()
-            filter = Filter(self.sender, to_address, self.in_message)
-            filter.reject_message(str(io_error), message=self.in_message)
+            self.reject_message(str(io_error))
 
         self.log_message('finished goodcrypto mail filter')
 
@@ -116,52 +111,76 @@ class Main(object):
         '''
             Are the email addresses valid.
 
-            >>> Main().is_valid(None, [None])
-            False
+            <<< Main().is_valid('test@goodcrypto.local', ['test@goodcrypto.remote'])
+            True
         '''
-        def validate_email(email):
+        def validate_email(email, role):
+            if email is None:
+                raise ValidationError(i18n('No email address specified for {role}'.format(
+                    role=role)))
             try:
-                if email is None:
-                    raise ValidationError('Email address does not exist')
                 email_validator = EmailValidator()
                 email_validator(email)
-            except ValidationError as validator_error:
-                self.log_message(str(validator_error))
-                raise ValidationError(i18n('Bad email address'))
+            except ValidationError as validation_error:
+                self.log_message('Bad {} email address in envelope: {}'.format(role, email))
+                raise ValidationError(i18n('Bad {role} email address in envelope: "{email}"'.format(
+                    role=role, email=email)))
 
             return email
 
-        try:
-            result_ok = True
-            self.sender = validate_email(sender)
-            for recipient in recipients:
-                self.recipients.append(validate_email(recipient))
+        self.log_message('sender: {}'.format(self.sender))
+        self.log_message('recipients: {}'.format(self.recipients))
+        result_ok = True
+        self.sender = validate_email(sender, 'sender')
+        for recipient in recipients:
+            self.recipients.append(validate_email(recipient, 'recipient'))
 
-            if Main.DEBUGGING:
-                self.log_message('sender: {}'.format(self.sender))
-                self.log_message('recipients: {}'.format(self.recipients))
-        except ValidationError:
-            result_ok = False
+        if Main.DEBUGGING:
+            self.log_message('sender: {}'.format(self.sender))
+            self.log_message('recipients: {}'.format(self.recipients))
 
         return result_ok
 
     def read_message_from_stdin(self):
-        ''' Read the message from stdin. '''
+        '''
+            Read the message from stdin.
+
+            >>> from test.support import captured_stdin
+            >>> with captured_stdin() as stdin:
+            ...     bytes = stdin.write('hello')
+            ...     position = stdin.seek(0)
+            ...     m = Main()
+            ...     m.read_message_from_stdin()
+            ...     ''.join(m.in_message)
+            'hello'
+        '''
 
         message = []
         try:
+            """
+            in_stream = codecs.getreader('utf-8')(sys.stdin)
             done = False
             while not done:
-                line = raw_input()
+                line = in_stream.readline()
+                self.log_message('{}'.format(line))
+                self.log_message('{}'.format(type(line)))
                 message.append(line)
+            """
+            done = False
+            while not done:
+                try:
+                    line = input()
+                    message.append(line)
 
-                if Main.DEBUGGING:
-                    self.log_message(line)
+                    if Main.DEBUGGING:
+                        self.log_message(line)
+                except UnicodeDecodeError:
+                    pass
         except EOFError:
             pass
         except Exception:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         self.set_message(message)
 
@@ -175,6 +194,21 @@ class Main(object):
             self.log_message(self.in_message)
             if self.in_message is not None:
                 self.log_message('length of message: {}'.format(len(self.in_message)))
+
+    def reject_message(self, error_message):
+        '''
+            Reject the message because of an exception or validation error
+        '''
+
+        # don't set the exit code because we don't want to reveal too much to the sender
+        record_exception()
+        self.log_message('EXCEPTION - see syr.exception.log for details')
+        if len(self.recipients) > 0:
+            to_address = self.recipients[0]
+        else:
+            to_address = get_admin_email()
+        filter = Filter(self.sender, to_address, self.in_message)
+        filter.reject_message(str(error_message), message=self.in_message)
 
     def log_message(self, message):
         '''
@@ -190,16 +224,17 @@ def get_address(argv):
     '''
         Get the address from the argument.
 
-        >>> # In honor of First Sergeant T, who publicly denounced and refused to serve in
-        >>> # operations involving the occupied Palestinian territories because of the
-        >>> # widespread surveillance of innocent residents.
-        >>> get_address('{t@goodcrypto.local}')
-        't@goodcrypto.local'
-        >>> get_address('this is a test') is None
+        <<< # In honor of First Sergeant T, who publicly denounced and refused to serve in
+        <<< # operations involving the occupied Palestinian territories because of the
+        <<< # widespread surveillance of innocent residents.
+        <<< address = get_address('{t@goodcrypto.local}')
+        <<< address == 't@goodcrypto.local'
         True
-        >>> get_address('<t@goodcrypto.local') is None
+        <<< get_address('this is a test') is None
         True
-        >>> get_address(None)
+        <<< get_address('<t@goodcrypto.local') is None
+        True
+        <<< get_address(None)
     '''
 
     address = None
@@ -209,6 +244,8 @@ def get_address(argv):
             # make sure there aren't any system directives
             if a.find('@') > 0 and a.find('<') != 0 and a.find('!') != 0:
                 address = get_email(a)
+            else:
+                Main().log('bad address: {}'.format(a))
     except Exception:
         record_exception()
 
@@ -227,9 +264,9 @@ if __name__ == "__main__":
 
                 sender = get_address(argv[1].strip('{').strip('}'))
                 Main().log_message('sender: {}'.format(sender))
-                recipients = []
 
                 # get all the recipients
+                recipients = []
                 i = 2
                 while i < len(argv):
                     recipient = argv[i]
@@ -246,13 +283,13 @@ if __name__ == "__main__":
         # hopefully our testing prevents this from ever occuring, but if not, we'd definitely like to know about it
         report_unexpected_named_error()
 
-    except Exception, IOError:
+    except Exception as IOError:
         report_unexpected_ioerror()
 
     if report_usage:
         print('GoodCrypto Mail')
         print('Usage: cd /var/local/projects/goodcrypto/server/src/mail')
-        print('       python __main__.py <sender> <recipient> <message')
+        print('       python3 __main__.py <sender> <recipient> <message')
 
     sys.exit(exit_result)
 

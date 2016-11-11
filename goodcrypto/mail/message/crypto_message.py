@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-03-05
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,14 +12,15 @@ from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.history import is_sig_verified
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.utils import add_private_key
-from goodcrypto.mail.utils import email_in_domain, get_encryption_software
+from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils import get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
+from syr.python import is_string
 
 
 class CryptoMessage(object):
@@ -55,7 +56,7 @@ class CryptoMessage(object):
             self.log_message('starting crypto message with a blank email message')
         else:
             self.email_message = email_message
-            if self.DEBUGGING: self.log_message('starting crypto message with an existing email message')
+            self.log_message('starting crypto message with an existing email message')
 
         # initialize a few key elements
         self.set_smtp_sender(sender)
@@ -127,11 +128,12 @@ class CryptoMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_smtp_sender('megan@goodcrypto.local')
-            >>> crypto_message.smtp_sender()
-            'megan@goodcrypto.local'
+            >>> sender = crypto_message.smtp_sender()
+            >>> sender == 'megan@goodcrypto.local'
+            True
         '''
 
-        self.sender = email_address
+        self.sender = get_email(email_address)
         if self.DEBUGGING: self.log_message('set sender: {}'.format(self.sender))
 
     def smtp_recipient(self):
@@ -156,11 +158,12 @@ class CryptoMessage(object):
             >>> # in Guantanamo by force feeding them.
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_smtp_recipient('nurse@goodcrypto.local')
-            >>> crypto_message.smtp_recipient()
-            'nurse@goodcrypto.local'
+            >>> recipient = crypto_message.smtp_recipient()
+            >>> recipient == 'nurse@goodcrypto.local'
+            True
         '''
 
-        self.recipient = email_address
+        self.recipient = get_email(email_address)
         if self.DEBUGGING: self.log_message('set recipient: {}'.format(self.recipient))
 
     def get_public_key_header(self, from_user):
@@ -168,7 +171,7 @@ class CryptoMessage(object):
             Get the public key header lines.
 
             >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
-            >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+            >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
             >>> auto_exchange = options.auto_exchange_keys()
             >>> options.set_auto_exchange_keys(True)
             >>> filename = get_plain_message_name('basic.txt')
@@ -184,7 +187,7 @@ class CryptoMessage(object):
 
         header_lines = []
         if options.auto_exchange_keys():
-            encryption_software_list = get_encryption_software(from_user)
+            encryption_software_list = contacts.get_encryption_names(from_user)
 
             # if no crypto and we're creating keys, then do so now
             if (len(encryption_software_list) <= 0 and
@@ -193,7 +196,7 @@ class CryptoMessage(object):
 
                 add_private_key(from_user)
                 self.log_message("started to create a new key for {}".format(from_user))
-                encryption_software_list = get_encryption_software(from_user)
+                encryption_software_list = contacts.get_encryption_names(from_user)
 
             if len(encryption_software_list) > 0:
                 self.log_message("getting header with public keys for {}: {}".format(
@@ -222,7 +225,7 @@ class CryptoMessage(object):
                 key_block = utils.make_public_key_block(from_user, encryption_software=encryption_software)
         except MessageException:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             self.log_exception("Unable to get {} public key header for {}".format(encryption_software, from_user))
 
         return key_block
@@ -248,7 +251,7 @@ class CryptoMessage(object):
         except MessageException:
             record_exception()
             self.log_exception("Unable to get {} public key block".format(encryption_software))
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return key_block
 
@@ -302,7 +305,7 @@ class CryptoMessage(object):
         if len(existing_crypto_software) > 0:
             self.log_message("attempted to add accepted encryption software to email_message that already has them")
         else:
-            encryption_software_list = get_encryption_software(from_user)
+            encryption_software_list = contacts.get_encryption_names(from_user)
             if len(encryption_software_list) <= 0:
                 self.log_message("No encryption software for {}".format(from_user))
             else:
@@ -334,7 +337,7 @@ class CryptoMessage(object):
         '''
 
         try:
-            encryption_software_list = get_encryption_software(from_user)
+            encryption_software_list = contacts.get_encryption_names(from_user)
             if len(encryption_software_list) <= 0:
                 self.log_message("Not adding fingerprint for {} because no crypto software".format(from_user))
             else:
@@ -346,7 +349,7 @@ class CryptoMessage(object):
                         self.log_message('added {} fingerprint'.format(encryption_name))
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
     def get_default_key_from_header(self):
         '''
@@ -523,11 +526,13 @@ class CryptoMessage(object):
         '''
             Set who signed this email_message when encrypted.
 
+            >>> private_signers = [{'signer': 'edward@goodcrypto.local', 'verified': True}]
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_private_signers(
-            ...    [{'signer': 'edward@goodcrypto.local', 'verified': True}])
-            >>> crypto_message.private_signers_list()
-            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            ...    [{u'signer': u'edward@goodcrypto.local', u'verified': True}])
+            >>> signers = crypto_message.private_signers_list()
+            >>> signers == private_signers
+            True
         '''
 
         self.private_signers = signers
@@ -540,8 +545,9 @@ class CryptoMessage(object):
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_private_signer(
             ...   {constants.SIGNER: 'edward@goodcrypto.local', constants.SIGNER_VERIFIED: True})
-            >>> crypto_message.private_signers_list()
-            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            >>> signers = crypto_message.private_signers_list()
+            >>> signers == [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            True
         '''
 
         self.add_signer(signer, self.private_signers_list())
@@ -605,8 +611,9 @@ class CryptoMessage(object):
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_clear_signers(
             ...    [{'signer': 'edward@goodcrypto.local', 'verified': True}])
-            >>> crypto_message.clear_signers_list()
-            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            >>> signers = crypto_message.clear_signers_list()
+            >>> signers == [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            True
         '''
 
         self.clear_signers = signers
@@ -618,8 +625,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_clear_signer({'signer': 'edward@goodcrypto.local', 'verified': True})
-            >>> crypto_message.clear_signers_list()
-            [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            >>> signers = crypto_message.clear_signers_list()
+            >>> signers == [{'signer': 'edward@goodcrypto.local', 'verified': True}]
+            True
         '''
 
         self.add_signer(signer_dict, self.clear_signers_list())
@@ -773,8 +781,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_crypted_with(['GPG'])
-            >>> crypto_message.get_crypted_with()
-            ['GPG']
+            >>> crypted_with = crypto_message.get_crypted_with()
+            >>> crypted_with == ['GPG']
+            True
         '''
 
         self.crypted_with = crypted_with
@@ -799,8 +808,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_metadata_crypted_with(['GPG'])
-            >>> crypto_message.get_metadata_crypted_with()
-            ['GPG']
+            >>> crypted_with = crypto_message.get_metadata_crypted_with()
+            >>> crypted_with == ['GPG']
+            True
         '''
 
         self.metadata_crypted_with = crypted_with
@@ -839,12 +849,12 @@ class CryptoMessage(object):
 
         return active
 
-    def add_tag_to_message(self, tags):
+    def add_tags_to_message(self, tags):
         '''
             Add tag to a message.
 
             >>> crypto_message = CryptoMessage()
-            >>> crypto_message.add_tag_to_message('')
+            >>> crypto_message.add_tags_to_message('')
             False
         '''
 
@@ -878,27 +888,27 @@ class CryptoMessage(object):
 
         tags_added = False
         if tags is None or len(tags.strip()) <= 0:
-            self.log_message('No tags need to be added to message')
+            self.log_message('no tags need to be added to message')
         elif self.get_email_message() is None or self.get_email_message().get_message() is None:
             self.log_message('email message not formed correctly')
         else:
+            msg_charset, self._last_charset = inspect_utils.get_charset(self.get_email_message())
             content_type = self.get_email_message().get_message().get_content_type()
-            if self.DEBUGGING: self.log_message("message type is {}".format(content_type))
+            self.log_message("content type: {}".format(content_type))
             if content_type is None:
                 pass
             elif (content_type == mime_constants.TEXT_PLAIN_TYPE or
-                content_type == mime_constants.TEXT_HTML_TYPE):
+                  content_type == mime_constants.TEXT_HTML_TYPE):
                 content = self.get_email_message().get_content()
-                charset, self._last_charset = inspect_utils.get_charset(self.get_email_message().get_message())
                 if content is None:
-                    self.get_email_message().set_content(tags, content_type, charset=charset)
+                    self.get_email_message().set_content(tags, content_type, charset=msg_charset)
                     tags_added = True
                 else:
                     if content.lower().find('<html>') > 0:
                         content = add_tags_to_html(content, tags)
                     else:
                         content = add_tags_to_text(self.get_email_message().get_content(), tags)
-                    self.get_email_message().set_content(content, content_type, charset=charset)
+                    self.get_email_message().set_content(content, content_type, charset=msg_charset)
                     tags_added = True
 
             elif content_type.startswith(mime_constants.MULTIPART_PRIMARY_TYPE):
@@ -907,19 +917,25 @@ class CryptoMessage(object):
                 message = self.get_email_message().get_message()
                 for part in message.get_payload():
                     part_content_type = part.get_content_type().lower()
+                    self.log_message('part_content_type: {}'.format(part_content_type)) #DEBUG
                     if part_content_type == mime_constants.TEXT_PLAIN_TYPE and not added_tags_to_text:
                         content = add_tags_to_text(part.get_payload(), tags)
-                        part.set_payload(content)
+                        charset, __ = inspect_utils.get_charset(content)
+                        if charset.lower() == msg_charset.lower():
+                            part.set_payload(content)
+                        else:
+                            part.set_payload(content, charset=charset)
                         added_tags_to_text = True
 
                     elif part_content_type == mime_constants.TEXT_HTML_TYPE and not added_tags_to_html:
                         content = add_tags_to_html(part.get_payload(), tags)
-                        part.set_payload(content)
+                        charset, __ = inspect_utils.get_charset(content)
+                        part.set_payload(content, charset=charset)
                         added_tags_to_html = True
 
                     # no need to keep getting payloads if we've added the tags
                     if added_tags_to_text and added_tags_to_html:
-                        break;
+                        break
 
                 tags_added = added_tags_to_text or added_tags_to_html
                 if not tags_added:
@@ -940,10 +956,13 @@ class CryptoMessage(object):
         '''
             Returns the list of tags to be added to the email_message text.
 
+            >>> regular_tags = ['test tag']
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_tag('test tag')
-            >>> crypto_message.get_tags()
-            ['test tag']
+            >>> tags = crypto_message.get_tags()
+            >>> crypto_message.log_message('tags: {}'.format(tags))
+            >>> tags == regular_tags
+            True
         '''
 
         if self.DEBUGGING: self.log_message("tags:\n{}".format(self.tags))
@@ -956,8 +975,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_tag('test tag')
-            >>> crypto_message.get_tag()
-            'test tag'
+            >>> tags = crypto_message.get_tag()
+            >>> tags == 'test tag'
+            True
         '''
 
         if self.tags is None:
@@ -974,8 +994,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_tag(None)
-            >>> crypto_message.get_tag()
-            ''
+            >>> tag = crypto_message.get_tag()
+            >>> tag == ''
+            True
         '''
 
         if new_tag is None:
@@ -984,7 +1005,7 @@ class CryptoMessage(object):
             self.tags = []
             if self.DEBUGGING: self.log_message("reset tags")
         else:
-            if type(new_tag) is str:
+            if is_string(new_tag):
                 new_tag = new_tag.strip('\n')
                 self.tags = [new_tag]
             else:
@@ -998,8 +1019,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_tag(None)
-            >>> crypto_message.get_tag()
-            ''
+            >>> tag = crypto_message.get_tag()
+            >>> tag == ''
+            True
         '''
 
         if new_tag is None or len(new_tag) <= 0:
@@ -1022,8 +1044,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_tag_once(None)
-            >>> crypto_message.get_tag().strip()
-            ''
+            >>> tag = crypto_message.get_tag().strip()
+            >>> tag == ''
+            True
         '''
         if new_tag is None:
             pass
@@ -1036,8 +1059,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_prefix_to_tag_once(None)
-            >>> crypto_message.get_tag()
-            ''
+            >>> tag = crypto_message.get_tag()
+            >>> tag == ''
+            True
         '''
 
         if new_tag is None:
@@ -1059,8 +1083,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_error_tag('test error tag')
-            >>> crypto_message.get_error_tags()
-            ['test error tag']
+            >>> tags = crypto_message.get_error_tags()
+            >>> tags == ['test error tag']
+            True
         '''
 
         if self.DEBUGGING: self.log_message("error tags:\n{}".format(self.error_tags))
@@ -1073,8 +1098,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_error_tag('test error tag')
-            >>> crypto_message.get_error_tag()
-            'test error tag'
+            >>> tag = crypto_message.get_error_tag()
+            >>> tag == 'test error tag'
+            True
         '''
 
         if self.error_tags is None:
@@ -1091,8 +1117,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.set_error_tag(None)
-            >>> crypto_message.get_error_tag()
-            ''
+            >>> tag = crypto_message.get_error_tag()
+            >>> tag == ''
+            True
         '''
 
         if new_tag is None:
@@ -1101,7 +1128,7 @@ class CryptoMessage(object):
             self.error_tags = []
             if self.DEBUGGING: self.log_message("reset error tags")
         else:
-            if type(new_tag) is str:
+            if is_string(new_tag):
                 new_tag = new_tag.strip('\n')
                 self.error_tags = [new_tag]
             else:
@@ -1115,8 +1142,9 @@ class CryptoMessage(object):
 
             >>> crypto_message = CryptoMessage()
             >>> crypto_message.add_error_tag_once(None)
-            >>> crypto_message.get_error_tag().strip()
-            ''
+            >>> tag = crypto_message.get_error_tag().strip()
+            >>> tag == ''
+            True
         '''
         if new_tag is None:
             pass

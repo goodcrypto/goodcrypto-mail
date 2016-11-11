@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-14
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,9 +15,9 @@ from goodcrypto import api_constants
 from goodcrypto.mail import contacts, options
 from goodcrypto.mail.forms import APIForm
 from goodcrypto.mail.utils import get_mail_status, create_superuser
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.oce.utils import format_fingerprint
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 from syr.utils import get_remote_ip, strip_input
 
 
@@ -102,7 +102,7 @@ class MailAPI(object):
 
                     record_exception()
                     self.log_message('unexpected error while parsing input')
-                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
             else:
                 self.log_attempted_access('Attempted GET connection')
 
@@ -114,7 +114,7 @@ class MailAPI(object):
 
         except:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             response = HttpResponsePermanentRedirect('/')
 
         return response
@@ -258,7 +258,7 @@ class MailAPI(object):
         except:
             ok = False
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return ok
 

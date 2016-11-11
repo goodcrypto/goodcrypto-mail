@@ -1,11 +1,12 @@
 '''
     Constants for GoodCrypto Mail.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2016-02-06
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 USER = 'goodcrypto'
 USER_GROUP = USER
 
@@ -57,5 +58,16 @@ DKIM_WARN_POLICY = 'warn'
 DKIM_DROP_POLICY = 'drop'
 DEFAULT_DKIM_POLICY = DKIM_WARN_POLICY
 
+UNKNOWN_EMAIL = 'Unknown'
+
 USE_POSTGRESQL = True
+
+# used by postfix
+POSTFIX_FILTER_PORT = 10027
+
+# used by keyservers
+HKP_PORT = 11371
+
+
+
 

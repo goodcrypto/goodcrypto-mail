@@ -2,11 +2,13 @@
     Show the user the security protection for messages they've sent or received..
 
     Copyright 2016 GoodCrypto
-    Last modified: 2016-02-07
+    Last modified: 2016-11-05
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import urllib
+from urllib.parse import quote as url_quote
+from urllib.parse import unquote as url_unquote
+
 from django.shortcuts import render_to_response
 from django.http import HttpResponseRedirect
 from django.template import RequestContext
@@ -14,8 +16,8 @@ from django.template import RequestContext
 from goodcrypto.mail.forms import VerifyMessageForm
 from goodcrypto.mail.message import history
 from goodcrypto.utils import i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 ENCRYPTED_STATUS = i18n('encrypted')
 DECRYPTED_STATUS = i18n('decrypted')
@@ -44,9 +46,9 @@ def prompt_for_code(request):
             params, status = get_crypted_params(
                request.user.email, form.cleaned_data['verification_code'])
             if 'error_message' in params and params['error_message'] is not None:
-                log_message('retry verification code: {}'.format(urllib.quote(form.cleaned_data['verification_code'])))
+                log_message('retry verification code: {}'.format(url_quote(form.cleaned_data['verification_code'])))
                 retry_params, __ = get_crypted_params(
-                   request.user.email, urllib.quote(form.cleaned_data['verification_code']))
+                   request.user.email, url_quote(form.cleaned_data['verification_code']))
                 if 'error_message' in retry_params and retry_params['error_message'] is None:
                     params = retry_params
                 log_message('retry params: {}'.format(retry_params))
@@ -85,7 +87,7 @@ def show_outbound_msg(request, verification_code):
         records = history.get_outbound_messages(email)
         if records:
             # narrow the messages to those matching the verification_code
-            records = records.filter(verification_code=urllib.unquote(verification_code))
+            records = records.filter(verification_code=url_unquote(verification_code))
         if not records:
             try:
                 # use the verification_code without unquoting it in case they pasted it into a url field
@@ -108,13 +110,14 @@ def show_outbound_msg(request, verification_code):
 
         params = {'email': email,
                   'main_headline': main_headline,
+                  'subheadline': subheadline,
                   'results': results,
                   'error_message': error_message}
         response = render_to_response(
             template, params, context_instance=RequestContext(request))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         response = HttpResponseRedirect('/mail/show_encrypted_history/')
 
     return response
@@ -135,8 +138,8 @@ def show_all_outbound(request):
                     record.verification_code, 'msg-encrypted')
                 results.append({
                   'email': record.recipient,
-                  'private_signed': len(history.unpickle_signers(record.private_signers)) > 0,
-                  'clear_signed': len(history.unpickle_signers(record.clear_signers)) > 0,
+                  'private_signed': history.is_signed(record.private_signers),
+                  'clear_signed': history.is_signed(record.clear_signers),
                   'verification_link': verification_link,
                   'record': record,
                   })
@@ -148,7 +151,7 @@ def show_all_outbound(request):
             template, params, context_instance=RequestContext(request))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         response = HttpResponseRedirect('/mail/show_encrypted_history/')
 
     return response
@@ -166,7 +169,7 @@ def show_inbound_msg(request, verification_code):
         records = history.get_inbound_messages(email)
         if records:
             # narrow the messages to those matching the verification_code
-            records = records.filter(verification_code=urllib.unquote(verification_code))
+            records = records.filter(verification_code=url_unquote(verification_code))
 
         if records:
             results, private, private_signed, clear_signed, dkim_signed = summarize_inbound_messages(
@@ -190,7 +193,7 @@ def show_inbound_msg(request, verification_code):
             template, params, context_instance=RequestContext(request))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         response = HttpResponseRedirect('/mail/verify_crypted/')
 
     return response
@@ -211,8 +214,8 @@ def show_all_inbound(request):
                 verification_link = get_formatted_verification_link(record.verification_code, 'msg-decrypted')
                 results.append({
                   'email': record.sender,
-                  'private_signed': len(history.unpickle_signers(record.private_signers)) > 0,
-                  'clear_signed': len(history.unpickle_signers(record.clear_signers)) > 0,
+                  'private_signed': history.is_signed(record.private_signers),
+                  'clear_signed': history.is_signed(record.clear_signers),
                   'verification_link': verification_link,
                   'record': record,
                 })
@@ -223,7 +226,7 @@ def show_all_inbound(request):
             template, params, context_instance=RequestContext(request))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         response = HttpResponseRedirect('/mail/show_decrypted_history/')
 
     return response
@@ -289,8 +292,8 @@ def summarize_message(record, email):
         if record.content_protected or record.metadata_protected:
             private = True
         record_result['private'] = private
-    
-        private_signers = history.unpickle_signers(record.private_signers)
+
+        private_signers = record.private_signers
         if len(private_signers) > 0:
             private_signed = True
             record_result['private_signed'] = True
@@ -298,8 +301,8 @@ def summarize_message(record, email):
         else:
             record_result['private_signed'] = False
             record_result['private_sig_verified'] = False
-    
-        clear_signers = history.unpickle_signers(record.clear_signers)
+
+        clear_signers = record.clear_signers
         if len(clear_signers) > 0:
             clear_signed = True
             record_result['clear_signed'] = True
@@ -307,7 +310,7 @@ def summarize_message(record, email):
         else:
             record_result['clear_signed'] = False
             record_result['clear_sig_verified'] = False
-    
+
         if record.dkim_signed:
             dkim_signed = True
             record_result['dkim_signed'] = True
@@ -385,7 +388,7 @@ def get_crypted_params(email, verification_code):
         log_message('params:\n{}'.format(params))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return params, status
 
@@ -394,7 +397,7 @@ def get_formatted_verification_link(verification_code, partial_link):
 
     try:
         code = verification_code
-        quoted_code = urllib.quote(code)
+        quoted_code = url_quote(code)
         link = '/mail/{}/{}'.format(partial_link, quoted_code, code)
     except:
         link = code

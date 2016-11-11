@@ -7,7 +7,7 @@
     or moves to another framework which doesn't interface with databases the same way as django.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-19
+    Last modified: 2016-10-28
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -38,11 +38,13 @@ class EncryptionSoftware(models.Model):
         Create some encryption software
         >>> test_gpg = EncryptionSoftware.objects.create(
         ... name='TestAnotherGPG', active=True, classname='goodcrypto.oce.gpg_plugin.GPGPlugin')
-        >>> str(test_gpg)
-        'TestAnotherGPG'
-        >>> test_gpg.__unicode__()
-        'TestAnotherGPG'
-        >>> test_gpg.delete()
+        >>> s = str(test_gpg)
+        >>> s == 'TestAnotherGPG'
+        True
+        >>> s = test_gpg.__str__()
+        >>> s == 'TestAnotherGPG'
+        True
+        >>> x = test_gpg.delete()
     '''
 
     name = models.CharField(i18n('Name'),
@@ -56,18 +58,27 @@ class EncryptionSoftware(models.Model):
        max_length=100, blank=True, null=True,
        help_text=i18n("Leave blank unless you are using encryption software not supplied by GoodCrypto."))
 
-    def __unicode__(self):
+    def __str__(self):
         return '{}'.format(self.name)
 
     class Meta:
         verbose_name = i18n('encryption software')
         verbose_name_plural = verbose_name
 
-
 class Keyserver(models.Model):
     '''
         List of keyservers to obtain public keys.
 
+        >>> test_gpg = EncryptionSoftware.objects.get(name='TestGPG')
+        >>> test_keyserver = Keyserver.objects.create(
+        ... name='TestKeyserver', active=True, encryption_software=test_gpg)
+        >>> s = str(test_keyserver)
+        >>> s == 'TestKeyserver'
+        True
+        >>> s = test_gpg.__str__()
+        >>> isinstance(s, str)
+        True
+        >>> x = test_keyserver.delete()
     '''
 
     name = models.CharField(i18n('Name'),max_length=100,
@@ -86,7 +97,7 @@ class Keyserver(models.Model):
        default=constants.DEFAULT_KEYSERVER_STATUS,
        help_text=i18n('The status of the last contact to this keyserver.'))
 
-    def __unicode__(self):
+    def __str__(self):
         return '{}'.format(self.name)
 
 class Contact(models.Model):
@@ -99,30 +110,35 @@ class Contact(models.Model):
         >>> # Create a contact with a full user name and email address
         >>> email = 'arlo@goodcrypto.remote'
         >>> contact = Contact.objects.create(email=email, user_name='Arlo')
-        >>> contact.email
-        'arlo@goodcrypto.remote'
-        >>> contact.user_name
-        'Arlo'
-        >>> str(contact)
-        'Arlo <arlo@goodcrypto.remote>'
-        >>> contact.__unicode__()
-        'Arlo <arlo@goodcrypto.remote>'
-        >>> contact.delete()
+        >>> contact_email = contact.email
+        >>> user_name = contact.user_name
+        >>> s = str(contact)
+        >>> u = contact.__str__()
+        >>> contact_email == 'arlo@goodcrypto.remote'
+        True
+        >>> user_name == 'Arlo'
+        True
+        >>> s == 'Arlo <arlo@goodcrypto.remote>'
+        True
+        >>> u == 'Arlo <arlo@goodcrypto.remote>'
+        True
+        >>> x = contact.delete()
 
         >>> # In honor of Andrea Shepard, a core Tor developer.
         >>> # Create a contact with only an email address
         >>> contact = Contact.objects.create(email='andrea@GoodCrypto.remote')
-        >>> str(contact)
-        'andrea@goodcrypto.remote'
-        >>> contact.delete()
+        >>> s = str(contact)
+        >>> s == 'andrea@goodcrypto.remote'
+        True
+        >>> x = contact.delete()
 
         >>> # In honor of Paul Syverson, one of the original designers of Tor.
         >>> # Create a contact with a mixed case email address
         >>> contact = Contact.objects.create(email='Paul@GoodCrypto.Remote')
-        >>> contact.__unicode__()
-        'paul@goodcrypto.remote'
-        >>> contact.delete()
-
+        >>> u = contact.__str__()
+        >>> u == 'paul@goodcrypto.remote'
+        True
+        >>> x = contact.delete()
     '''
 
     Outbound_Encrypt_Policies = [
@@ -148,7 +164,7 @@ class Contact(models.Model):
             self.email = self.email.lower()
         super(Contact, self).save(*args, **kwargs)
 
-    def __unicode__(self):
+    def __str__(self):
         if self.user_name and len(self.user_name.strip()) > 0:
             return '{} <{}>'.format(self.user_name, self.email)
         else:
@@ -157,7 +173,6 @@ class Contact(models.Model):
     class Meta:
         verbose_name = i18n('contact')
         verbose_name_plural = i18n('contacts')
-
 
 class ContactsCrypto(models.Model):
     '''
@@ -175,22 +190,25 @@ class ContactsCrypto(models.Model):
         >>> gpg = EncryptionSoftware.objects.create(
         ... name='TestWilliamGPG', active=True, classname='goodcrypto.oce.gpg_plugin.GPGPlugin')
         >>> contacts_crypto = ContactsCrypto.objects.create(contact=contact, encryption_software=gpg)
-        >>> str(contacts_crypto)
-        'william@goodcrypto.remote: TestWilliamGPG'
-        >>> contacts_crypto.__unicode__()
-        'william@goodcrypto.remote: TestWilliamGPG'
+        >>> s = str(contacts_crypto)
+        >>> s == 'william@goodcrypto.remote: TestWilliamGPG'
+        True
+        >>> u = contacts_crypto.__str__()
+        >>> isinstance(u, str)
+        True
         >>> contact.user_name = 'William'
         >>> contact.save()
-        >>> contacts_crypto.__unicode__()
-        'William <william@goodcrypto.remote>: TestWilliamGPG'
+        >>> u = contacts_crypto.__str__()
+        >>> u == 'William <william@goodcrypto.remote>: TestWilliamGPG'
+        True
         >>> try:
         ...     ContactsCrypto.objects.create(contact=contact, encryption_software=gpg)
         ... except IntegrityError as error:
         ...     str(error).strip().startswith('duplicate key value violates unique constraint "mail_contactscrypto_contact_id_encryption_software_id_key"')
         True
-        >>> contacts_crypto.delete()
-        >>> contact.delete()
-        >>> gpg.delete()
+        >>> x = contacts_crypto.delete()
+        >>> x = contact.delete()
+        >>> x = gpg.delete()
     '''
 
     KEY_SOURCES = [
@@ -223,9 +241,10 @@ class ContactsCrypto(models.Model):
             self.encryption_software = EnryptionSoftware.objects.all()[0]
         if self.fingerprint is not None:
             self.fingerprint = format_fingerprint(self.fingerprint)
+        _log("saving a {} contact's crypto for {}".format(self.encryption_software, self.contact))
         super(ContactsCrypto, self).save(*args, **kwargs)
 
-    def __unicode__(self):
+    def __str__(self):
         return '{}: {}'.format(self.contact, self.encryption_software)
 
     class Meta:
@@ -233,8 +252,9 @@ class ContactsCrypto(models.Model):
         verbose_name_plural = verbose_name
 
         unique_together = ('contact', 'encryption_software')
-post_save.connect(model_signals.post_save_contacts_crypto, sender=ContactsCrypto)
-pre_delete.connect(model_signals.post_delete_contacts_crypto, sender=ContactsCrypto)
+# Set 'weak=False' so Django doesn't garbage collect function before it's activated.
+post_save.connect(model_signals.post_save_contacts_crypto, sender=ContactsCrypto, weak=False)
+pre_delete.connect(model_signals.post_delete_contacts_crypto, sender=ContactsCrypto, weak=False)
 
 class UserKey(models.Model):
     '''
@@ -264,8 +284,8 @@ class UserKey(models.Model):
         ...  passcode='secret', auto_generated=False)
         >>> user_key is not None
         True
-        >>> contact.delete()
-        >>> gpg.delete()
+        >>> x = contact.delete()
+        >>> x = gpg.delete()
         >>> TESTS_RUNNING = False
     '''
 
@@ -302,12 +322,14 @@ class UserKey(models.Model):
         default=DEFAULT_EXPIRATION_PERIOD, choices=EXPIRATION_CHOICES,
        help_text=i18n('The unit of time the key is valid.'))
 
-    def __unicode__(self):
+    def __str__(self):
         return '{}'.format(self.contacts_encryption)
 
     class Meta:
         verbose_name = i18n('user key')
         verbose_name_plural = i18n('user keys')
+# Set 'weak=False' so Django doesn't garbage collect function before it's activated.
+post_save.connect(model_signals.post_save_user_key, sender=UserKey, weak=False)
 
 class MessageHistory(models.Model):
     '''
@@ -372,7 +394,7 @@ class MessageHistory(models.Model):
     verification_code = models.CharField(i18n('Verification code'), max_length=MAX_VERIFICATION_CODE,
        help_text=i18n("The special code generated when the message is encrypted/decrypted."))
 
-    def __unicode__(self):
+    def __str__(self):
         return '{}: {} at {}'.format(self.sender, self.recipient, self.message_date)
 
     class Meta:
@@ -394,13 +416,14 @@ class InternalSettings(models.Model):
 
     date_queue_last_active = models.DateTimeField(blank=True, null=True)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.domain
 
     class Meta:
         verbose_name = i18n('internal settings')
         verbose_name_plural = i18n('internal settings')
-post_save.connect(model_signals.post_save_internal_settings, sender=InternalSettings)
+# Set 'weak=False' so Django doesn't garbage collect function before it's activated.
+post_save.connect(model_signals.post_save_internal_settings, sender=InternalSettings, weak=False)
 
 class Options(models.Model):
     '''
@@ -518,21 +541,22 @@ class Options(models.Model):
        max_length=1000, blank=True, null=True,
        help_text=i18n("The public key for DKIM. Enter this key into a TXT record for your DNS. <a href=\"https://goodcrypto.com/qna/knowledge-base/crypt-options#DkimPublicKey\">Learn more</a>"))
 
-    use_keyservers = models.BooleanField(i18n('Use keyservers'), default=True,
+    use_keyservers = models.BooleanField(i18n('Use keyservers'), default=False,
        help_text=i18n("Use keyservers to find keys for contacts without keys."))
 
     add_long_tags = models.BooleanField(i18n('Add long tags'), default=False,
        help_text=i18n("Add detailed tags describing the security features of the message."))
 
-    def __unicode__(self):
+    def __str__(self):
         if self.mail_server_address is not None and len(self.mail_server_address) > 0:
             return self.mail_server_address
         else:
             return ''
 
     class Meta:
-        verbose_name = i18n('global options')
-        verbose_name_plural = i18n('global options')
-post_save.connect(model_signals.post_save_options, sender=Options)
+        verbose_name = i18n('options')
+        verbose_name_plural = i18n('options')
+# Set 'weak=False' so Django doesn't garbage collect function before it's activated.
+post_save.connect(model_signals.post_save_options, sender=Options, weak=False)
 
 

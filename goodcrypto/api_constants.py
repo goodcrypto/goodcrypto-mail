@@ -1,8 +1,8 @@
 '''
     API Constants for GoodCrypto.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-06-28
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -11,7 +11,7 @@
 
 SERVER_API_URL = 'https://goodcrypto.com/server/api/'
 MAIL_API_URL = 'http://127.0.0.1:8080/mail/api'
-WEB_API_URL = 'http://127.0.0.1:8080/web/api'
+WEB_API_URL = 'http://127.0.0.1:8080/webfirewall/api'
 SYSTEM_API_URL = 'http://127.0.0.1:8080/system/customize/'
 
 # the shared dictionary keys and fields

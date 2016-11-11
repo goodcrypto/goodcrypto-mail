@@ -1,0 +1,8 @@
+#! /bin/bash
+#  Supervise padding and packetizing messages.
+#  Last modified: 2016-10-31
+
+PYTHON=/usr/bin/python3
+COMMAND=/var/local/projects/goodcrypto/server/src/mail/message/bundle.py
+
+sudo -u goodcrypto $PYTHON $COMMAND

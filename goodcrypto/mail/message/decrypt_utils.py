@@ -1,10 +1,11 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-18
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from dkim import DKIM, DKIMException
+import dkim
+from email.encoders import encode_base64, encode_quopri
 
 from goodcrypto.mail import crypto_software, options
 from goodcrypto.mail.constants import DKIM_WARN_POLICY
@@ -12,20 +13,23 @@ from goodcrypto.mail.contacts import is_key_ok
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import history, tags, utils
 from goodcrypto.mail.message.constants import ACCEPTED_CRYPTO_SOFTWARE_HEADER, CRLF, LF, SIGNER, SIGNER_VERIFIED
+from goodcrypto.mail.message.inspect_utils import get_charset
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.tags import add_verification_tag
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.utils import i18n, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr import mime_constants
+from syr.exception import record_exception
 from syr.message import prep_mime_message
-from syr.timestamp import Timestamp
 
-DEBUGGING = False
+DEBUGGING = True
 USE_UTC = True
 DEFAULT_CRYPTO = CryptoFactory.DEFAULT_ENCRYPTION_NAME
 
+# dkim verification in python3 doesn't work so we'll disable it for now
+DKIM_VERIFICATION_ACTIVE = False
 
 _log = None
 
@@ -42,8 +46,9 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
         ...    email = 'mike@goodcrypto.remote'
         ...    crypto_message = CryptoMessage(email_message=EmailMessage(input_file))
         ...    verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO)
-        ...    crypto_message.clear_signers_list()
-        [{'signer': 'unknown user', 'verified': False}]
+        ...    signers = crypto_message.clear_signers_list()
+        ...    signers == [{'signer': 'unknown user', 'verified': False}]
+        True
     '''
 
     def extract_signers(email, signature_blocks, encryption_name=DEFAULT_CRYPTO):
@@ -87,7 +92,8 @@ def verify_clear_signed(email, crypto_message, encryption_name=DEFAULT_CRYPTO, c
         if extract_signers(get_email(email), signature_blocks, encryption_name=encryption_name):
             crypto_message.get_email_message().remove_pgp_signature_blocks()
     else:
-        log_message('no signature block found in this part of message')
+        if DEBUGGING:
+            log_message('no signature block found in this part of message')
 
 def add_history_and_verification(crypto_message):
     '''
@@ -111,36 +117,94 @@ def verify_dkim_sig(crypto_message):
             global _log
 
             crypto_message.set_dkim_signed(True)
-            message = crypto_message.get_email_message().to_string()
+
+            charset, __ = get_charset(crypto_message.get_email_message())
+            log_message('dkim message char set: {}'.format(charset))
+
+            message = crypto_message.get_email_message().to_string().encode()
             if DEBUGGING:
                 log_message('headers before DKIM verification:\n{}'.format(
                    crypto_message.get_email_message().get_header_lines()))
+                log_message('message:\n{}'.format(message))
 
-            dkim = DKIM(message=message, logger=_log)
-            verified_sig = dkim.verify()
-            log_message('DKIM signature verified: {}'.format(verified_sig))
+            if DKIM_VERIFICATION_ACTIVE:
+                verified_sig = dkim.verify(message, logger=_log)
+                log_message('DKIM signature verified: {}'.format(verified_sig))
 
-            if verified_sig:
-                crypto_message.get_email_message().delete_header('DKIM-Signature')
-                crypto_message.set_dkim_sig_verified(True)
-            elif options.dkim_delivery_policy() == DKIM_WARN_POLICY:
-                crypto_message.get_email_message().delete_header('DKIM-Signature')
-                log_message('dkim policy is to warn and accept message')
+                if verified_sig:
+                    crypto_message.get_email_message().delete_header('DKIM-Signature')
+                    crypto_message.set_dkim_sig_verified(True)
+                elif options.dkim_delivery_policy() == DKIM_WARN_POLICY:
+                    crypto_message.get_email_message().delete_header('DKIM-Signature')
+                    log_message('dkim policy is to warn and accept message')
+                else:
+                    raise DKIMException("Unable to verify message originated on sender's mail server.")
             else:
-                raise DKIMException("Unable to verify message originated on sender's mail server.")
-        except DKIMException as dkim_exception:
+                verified_sig = True # !!!!! fix dkim in python3
+                log_message('unable to verify dkim sig with python3')
+        except dkim.DKIMException as dkim_exception:
             if options.dkim_delivery_policy() == DKIM_WARN_POLICY:
                 crypto_message.get_email_message().delete_header('DKIM-Signature')
                 log_message('dkim policy is to warn; {}'.format(dkim_exception))
             else:
-                raise DKIMException(str(dkim_exception))
+                raise dkim.DKIMException(str(dkim_exception))
         except:
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
             record_exception()
     else:
         verified_sig = False
 
     return crypto_message, verified_sig
+
+def re_mime_encode(crypto_message):
+    '''
+        Re-encode message if it was encoded with base64 or quoted printable.
+
+        >>> from goodcrypto.mail.message.crypto_message import CryptoMessage
+        >>> from goodcrypto.mail.message.email_message import EmailMessage
+        >>> from goodcrypto_tests.mail.message_utils import get_plain_message_name
+        >>> with open(get_plain_message_name('basic.txt')) as input_file:
+        ...    crypto_message = CryptoMessage(email_message=EmailMessage(input_file))
+        ...    re_mime_encode(crypto_message)
+        False
+    '''
+    decoded = re_encoded = False
+    message = crypto_message.get_email_message().get_message()
+    try:
+        encoding = message.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+    except Exception:
+        encoding = None
+
+    if encoding is not None:
+        encoding = encoding.lower()
+
+        # only use the encoding if it's not a multipart message
+        if (encoding == mime_constants.QUOTED_PRINTABLE_ENCODING or
+            encoding == mime_constants.BASE64_ENCODING):
+            current_content_type = message.get_content_type()
+            if (current_content_type is not None and
+                current_content_type.lower().find(mime_constants.MULTIPART_PRIMARY_TYPE) < 0):
+                decoded = True
+                log_message('payload decoded with {}'.format(encoding))
+
+        if decoded:
+            if DEBUGGING:
+                log_message('decoded message:\n{}'.format(
+                    crypto_message.get_email_message().get_message()))
+            if encoding == mime_constants.QUOTED_PRINTABLE_ENCODING:
+                encode_quopri(message)
+                re_encoded = True
+            elif encoding == mime_constants.BASE64_ENCODING:
+                encode_base64(message)
+                re_encoded = True
+            crypto_message.get_email_message().set_message(message)
+            log_message('payload re-encoded with {}'.format(encoding))
+            if DEBUGGING:
+                log_message('encoded message:\n{}'.format(
+                    crypto_message.get_email_message().get_message()))
+
+    return re_encoded
+
 
 def log_message(message):
     '''

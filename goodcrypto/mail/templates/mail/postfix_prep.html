@@ -1,14 +1,42 @@
+{% extends "base.html" %}
 {% comment %}
 
     Copyright 2016 GoodCrypto
-    Last modified: 2016-02-14
+    Last modified: 2016-11-06
 
 {% endcomment %}
-{% load i18n bootstrap custom %}
+{% load i18n custom bootstrap3 %}
 
-    <div class="row">&nbsp;</div>
+  {% block meta_keywords %}
+  <meta name="Keywords" content="mail server, mta">
+  {% endblock meta_keywords %}
+  {% block meta_description %}
+  <meta name="Description" content="How to configure your mail server to work with your GoodCrypto private server.">
+  {% endblock meta_description %}
 
-    <form method="POST" action="/mail/prep_mail_server/" class="form-horizontal" role="postfix_form">{% csrf_token %}
+  {% block titlevar %}Generate Configuration Updates{% endblock %}
+
+{% block contentpane %}
+<h1 class="headline">
+    {% trans 'Generate Configuration Updates' %}
+</h1>
+
+<div id="tabs">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active">
+            <a href="#prep_postfix_tab" role="tab" aria-control="tab1" data-toggle="tab">
+                {% trans 'For your Postfix server' %}
+            </a>
+        </li>
+        <li role="presentation">
+            <a href="/mail/prep_exim/" role="tab" aria-control="tab2" data-toggle="tab">
+                {% trans 'For your Exim server' %}
+            </a>
+        </li>
+    </ul>
+</div>
+
+<form method="POST" action="/mail/prep_postfix/" class="form-horizontal" role="postfix_form">{% csrf_token %}
 
         <div class="form-group">
             <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
@@ -26,24 +54,34 @@
         </div>
         {% endif %}
 
-        {{ postfix_form|bootstrap_horizontal }}
+        <div class="row">
+            <div class="form-group">
+                <div class=" control-label col-sm-1 col-lg-1 ">&nbsp;</div>
+                <div class=" col-sm-11 col-lg-11 ">
+                {% bootstrap_form postfix_form %}
+                </div>
+            </div>
+        </div>       
+        
         <div class="form-group">
             <div class=" control-label col-sm-2 col-lg-2 ">&nbsp;</div>
             <div class=" col-sm-10 col-lg-10 ">
                 <input class="btn btn-primary" type="submit" value="{% trans 'Generate changes' %}" name="submit">
             </div>
         </div>
-    </form>
+</form>
 
-    <script type="text/javascript">
-        var serverInput = $('#id_goodcrypto_private_server_ip');
+<script type="text/javascript">
+    var serverInput = $('#id_goodcrypto_private_server_ip');
 
-        // Multiply by 2 to ensure the cursor always ends up at the end;
-        // Opera sometimes sees a carriage return as 2 characters.
-        var strLength = serverInput.val().length * 2;
+    // Multiply by 2 to ensure the cursor always ends up at the end;
+    // Opera sometimes sees a carriage return as 2 characters.
+    var strLength = serverInput.val().length * 2;
 
-        serverInput.focus();
-        serverInput[0].setSelectionRange(strLength, strLength);
+    serverInput.focus();
+    serverInput[0].setSelectionRange(strLength, strLength);
 
-    </script>
+</script>
+
+{% endblock contentpane %}
 

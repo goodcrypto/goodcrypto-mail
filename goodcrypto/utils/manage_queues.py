@@ -1,16 +1,16 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
-    Utilities for managing RQ.
+    Utilities for managing queues.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from random import uniform
 from redis import Redis
-from rq import Queue
+from rq.queue import Queue
 from time import sleep
 
 # set up django early
@@ -37,12 +37,12 @@ def wait_until_queue_empty(name, port):
     '''
         Wait until the queue is empty.
 
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQ, GPG_REDIS_PORT
+        >>> from goodcrypto.oce.gpg_queue_settings import GPG_RQ, GPG_REDIS_PORT
         >>> wait_until_queue_empty(GPG_RQ, GPG_REDIS_PORT)
     '''
 
     redis_connection = Redis(REDIS_HOST, port)
-    queue = Queue(name, connection=redis_connection)
+    queue = Queue(name=name, connection=redis_connection)
     while not queue.is_empty():
         # sleep a random amount of time to minimize deadlock
         secs = uniform(1, 20)
@@ -52,16 +52,17 @@ def get_job_count(name, port):
     '''
         Get the count of jobs in the queue.
 
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQ, GPG_REDIS_PORT
+        >>> from goodcrypto.oce.gpg_queue_settings import GPG_RQ, GPG_REDIS_PORT
         >>> wait_until_queue_empty(GPG_RQ, GPG_REDIS_PORT)
         >>> get_job_count(GPG_RQ, GPG_REDIS_PORT)
         0
     '''
 
     redis_connection = Redis(REDIS_HOST, port)
-    queue = Queue(name, connection=redis_connection)
-    if queue.get_job_ids() > 0:
-        for job_id in queue.get_job_ids():
+    queue = Queue(name=name, connection=redis_connection)
+    job_ids = list(queue.get_job_ids())
+    if len(job_ids) > 0:
+        for job_id in job_ids:
             log.write_and_flush('job id: {}'.format(job_id))
     return queue.count
 
@@ -69,20 +70,23 @@ def get_job_results(queue, job, secs_to_wait, purpose):
     ''' Get the initial job results. '''
 
     if job is None:
-        log_message('unable to queue {} postfix job for {}'.format(queue.name, purpose))
+        log_message('unable to queue {} job for {}'.format(queue.name, purpose))
     else:
         job_id = job.get_id()
 
         wait_until_queued(job, secs_to_wait)
 
         if job.is_failed:
-            job_dump = job.dump()
+            job_dump = job.to_dict()
+
             if 'exc_info' in job_dump:
                 error = job_dump['exc_info']
                 log_message('{} job exc info: {}'.format(job_id, error))
             elif 'status' in job_dump:
                 error = job_dump['status']
                 log_message('{} job status: {}'.format(job_id, error))
+            else:
+                log_message('job dump: {}'.format(job_dump))
             job.cancel()
             queue.remove(job_id)
 
@@ -92,6 +96,7 @@ def get_job_results(queue, job, secs_to_wait, purpose):
 
         else:
             result_ok = False
+            log_message('job with unknown result: {}'.format(job))
 
     return result_ok
 
@@ -99,18 +104,20 @@ def clear_failed_queue(name, port):
     '''
         Clear all the jobs in the failed queue.
 
-        >>> from goodcrypto.oce.rq_gpg_settings import GPG_RQ, GPG_REDIS_PORT
+        >>> from goodcrypto.oce.gpg_queue_settings import GPG_RQ, GPG_REDIS_PORT
         >>> clear_failed_queue(GPG_RQ, GPG_REDIS_PORT)
     '''
 
     redis_connection = Redis(REDIS_HOST, port)
-    queue = Queue('failed', connection=redis_connection)
-    if queue.get_job_ids() > 0:
+    queue = Queue(name='failed', connection=redis_connection)
+    job_ids = list(queue.get_job_ids())
+    if len(job_ids) > 0:
         log.write('clearing {} failed jobs'.format(name))
-        for job_id in queue.get_job_ids():
+        for job_id in job_ids:
             job = queue.fetch_job(job_id)
             if job is not None:
-                log.write_and_flush('   {}\n\n'.format(job.dump()))
+                job_dump = job.to_dict()
+                log.write_and_flush('   {}\n\n'.format(job_dump))
             queue.remove(job_id)
 
 def log_message(message):
@@ -121,7 +128,7 @@ def log_message(message):
         >>> from syr.log import BASE_LOG_DIR
         >>> from syr.user import whoami
         >>> log_message('test message')
-        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.manage_rq.log'))
+        >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.manage_queues.log'))
         True
     '''
 

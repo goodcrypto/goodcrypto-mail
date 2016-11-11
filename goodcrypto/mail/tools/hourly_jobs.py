@@ -1,8 +1,12 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-10-26
 '''
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sh, sys
 from time import sleep
 from traceback import format_exc

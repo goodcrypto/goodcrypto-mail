@@ -2,17 +2,18 @@
     Import a key interactively.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-20
+    Last modified: 2016-11-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-from django.shortcuts import redirect, render_to_response
+
+from django.shortcuts import render_to_response
 from django.template import RequestContext
 from django.template.context_processors import csrf
 
 from goodcrypto.mail import contacts, crypto_software
 from goodcrypto.mail.constants import MANUALLY_IMPORTED
-from goodcrypto.mail.crypto_rq import retrieve_key_from_keyservers_via_rq, search_keyservers_via_rq
+from goodcrypto.mail.crypto_queue import queue_keyserver_retrieval, queue_keyserver_search
 from goodcrypto.mail.forms import ImportKeyFromKeyserverForm, ImportKeyFromFileForm, MAX_PUBLIC_KEY_FILEZISE
 from goodcrypto.mail.i18n_constants import KEYBLOCK_INVALID
 from goodcrypto.mail.keyservers import get_active_keyservers
@@ -20,60 +21,34 @@ from goodcrypto.mail.utils import email_in_domain
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import strip_fingerprint
 from goodcrypto.utils import i18n, parse_address
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 log = None
 
 MISSING_DATA_STATUS = i18n('Unable to import key with missing data')
 
 
-def get_user_input(request):
+def import_file_tab(request):
     ''' Get the details about importing a key from the user.'''
 
     response = None
-    form_template = 'mail/import_key.html'
+    form_template = 'mail/import_key_from_file.html'
     if request.method == 'POST':
-        try:
-            # check for a field that is only in the "from file" form
-            if request.POST.get('submit') == i18n('Import'):
-                form = ImportKeyFromFileForm(request.POST, request.FILES)
-                if form.is_valid():
-                    response = import_key_from_file(request, form)
-                else:
-                    form_from_server = ImportKeyFromKeyserverForm()
-                    params = {
-                       'form_from_file': form,
-                       'form_from_server': form_from_server,
-                       'selected_tab': 0}
-            else:
-                form = ImportKeyFromKeyserverForm(request.POST)
-                if form.is_valid():
-                    response = import_key_from_keyserver(request, form)
-                else:
-                    form_from_file = ImportKeyFromFileForm()
-                    params = {
-                       'form_from_file': form_from_file,
-                       'form_from_server': form,
-                       'selected_tab': 1}
-                    response = render_to_response(
-                        form_template, params, context_instance=RequestContext(request))
-
-            if response is None:
-                response = render_to_response(
-                   form_template, params, context_instance=RequestContext(request))
-        except Exception:
-            record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        form = ImportKeyFromFileForm(request.POST, request.FILES)
+        if form.is_valid():
+            response = import_key_from_file(request, form)
+        else:
+            params = {'form_from_file': form}
+            response = render_to_response(
+               form_template, params, context_instance=RequestContext(request))
 
         if response is None:
             log_message('post: {}'.format(request.POST))
 
     if response is None:
-        log_message('request: {}'.format(request))
         form_from_file = ImportKeyFromFileForm()
-        form_from_server = ImportKeyFromKeyserverForm()
-        params = {'form_from_file': form_from_file, 'form_from_server': form_from_server}
+        params = {'form_from_file': form_from_file}
         response = render_to_response(
             form_template, params, context_instance=RequestContext(request))
 
@@ -102,7 +77,8 @@ def import_key_from_file(request, form):
             data = {'title': title, 'result': result}
             template = 'mail/key_error_results.html'
         else:
-            keyblock = key_file.read()
+            keyblock = key_file.read().decode()
+            log_message('key block:\n{}'.format(keyblock))
             result_ok, status, fingerprint_ok, id_fingerprint_pairs = import_key_now(
                 encryption_software, keyblock, user_name, fingerprint, passcode)
 
@@ -233,7 +209,7 @@ def _import_key_add_contact(keyblock, user_name, possible_fingerprint, passcode,
                     log_message('imported fingerprint: {}'.format(strip_fingerprint(fingerprint).lower()))
         except:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
         return  fingerprint_ok
 
@@ -288,6 +264,36 @@ def _import_key_add_contact(keyblock, user_name, possible_fingerprint, passcode,
 
     return result_ok, status, fingerprint_ok
 
+def import_keyserver_tab(request):
+    ''' Get the details about importing a key from a keyserver.'''
+
+    response = None
+    form_template = 'mail/import_key_from_keyserver.html'
+    if request.method == 'POST':
+        try:
+            form = ImportKeyFromKeyserverForm(request.POST)
+            if form.is_valid():
+                response = import_key_from_keyserver(request, form)
+            else:
+                params = {'form_from_server': form}
+                response = render_to_response(
+                    form_template, params, context_instance=RequestContext(request))
+        except Exception:
+            record_exception()
+            log_message('EXCEPTION - see syr.exception.log for details')
+
+        if response is None:
+            log_message('post: {}'.format(request.POST))
+
+    if response is None:
+        form_from_server = ImportKeyFromKeyserverForm()
+        params = {'form_from_server': form_from_server}
+        response = render_to_response(
+            form_template, params, context_instance=RequestContext(request))
+
+    return response
+
+
 def import_key_from_keyserver(request, form):
     ''' Import a key from a keyserver, if found. '''
 
@@ -313,17 +319,18 @@ def import_key_from_keyserver(request, form):
                 __, email = parse_address(email_or_fingerprint)
                 if email is None:
                     fingerprint = email_or_fingerprint
-                    result_ok = retrieve_key_from_keyservers_via_rq(
-                        fingerprint, encryption_software.name, user_requesting_search)
+                    result_ok = queue_keyserver_retrieval(
+                      fingerprint, encryption_software.name, user_requesting_search)
                     log_message('started retrieving key using {} key id'.format(fingerprint))
                 else:
-                    result_ok = search_keyservers_via_rq(email, user_requesting_search, interactive=True)
+                    result_ok = queue_keyserver_search(
+                      email, user_requesting_search, interactive=True)
                     log_message('started searching for key for {}'.format(email))
 
                 if result_ok:
                     page_title = i18n("Starting search for Key")
                     data = {'page_title': page_title,
-                            'status': 'Searches can take a long time. You will receive email if a key was successfully imported.'}
+                            'status': 'Searches can take a long time. You will receive email with the results.'}
                     template = 'mail/import_from_keyserver_results.html'
                 else:
                     status = UNEXPECTED_START_SEARCH_ERROR

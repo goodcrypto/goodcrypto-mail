@@ -2,7 +2,7 @@
     Mail views
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-14
+    Last modified: 2016-11-06
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -15,7 +15,6 @@ from django.template.context_processors import csrf
 from goodcrypto.mail import contacts, crypto_software, forms, options
 from goodcrypto.mail.api import MailAPI
 from goodcrypto.mail.constants import ACTIVE_ENCRYPT_POLICIES
-from goodcrypto.mail.import_key import get_user_input
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message_security import (prompt_for_code, show_outbound_msg, show_all_outbound,
                                               show_inbound_msg, show_all_inbound)
@@ -23,9 +22,9 @@ from goodcrypto.mail.tools import prep_mta_postfix
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
 from goodcrypto.utils import get_ip_address, i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from reinhardt.utils import is_secure_connection
+from syr.exception import record_exception
 from syr.user_tests import superuser_required
 from syr.utils import get_remote_ip
 
@@ -131,13 +130,14 @@ def view_fingerprint(request):
                         response = show_fingerprint(request, email, fingerprint, verified, active, page_title)
                 except Exception:
                     record_exception()
-                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    log_message('EXCEPTION - see syr.exception.log for details')
 
             if response is None:
                 log_message('view fingerprint post: {}'.format(request.POST))
 
         if response is None:
             form_template = 'mail/get_fingerprint.html'
+            form = forms.GetFingerprintForm()
             response = render_to_response(
                 form_template, {'form': form}, context_instance=RequestContext(request))
 
@@ -184,13 +184,14 @@ def verify_fingerprint(request):
                     response = show_fingerprint(request, email, key_id, verified, active, page_title)
                 except Exception:
                     record_exception()
-                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    log_message('EXCEPTION - see syr.exception.log for details')
 
             if response is None:
                 log_message('verify key_id post: {}'.format(request.POST))
 
         if response is None:
             form_template = 'mail/get_fingerprint.html'
+            form = forms.VerifyFingerprintForm()
             response = render_to_response(
                 form_template, {'form': form}, context_instance=RequestContext(request))
 
@@ -270,7 +271,7 @@ def export_key(request):
         except Exception:
             name = email
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
         return name
 
@@ -306,7 +307,7 @@ def export_key(request):
                         response['Content-Disposition'] = 'attachment; filename="{}.asc"'.format(name)
                 except Exception:
                     record_exception()
-                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    log_message('EXCEPTION - see syr.exception.log for details')
 
             if response is None:
                 log_message('post: {}'.format(request.POST))
@@ -317,15 +318,31 @@ def export_key(request):
 
     return response
 
-def import_key(request):
-    ''' Import a key or a key pair if for a local user.'''
+def import_key_from_file(request):
+    ''' Import a key or a key pair if for a local user from a file.'''
 
     if not request.user.is_authenticated():
         context = {}
         context.update(csrf(request))
         response = redirect('/login/?next={}'.format(request.path), context)
     else:
-        response = get_user_input(request)
+        from goodcrypto.mail.import_key import import_file_tab
+
+        response = import_file_tab(request)
+
+    return response
+
+def import_key_from_keyserver(request):
+    ''' Import a key from a keyserver.'''
+
+    if not request.user.is_authenticated():
+        context = {}
+        context.update(csrf(request))
+        response = redirect('/login/?next={}'.format(request.path), context)
+    else:
+        from goodcrypto.mail.import_key import import_keyserver_tab
+
+        response = import_keyserver_tab(request)
 
     return response
 
@@ -367,12 +384,12 @@ def show_metadata_domains(request):
                 template, params, context_instance=RequestContext(request))
         except Exception:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
             response = HttpResponseRedirect('/mail/show_metadata_domains/')
 
     return response
 
-def prep_mail_server(request):
+def prep_postfix(request):
     ''' Prepare the mail server for GoodCrypto.'''
 
     if not request.user.is_authenticated() or not request.user.is_superuser:
@@ -380,28 +397,18 @@ def prep_mail_server(request):
         context.update(csrf(request))
         response = redirect('/login/?next={}'.format(request.path), context)
     else:
-        template = 'mail/mail_server.html'
+        template = 'mail/postfix_prep.html'
         if request.method == 'POST':
             try:
-                # check for a field that is only in the "postfix" form
-                if request.POST.get('main_cf') is None:
-                    form = forms.PrepEximForm(request.POST)
-                    if form.is_valid():
-                        response = get_exim_config(form, request)
-                    else:
-                        response = render_to_response(template, {'form': form,},
-                            context_instance=RequestContext(request))
-                        log_message('integrate exim form had errors')
+                form = forms.PrepPostfixForm(request.POST)
+                if form.is_valid():
+                    response = get_postfix_config(template, form, request)
                 else:
-                    form = forms.PrepPostfixForm(request.POST)
-                    if form.is_valid():
-                        response = get_postfix_config(form, request)
-                    else:
-                        response = render_to_response(template, {'form': form,},
-                            context_instance=RequestContext(request))
-                        log_message('integrate postfix form had errors')
+                    response = render_to_response(template, {'form': form,},
+                        context_instance=RequestContext(request))
+                    log_message('integrate postfix form had errors')
             except:
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for more details')
+                log_message('EXCEPTION - see syr.exception.log for more details')
                 record_exception()
                 response = render_to_response(template, {'form': form,},
                     context_instance=RequestContext(request))
@@ -409,17 +416,16 @@ def prep_mail_server(request):
         else:
             ip_address = get_goodcrypto_private_server_ip(request)
             if ip_address is not None and len(ip_address) > 0:
-                postfix_form = forms.PrepPostfixForm(initial={'goodcrypto_private_server_ip': ip_address})
-                exim_form = forms.PrepEximForm(initial={'goodcrypto_private_server_ip': ip_address})
+                postfix_form = forms.PrepPostfixForm(
+                  initial={'goodcrypto_private_server_ip': ip_address})
             else:
                 postfix_form = forms.PrepPostfixForm()
-                exim_form = forms.PrepEximForm()
-            response = render_to_response(template, {'postfix_form': postfix_form, 'exim_form': exim_form},
+            response = render_to_response(template, {'postfix_form': postfix_form},
                 context_instance=RequestContext(request))
 
     return response
 
-def get_postfix_config(form, request):
+def get_postfix_config(template, form, request):
     ''' Get the postfix config from the form. '''
 
     log_message('postfix form is valid')
@@ -474,7 +480,30 @@ def prep_exim(request):
         context.update(csrf(request))
         response = redirect('/login/?next={}'.format(request.path), context)
     else:
-        response = HttpResponse('Exim support will be available in the near future.')
+        template = 'mail/exim_prep.html'
+        if request.method == 'POST':
+            try:
+                form = forms.PrepEximForm(request.POST)
+                if form.is_valid():
+                    response = get_exim_config(form, request)
+                else:
+                    response = render_to_response(template, {'form': form,},
+                        context_instance=RequestContext(request))
+                    log_message('integrate exim form had errors')
+            except:
+                log_message('EXCEPTION - see syr.exception.log for more details')
+                record_exception()
+                response = render_to_response(template, {'form': form,},
+                    context_instance=RequestContext(request))
+
+        else:
+            ip_address = get_goodcrypto_private_server_ip(request)
+            if ip_address is not None and len(ip_address) > 0:
+                exim_form = forms.PrepEximForm(initial={'goodcrypto_private_server_ip': ip_address})
+            else:
+                exim_form = forms.PrepEximForm()
+            response = render_to_response(template, {'exim_form': exim_form},
+                context_instance=RequestContext(request))
 
     return response
 
@@ -516,7 +545,7 @@ def api(request):
             response = HttpResponsePermanentRedirect('/')
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         response = HttpResponsePermanentRedirect('/')
 
     return response

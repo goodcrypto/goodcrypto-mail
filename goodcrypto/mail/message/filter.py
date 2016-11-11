@@ -1,9 +1,10 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-03-05
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 import sh
 from dkim import DKIMException
 from smtplib import SMTP
@@ -21,8 +22,8 @@ from goodcrypto.mail.utils import email_in_domain, get_admin_email, send_message
 from goodcrypto.mail.utils.notices import notify_user
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.utils import i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 
 class Filter(object):
@@ -110,7 +111,7 @@ class Filter(object):
             self.out_message = None
         except Exception as exception:
             record_exception()
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             try:
                 self.bounce_outbound_message(exception.value)
             except:
@@ -221,7 +222,7 @@ class Filter(object):
         except Exception as exception:
             result_ok = False
             self.log_message('error while re-injecting message into postfix queue')
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             record_exception()
             try:
                 error_message = exception.value
@@ -229,7 +230,7 @@ class Filter(object):
                 self.log_message('sent notice to {} about {}'.format(to_address, error_message))
             except:
                 record_exception()
-                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                self.log_message('EXCEPTION - see syr.exception.log for details')
 
         return result_ok
 
@@ -270,7 +271,7 @@ class Filter(object):
         ''' Bounce a message that a local user originated. '''
 
         self.log_message(error_message)
-        self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        self.log_message('EXCEPTION - see syr.exception.log for details')
         record_exception()
 
         subject = i18n('{} - Undelivered Mail: Unable to protect message'.format(TAG_ERROR))
@@ -303,7 +304,7 @@ class Filter(object):
         ''' Drop a message that we shouldn't process from a remote user. '''
 
         self.log_message(error_message)
-        self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        self.log_message('EXCEPTION - see syr.exception.log for details')
         record_exception()
 
         subject = i18n('{} - Unable to decrypt message'.format(TAG_ERROR))

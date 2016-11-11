@@ -1,10 +1,14 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Clear jobs from failed queue.
 
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-22
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 '''
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sys
 
 # set up django early

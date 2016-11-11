@@ -1,10 +1,15 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
     Export all public keys for the domain.
-    
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-08
+
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-10-26
 '''
+
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sys
 from goodcrypto.mail import crypto_software
 from goodcrypto.mail.contacts import get_public_key
@@ -19,7 +24,7 @@ def main(argv):
     # set the defaults
     crypto_name = CryptoFactory.DEFAULT_ENCRYPTION_NAME
     parent_dir = '/var/local/projects/goodcrypto/server/data/oce/pubkeys'
-    
+
     # use the args passed on the command line
     if argv and len(argv) >= 1:
         parent_dir = argv[0]

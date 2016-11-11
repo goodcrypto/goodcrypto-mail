@@ -1,8 +1,12 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-28
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-15-26
 '''
+# limit the path to known locations
+from os import environ
+environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 import os, sh, sys
 
 from goodcrypto.mail.constants import USE_POSTGRESQL

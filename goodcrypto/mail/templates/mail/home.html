@@ -2,7 +2,7 @@
 {% comment %}
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-22
+    Last modified: 2016-11-06
 
 {% endcomment %}
 {% load i18n custom %}
@@ -114,7 +114,7 @@
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/import_key/" title="{% trans 'Import a key for a contact. You must be signed in.' %}">
+                        <a href="/mail/import_key_from_file/" title="{% trans 'Import a key for a contact. You must be signed in.' %}">
                             <button type="button" class="btn btn-primary btn-block">{% trans 'Import' %}</button>
                         </a>
                         <p>&nbsp;</p>
@@ -168,7 +168,7 @@
                     </td>
                     <td>
                         <p>&nbsp;</p>
-                        <a href="/mail/prep_mail_server/" title="{% trans 'Generate the changes you need to make to your mail server to work with your GoodCrypto private server.' %}">
+                        <a href="/mail/prep_postfix/" title="{% trans 'Generate the changes you need to make to your mail server to work with your GoodCrypto private server.' %}">
                             <button type="button" class="btn btn-primary btn-block">&nbsp;&nbsp;{% trans 'MTA configuration' %}&nbsp;&nbsp;</button>
                         </a>
                         <p>&nbsp;</p>
@@ -209,7 +209,7 @@
                     Warning: Your MTA is configured for the local machine at ({{ mta }}).
                     We strongly recommend that you use a different computer for your MTA
                     and your GoodCrypto private server.
-                    You can change the MTA address in the  <a href="/admin/mail/options/">Mail server options</a>.
+                    After you sign in as an administrator, you can change the MTA address in the  <a href="/admin/mail/options/">Mail server options</a>.
                     {% endblocktrans %}
                 </div>
             {% endif %}

@@ -1,11 +1,12 @@
 '''
     Mail database router.
 
-    Copyright 2015 GoodCrypto
-    Last modified: 2015-06-06
+    Copyright 2015-2016 GoodCrypto
+    Last modified: 2016-10-26
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
+
 from goodcrypto.constants import MAIL_DB
 
 class MailRouter(object):

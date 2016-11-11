@@ -1,3 +1,5 @@
+#! /bin/bash
+
 cd /var/local/projects/goodcrypto/server/src/mail
-python __main__.py "$@"
+python3 __main__.py "$@"
 

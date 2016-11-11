@@ -1,18 +1,18 @@
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-12
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 import os
 from datetime import datetime
-from dkim import DKIM
+from dkim import DKIM, ParameterError
 from email.encoders import encode_7or8bit
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from random import random
 
-from goodcrypto.mail import contacts, options, user_keys
+from goodcrypto.mail import contacts, options
 from goodcrypto.mail.crypto_software import get_classname
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants, metadata, utils
@@ -24,9 +24,9 @@ from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from goodcrypto.utils import i18n, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
 
 DEBUGGING = False
 
@@ -42,39 +42,53 @@ def encrypt_text_message(crypto_message, crypto, users_dict):
         Encrypt a plain text message.
     '''
 
-    def encrypt_text_part(content, crypto, users_dict):
-        if DEBUGGING: log_message("type of content: {}".format(type(content)))
+    def encrypt_text_part(content, charset, crypto, users_dict):
+        if DEBUGGING:
+            log_message('type of content: {}'.format(type(content)))
+            log_message('charset: {}'.format(charset))
 
-        ciphertext, error_message = encrypt_byte_array(bytearray(content), crypto, users_dict)
-
-        #  if we encrypted successfully, save the results
-        if ciphertext is not None and len(ciphertext) > 0:
-            crypto_message.get_email_message().get_message().set_payload(ciphertext)
-            from_user = users_dict[FROM_KEYWORD]
-            log_message('from user: {}'.format(from_user))
-            log_message('passcode: {}'.format(users_dict[PASSCODE_KEYWORD]))
-            set_sigs(crypto_message, from_user, users_dict[PASSCODE_KEYWORD])
-            result_ok = True
-        else:
+        result_ok = True
+        try:
+            data = bytearray(content, charset)
+        except UnicodeEncodeError as uee:
+            error_message = str(uee)
             result_ok = False
+
+        if result_ok:
+            ciphertext, error_message = encrypt_byte_array(data, crypto, users_dict)
+
+            #  if we encrypted successfully, save the results
+            if ciphertext is not None and len(ciphertext) > 0:
+                crypto_message.get_email_message().get_message().set_payload(ciphertext)
+                from_user = users_dict[FROM_KEYWORD]
+                log_message('from user: {}'.format(from_user))
+                log_message('passcode: {}'.format(users_dict[PASSCODE_KEYWORD]))
+                set_sigs(crypto_message, from_user, users_dict[PASSCODE_KEYWORD])
+                result_ok = True
+            else:
+                result_ok = False
 
         return result_ok, error_message
 
-    log_message("encrypting a text message")
+    log_message('encrypting a text message')
 
     error_message = None
 
     email_message = crypto_message.get_email_message()
     if is_multipart_message(email_message):
         for part in email_message.walk():
-            result_ok, error_message = encrypt_text_part(part.get_payload(), crypto, users_dict)
+            charset, __ = get_charset(part)
+            log_message('char set while encrypting text part: {}'.format(charset))
+            result_ok, error_message = encrypt_text_part(part.get_payload(), charset, crypto, users_dict)
             if not result_ok:
                 break
     else:
         final_content = email_message.get_content()
-        if DEBUGGING: log_message("  content:\n{!s}".format(final_content))
+        if DEBUGGING: log_message('  content:\n{!s}'.format(final_content))
 
-        result_ok, error_message = encrypt_text_part(final_content, crypto, users_dict)
+        charset, __ = get_charset(final_content)
+        log_message('char set while encrypting text message: {}'.format(charset))
+        result_ok, error_message = encrypt_text_part(final_content, charset, crypto, users_dict)
 
     #  if we encrypted successfully, save the results
     if result_ok:
@@ -97,16 +111,18 @@ def encrypt_mime_message(crypto_message, crypto, users_dict):
         if value is not None:
             msg.__setitem__(keyword, value)
 
-    log_message("encrypting a mime message")
+    log_message('encrypting a mime message')
     message = crypto_message.get_email_message().get_message()
-    log_message("content type: {}".format(message.get_content_type()))
+    log_message('content type: {}'.format(message.get_content_type()))
 
     #  Encrypt the whole message and add it to the body text
     #  This removes important meta data. The recieving end must
     #  decrypt the message, and then create a new message with the original structure.
-    log_message("about to encrypt mime message")
+    email_message = crypto_message.get_email_message()
+    charset, __ = get_charset(email_message)
+    log_message('about to encrypt {} mime message'.format(charset))
     ciphertext, error_message = encrypt_byte_array(
-        bytearray(crypto_message.get_email_message().to_string()), crypto, users_dict)
+        bytearray(email_message.to_string(), charset), crypto, users_dict)
 
     if ciphertext is not None and len(ciphertext) > 0:
         from_user = users_dict[FROM_KEYWORD]
@@ -136,8 +152,9 @@ def encrypt_byte_array(data, crypto, users_dict):
             log_message('encrypting, but not signing message')
             encrypted_data, error_message = crypto.encrypt_and_armor(data, to_user, charset=charset)
     else:
-        log_message('encrypting and signing')
+        log_message('encrypting, signing, and armoring')
         log_message('clear signing message: {}'.format(clear_sign))
+        if DEBUGGING: log_message('data:\n{}'.format(data))
         encrypted_data, error_message = crypto.sign_encrypt_and_armor(data,
             from_user, to_user, passcode, clear_sign=clear_sign, charset=charset)
 
@@ -153,17 +170,18 @@ def encrypt_byte_array(data, crypto, users_dict):
             ciphertext = None
             utils.log_crypto_exception('data was not encrypted')
 
-        elif not OpenPGPAnalyzer().is_encrypted(encrypted_data, passphrase=passcode, crypto=crypto):
+        elif OpenPGPAnalyzer().is_encrypted(encrypted_data, passphrase=passcode, crypto=crypto):
+            ciphertext = str(encrypted_data)
+
+        else:
             utils.log_crypto_exception('unable to verify data was encrypted')
             # !!!! we're going to use it any ways for now as not too confident about the analyzer
             ciphertext = str(encrypted_data)
-            if DEBUGGING:
-                log_message("ciphertext:\n{}".format(ciphertext))
 
-        else:
-            ciphertext = str(encrypted_data)
+        if ciphertext is not None:
+            log_message('got {} encrypted bytes: '.format(len(ciphertext)))
             if DEBUGGING:
-                log_message("ciphertext:\n{}".format(ciphertext))
+                log_message('ciphertext:\n{}'.format(ciphertext))
 
     if error_message is not None:
         log_message('Unable to encrypt data because:\n  {}'.format(error_message))
@@ -175,10 +193,10 @@ def sign_text_message(crypto_message, crypto, from_user_id, passcode):
         Sign a plain text message.
     '''
 
-    def sign_text_part(content, crypto, from_user_id, passcode):
-        if DEBUGGING: log_message("type of content: {}".format(type(content)))
+    def sign_text_part(content, charset, crypto, from_user_id, passcode):
+        if DEBUGGING: log_message('type of content: {}'.format(type(content)))
 
-        ciphertext, error_message = crypto.sign(bytearray(content), from_user_id, passcode)
+        ciphertext, error_message = crypto.sign(bytearray(content, charset), from_user_id, passcode)
 
         #  if we signed successfully, save the results
         if ciphertext != None and len(ciphertext) > 0:
@@ -189,20 +207,22 @@ def sign_text_message(crypto_message, crypto, from_user_id, passcode):
 
         return result_ok, error_message
 
-    log_message("signing a text message")
+    log_message('signing a text message')
 
     error_message = None
     email_message = crypto_message.get_email_message()
     if is_multipart_message(email_message):
         for part in email_message.walk():
-            result_ok, error_message = sign_text_part(part.get_payload(), crypto, from_user_id, passcode)
+            charset, __ = get_charset(part)
+            result_ok, error_message = sign_text_part(part.get_payload(), charset, crypto, from_user_id, passcode)
             if not result_ok:
                 break
     else:
         final_content = email_message.get_content()
-        if DEBUGGING: log_message("  content:\n{!s}".format(final_content))
+        if DEBUGGING: log_message('  content:\n{!s}'.format(final_content))
 
-        result_ok, error_message = sign_text_part(final_content, crypto, from_user_id, passcode)
+        charset, __ = get_charset(final_content)
+        result_ok, error_message = sign_text_part(final_content, charset, crypto, from_user_id, passcode)
 
     #  if we signed successfully, save the results
     if result_ok:
@@ -225,16 +245,18 @@ def sign_mime_message(crypto_message, crypto, from_user_id, passcode):
         if value is not None:
             msg.__setitem__(keyword, value)
 
-    log_message("signing a mime message")
+    log_message('signing a mime message')
     message = crypto_message.get_email_message().get_message()
-    log_message("content type: {}".format(message.get_content_type()))
+    log_message('content type: {}'.format(message.get_content_type()))
 
     #  Sign the whole message and add it to the body text
     #  This removes important meta data. The recieving end must
     #  decrypt the message, and then create a new message with the original structure.
-    log_message("about to sign mime message")
+    log_message('about to sign mime message')
+    email_message = crypto_message.get_email_message()
+    charset, __ = get_charset(email_message)
     ciphertext, error_message = crypto.sign(
-        bytearray(crypto_message.get_email_message().to_string()), from_user_id, passcode)
+        bytearray(email_message.to_string(), charset), from_user_id, passcode)
 
     if ciphertext is not None and len(ciphertext) > 0:
         convert_encrypted_mime_message(
@@ -304,20 +326,19 @@ def create_protected_message(from_user, to_user, data, message_id):
         crypto_message.get_email_message().add_header(mime_constants.MESSAGE_ID_KEYWORD, message_id)
         # include the timestamp because some MTAs/spam filters object if it's not set
         crypto_message.get_email_message().add_header(
-            mime_constants.DATE_KEYWORD, datetime.utcnow().isoformat(' '))
+            mime_constants.DATE_KEYWORD, datetime.utcnow().isoformat(str(' ')))
 
         return crypto_message
 
     def encrypt_message(crypto_message, data):
 
-        from goodcrypto.mail.utils import get_encryption_software
 
         encryption_ready = False
         encrypted_with = []
 
         # use the metadata address' encryption
         to_metadata_address = metadata.get_metadata_address(email=to_user)
-        encryption_names = get_encryption_software(to_metadata_address)
+        encryption_names = contacts.get_encryption_names(to_metadata_address)
         log_message('{} encryption software for: {}'.format(encryption_names, to_metadata_address))
 
         if len(encryption_names) < 1:
@@ -382,7 +403,7 @@ def create_protected_message(from_user, to_user, data, message_id):
         crypto_message = start_crypto_message()
 
         if data is None:
-            log_message("no data to encrypt")
+            log_message('no data to encrypt')
         else:
             ready, encrypted_with = encrypt_message(crypto_message, data)
 
@@ -391,7 +412,7 @@ def create_protected_message(from_user, to_user, data, message_id):
                 crypto_message.set_metadata_crypted_with(encrypted_with)
                 log_message('metadata encrypted with: {}'.format(encrypted_with))
                 if DEBUGGING:
-                    log_message("metadata message:\n{}".format(
+                    log_message('metadata message:\n{}'.format(
                         crypto_message.get_email_message().to_string()))
             elif not ready:
                 error_message = i18n('Unable to protect metadata because a key is missing.')
@@ -407,7 +428,7 @@ def create_protected_message(from_user, to_user, data, message_id):
     except:
         error_message = i18n('Unable to protect metadata due to an unexpected error.')
         log_message(error_message)
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         record_exception()
         raise MessageException(value=error_message)
 
@@ -439,29 +460,35 @@ def add_dkim_sig_optionally(crypto_message):
         try:
             global log
 
-            SELECTOR = 'mail'
+            SELECTOR = b'mail'
+            DKIM_SIG = b'DKIM-Signature'
             PRIVATE_KEY_FILE = '/etc/opendkim/{}/dkim.private.key'.format(get_domain())
-
-            with open(PRIVATE_KEY_FILE, 'rb') as f:
-                private_key = f.read()
 
             # in case there's a mixture of CR-LF and LF lines, convert CR-LF to LF and then all LFs to CR-LFs
             message = crypto_message.get_email_message().to_string().replace(
                 constants.CRLF, constants.LF).replace(constants.LF, constants.CRLF)
-            dkim = DKIM(message=message, minkey=constants.MIN_DKIM_KEY, logger=log)
-            # stop header injections of many headers
+
+            charset, __ = get_charset(crypto_message.get_email_message())
+            msg = bytes(message, charset)
+            with open(PRIVATE_KEY_FILE, 'rb') as f:
+                private_key = f.read()
+
+            dkim = DKIM(message=msg, minkey=constants.MIN_DKIM_KEY, logger=log)
+            # stop header injections of standard headers
             dkim.frozen_sign = set(DKIM.RFC5322_SINGLETON)
-            sig = dkim.sign(SELECTOR, get_domain().encode('ascii'), private_key)
-            if sig.startswith('DKIM-Signature'):
-                signed_message = '{}{}'.format(sig, message)
+            sig = dkim.sign(SELECTOR, get_domain().encode(), private_key)
+            if sig.startswith(DKIM_SIG):
+                signed_message = '{}{}'.format(sig.decode(), message)
                 crypto_message.get_email_message().set_message(signed_message)
                 crypto_message.set_dkim_signed(True)
                 crypto_message.set_dkim_sig_verified(True)
                 log_message('added DKIM signature successfully')
             else:
                 log_message('error trying to add DKIM signature')
+        except ParameterError as pe:
+            log_message(str(pe))
         except:
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
             record_exception()
 
     return crypto_message

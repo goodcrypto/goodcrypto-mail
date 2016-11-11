@@ -2,7 +2,7 @@
     Admin for GoodCrypto Mail.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-04-06
+    Last modified: 2016-06-27
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -12,7 +12,7 @@ from django_singleton_admin.admin import SingletonAdmin
 
 from goodcrypto.mail import forms, models
 from goodcrypto.utils import i18n
-from reinhardt.admin_extensions import CustomModelAdmin, CustomStackedInline
+from reinhardt.admin_extensions import CustomStackedInline
 
 
 class ContactsCryptoInline(CustomStackedInline):
@@ -36,7 +36,7 @@ class ContactsCryptoInline(CustomStackedInline):
     verbose_name = i18n('encryption software used by this contact')
     verbose_name_plural = verbose_name
 
-class Contact(CustomModelAdmin):
+class Contact(admin.ModelAdmin):
     form = forms.ContactAdminForm
     inlines = [ContactsCryptoInline]
     search_fields = ['email', 'user_name', 'outbound_encrypt_policy']
@@ -45,39 +45,43 @@ class Contact(CustomModelAdmin):
     save_on_top = True
 
     list_display = ('email', 'user_name', 'outbound_encrypt_policy',)
-    staff_list_display = list_display
-    superuser_list_display = list_display
     list_display_links = ('email',)
 
-    staff_fieldsets = (
+    fieldsets = (
         (None, {
             'classes': ('wide',),
             'fields': (('email', ), ('user_name',), ('outbound_encrypt_policy',))
         }),
     )
-    superuser_fieldsets = staff_fieldsets
 
+    class Media:
+        css = {
+            'all': ('/static/css/admin.css',)
+        }
 admin.site.register(models.Contact, Contact)
 
-class Keyserver(CustomModelAdmin):
+class Keyserver(admin.ModelAdmin):
     form = forms.KeyserverAdminForm
     search_fields = ['name', 'active', 'last_date', 'last_status']
 
+    save_on_top = True
+
     list_display = ('name', 'active', 'last_date', 'last_status',)
-    staff_list_display = list_display
-    superuser_list_display = list_display
     list_display_links = ('name',)
 
     ordering = ['-active', 'name']
 
-    staff_fieldsets = (
+    fieldsets = (
         (None, {
             'classes': ('wide',),
             'fields': (('name', 'active'), ('last_date', 'last_status'),)
         }),
     )
-    superuser_fieldsets = staff_fieldsets
 
+    class Media:
+        css = {
+            'all': ('/static/css/admin.css',)
+        }
 admin.site.register(models.Keyserver, Keyserver)
 
 class Options(SingletonAdmin):
@@ -91,6 +95,14 @@ class Options(SingletonAdmin):
     readonly_fields = ('dkim_public_key',)
 
     form = forms.OptionsAdminForm
+    sig_fields = (
+                  'clear_sign',
+                  #'clear_sign_policy',
+                  'add_dkim_sig',
+                  #'verify_dkim_sig',
+                  #'dkim_delivery_policy',
+                  'dkim_public_key',
+                 )
     fieldsets = (
         (None, {
             'fields': (
@@ -113,14 +125,7 @@ class Options(SingletonAdmin):
                       )
         }),
         (sig_label, {
-            'fields': (
-                       'clear_sign',
-                       #'clear_sign_policy',
-                       'add_dkim_sig',
-                       'verify_dkim_sig',
-                       'dkim_delivery_policy',
-                       'dkim_public_key',
-                      )
+            'fields': sig_fields
         }),
         (misc_label, {
             'fields': (
@@ -131,4 +136,5 @@ class Options(SingletonAdmin):
         }),
     )
 admin.site.register(models.Options, Options)
+
 

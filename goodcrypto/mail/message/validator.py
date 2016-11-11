@@ -1,15 +1,15 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-07-27
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
 from email.mime.multipart import MIMEMultipart
-from StringIO import StringIO
+from io import StringIO
 
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
 
 
 class Validator(object):
@@ -18,9 +18,9 @@ class Validator(object):
     DEBUGGING = False
 
     def __init__(self, email_message):
-        ''' 
-            Unparsable messages are wrapped in a valid message. 
-            
+        '''
+            Unparsable messages are wrapped in a valid message.
+
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
@@ -36,7 +36,7 @@ class Validator(object):
     def is_message_valid(self):
         '''
              Returns true if the message is parsable, else false.
-            
+
              If a MIME message is not parsable, you should still be able to process it.
              As we find different errors in messages, we should make sure this
              method catches them.
@@ -61,13 +61,13 @@ class Validator(object):
 
                 self._check_content(self.email_message)
                 is_valid = True
-                
+
             except Exception:
                 is_valid = False
-                
+
                 #  we explicitly want to catch everything here, even NPE
                 record_exception()
-                self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                self.log_message('EXCEPTION - see syr.exception.log for details')
 
         self.log_message('message is valid: {}'.format(is_valid))
 
@@ -77,7 +77,7 @@ class Validator(object):
     def _check_content(self, part):
         '''
              Make sure we can read the content.
-            
+
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
             >>> validator = Validator(good_message)
@@ -101,8 +101,8 @@ class Validator(object):
 
 
     def get_why(self):
-        ''' 
-            Gets why a message is invalid. Returns null if the message is valid. 
+        '''
+            Gets why a message is invalid. Returns null if the message is valid.
 
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> good_message = get_basic_email_message()
@@ -116,7 +116,7 @@ class Validator(object):
     def log_message(self, message):
         '''
             Log the message to the local log.
-            
+
             >>> import os.path
             >>> from syr.log import BASE_LOG_DIR
             >>> from syr.user import whoami

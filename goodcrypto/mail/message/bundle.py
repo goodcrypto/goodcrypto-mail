@@ -1,36 +1,48 @@
+#! /usr/bin/python3
 '''
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-04-06
+    Last modified: 2016-11-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import base64, os
-from datetime import datetime
+import os, sys
+from base64 import b64encode
+from datetime import datetime, timedelta
 from email.encoders import encode_base64
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from random import random
+from time import sleep
+
+# set up django early
+from goodcrypto.utils import gc_django
+gc_django.setup()
+
 from django.utils.timezone import utc
 
-from goodcrypto.mail import contacts, options, user_keys
+from goodcrypto.constants import WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP
+from goodcrypto.mail import contacts, options
 from goodcrypto.mail.constants import TAG_ERROR
 from goodcrypto.mail.crypto_software import get_classname
-from goodcrypto.mail.internal_settings import get_domain
+from goodcrypto.mail.internal_settings import get_date_queue_last_active, get_domain, set_date_queue_last_active
 from goodcrypto.mail.message import constants, history, utils
 from goodcrypto.mail.message.crypto_message import CryptoMessage
 from goodcrypto.mail.message.email_message import EmailMessage
 from goodcrypto.mail.message.encrypt_utils import add_dkim_sig_optionally, create_protected_message
+from goodcrypto.mail.message.inspect_utils import get_charset
 from goodcrypto.mail.message.metadata import get_metadata_address, parse_bundled_message
-from goodcrypto.mail.utils import get_encryption_software, send_message
+from goodcrypto.mail.utils import send_message
+from goodcrypto.mail.utils.notices import report_unable_to_send_bundled_messages
 from goodcrypto.mail.utils.dirs import get_packet_directory, SafeDirPermissions
 from goodcrypto.mail.utils.notices import report_bad_bundled_encrypted_message
 from goodcrypto.oce.crypto_factory import CryptoFactory
 from goodcrypto.oce.open_pgp_analyzer import OpenPGPAnalyzer
 from goodcrypto.utils import i18n, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
+from syr.python import is_string
 
 class Bundle(object):
     '''
@@ -54,6 +66,51 @@ class Bundle(object):
 
         self.bundled_messages = []
         self.crypted_with = []
+
+    def ready_to_run(self):
+        ''' Check to see if it's time to run the bundle and again. '''
+
+        if options.encrypt_metadata() and options.bundle_and_pad():
+
+            if options.bundle_frequency() == options.bundle_hourly():
+                if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
+                    frequency = timedelta(minutes=10)
+                else:
+                    frequency = timedelta(hours=1)
+            elif options.bundle_frequency() == options.bundle_daily():
+                frequency = timedelta(days=1)
+            elif options.bundle_frequency() == options.bundle_weekly():
+                frequency = timedelta(weeks=1)
+            else:
+                frequency = timedelta(hour=1)
+
+            next_run = get_date_queue_last_active() + frequency
+
+            ready = next_run <= datetime.utcnow()
+            if not ready:
+                self.log_message('bundle and pad messages next: {}'.format(next_run))
+
+        else:
+            self.log_message('not padding and packetizing messages')
+            ready = False
+
+        return ready
+
+    def bundle_and_pad_messages(self):
+        ''' Bundle and pad messages. '''
+
+        try:
+            self.log_message('starting to bundle and pad messages')
+            self.bundle_and_pad()
+            set_date_queue_last_active(datetime.utcnow())
+            ok = True
+            self.log_message('finished bundling and padding messages')
+        except Exception as exception:
+            ok = False
+            report_unable_to_send_bundled_messages(exception)
+            self.log_message('EXCEPTION - see syr.exception.log for details')
+
+        return ok
 
     def bundle_and_pad(self):
         ''' Bundle and pad messages to reduce tracking. '''
@@ -95,7 +152,7 @@ class Bundle(object):
         except Exception as exception:
             result_ok = False
             self.log_message('error while sending message')
-            self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            self.log_message('EXCEPTION - see syr.exception.log for details')
             record_exception()
 
         return result_ok
@@ -127,7 +184,6 @@ class Bundle(object):
 
             crypto_message = create_protected_message(
                 from_user, to_user, inner_message.as_string(), utils.get_message_id())
-
             if crypto_message.is_crypted():
 
                 # add the DKIM signature to the inner message if user opted for it
@@ -137,7 +193,7 @@ class Bundle(object):
                 self.crypted_with = crypto_message.get_metadata_crypted_with()
                 self.log_message('crypted with: {}'.format(self.crypted_with))
                 for part in message.walk():
-                    self.log_message('Content type: {}'.format(part.get_content_type()))
+                    self.log_message('Content type of part: {}'.format(part.get_content_type()))
                     if self.DEBUGGING: self.log_message(part.get_payload())
             else:
                 report_bad_bundled_encrypted_message(to_domain, self.bundled_messages)
@@ -202,12 +258,12 @@ class Bundle(object):
         while current_size < target_size:
             # using urandom because it's less likely to lock up
             # a messaging program can't afford the potential locks up of /dev/random
-            with open('/dev/urandom') as rnd:
+            with open('/dev/urandom', 'rb') as rnd:
                 rnd_bytes = rnd.read(target_size - current_size)
                 if len(rnd_bytes) > target_size - current_size:
                     rnd_bytes = rnd_bytes[:target_size - current_size]
             part = MIMEApplication(
-              base64.b64encode(rnd_bytes), mime_constants.ALTERNATIVE_SUB_TYPE, encode_base64)
+              b64encode(rnd_bytes), mime_constants.ALTERNATIVE_SUB_TYPE, encode_base64)
             current_size += len(part.as_string())
             parts.append(part)
 
@@ -244,18 +300,17 @@ class Bundle(object):
 
             elif (filesize + estimated_size) < max_size:
                 try:
-                    with open(fullname) as f:
-                        content = f.read()
-                        # if the entire contents were saved
-                        if content.endswith(constants.END_ADDENDUM):
-                           part = MIMEApplication(
-                             base64.b64encode(content), mime_constants.ALTERNATIVE_SUB_TYPE, encode_base64)
-                           if self.DEBUGGING: self.log_message('message part:\n{}'.format(part))
+                    with open(fullname, 'rb') as input_file:
+                        content = input_file.read()
+                        if content.endswith(constants.END_ADDENDUM.encode()):
+                            part = MIMEApplication(
+                             b64encode(content), mime_constants.ALTERNATIVE_SUB_TYPE, encode_base64)
+                            if self.DEBUGGING: self.log_message('message part:\n{}'.format(part))
                         else:
-                           self.log_message('{} is not ready to send'.format(filename))
+                            self.log_message('{} is not ready to send'.format(filename))
                 except:
                     record_exception()
-                    self.log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
 
             else:
                 self.log_message('{} is too large for this batch of messages (estimated size with this message: {})'.format(filename, filesize + estimated_size))
@@ -294,7 +349,7 @@ class Bundle(object):
 
         def get_addendum_value(addendum, keyword):
             value = addendum[keyword]
-            if type(value) is str:
+            if is_string(value):
                 value = value.strip()
             if value == 'True':
                 value = True
@@ -380,4 +435,29 @@ class Bundle(object):
             self.log = LogFile()
 
         self.log.write_and_flush(message)
+
+def main():
+    # sleep is measured in seconds
+    if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
+        PERIOD = 10 * 60
+    else:
+        PERIOD = 60 * 60
+
+    while True:
+        try:
+            bundle = Bundle()
+            if bundle.ready_to_run():
+                bundle.bundle_and_pad_messages()
+        except Exception as exception:
+            report_unable_to_send_bundled_messages(exception)
+            print(str(exception))
+
+        sleep(PERIOD)
+
+if __name__ == "__main__":
+
+    print()
+    print('GoodCrypto Padding and Packetization')
+    print('Copyright 2015-2016 GoodCrypto.com')
+    main()
 

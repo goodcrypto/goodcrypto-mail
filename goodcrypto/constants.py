@@ -2,9 +2,8 @@
     Constants for GoodCrypto app.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-22
+    Last modified: 2016-11-07
 '''
-
 import os, os.path
 
 # set this to False to ship, or True to test
@@ -39,13 +38,6 @@ try:
 except:
     pass
 
-# domain or ip of the system running the hypervisor
-VM_HOST = '127.0.0.1'
-HTTP_PROXY_PORT = 8398
-HTTP_PROXY_URL = 'http://{}:{}'.format(VM_HOST, HTTP_PROXY_PORT)
-
-TOR_PORT = 9350
-
 if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
     FORWARDED_APP_SSH_PORT = 8022
     FORWARDED_HOST_SSH_PORT = 8122
@@ -54,21 +46,16 @@ if WARNING_WARNING_WARNING_TESTING_ONLY_DO_NOT_SHIP:
 HTTP_PORT = 8080
 HTTPS_PORT = 8443
 
-POSTFIX_FILTER_PORT = 10027
-
 # apps status
 STATUS_GREEN = 'green'
 STATUS_RED = 'red'
 STATUS_YELLOW = 'yellow'
 
-# tor status file
-TOR_STATUS_FILE = '/tmp/goodcrypto.tor.status'
-
 # name for the databases
 DEFAULT_DB = 'default'
 MAIL_DB = DEFAULT_DB #'mail'
 SYSTEM_DB = 'system'
-WEB_DB = 'web'
+WEB_DB = 'webfirewall'
 
 # unique 'goodcrypto' user id used as base for other user ids
 # project start date 2013-07-01 --> 1371

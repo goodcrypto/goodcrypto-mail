@@ -3,12 +3,11 @@
     with the associated crypto keys.
 
     Copyright 2014-2016 GoodCrypto
-    Last modified: 2016-02-19
+    Last modified: 2016-10-31
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-import os
-from base64 import b64decode, b64encode
+import os, pickle
 from redis import Redis
 from rq import Connection, Queue
 from rq.job import Job
@@ -17,13 +16,15 @@ from rq.job import Job
 from goodcrypto.utils import gc_django
 gc_django.setup()
 
-from goodcrypto.mail.crypto_rq import delete_contacts_crypto_via_rq, add_private_key_via_rq, set_fingerprint_via_rq
-from goodcrypto.mail.rq_special_settings import SPECIAL_RQ, SPECIAL_REDIS_PORT
+from goodcrypto.mail.constants import AUTO_GENERATED
+from goodcrypto.mail.crypto_queue import queue_sync
 from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.oce.key.key_factory import KeyFactory
+from goodcrypto.system.special_queue_settings import SPECIAL_RQ, SPECIAL_REDIS_PORT
 from goodcrypto.utils.constants import REDIS_HOST
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
-from goodcrypto.utils.manage_rq import get_job_count, get_job_results
+from goodcrypto.utils.manage_queues import get_job_results
+from syr.exception import record_exception
 
 
 # the tests themsevles set this variable to True when appropriate
@@ -32,37 +33,59 @@ TESTS_RUNNING = False
 _log = None
 
 def post_save_contacts_crypto(sender, **kwargs):
-    ''' Process the contact's encryption record after it's saved.'''
+    '''
+        Process the contact's encryption record after it's saved.
+
+        After crypto record saved:
+  * if record for managed domain:
+    * if no user_key record:
+      * create user_key record
+      * create gpg key
+      * get gpg fingerprint
+      * update crypto record with fingerprint
+    * if user_key record, but no fingerprint in crypto record:
+      * get gpg fingerprint
+      * update crypto record with fingerprint
+  * if no fingerprint in crypto record
+    * get gpg fingerprint
+    * update crypto record with fingerprint
+
+    '''
 
     if TESTS_RUNNING:
         log_message('tests running so no post save processing')
     else:
-        log_message("starting post save for contact's crypto")
+        created = kwargs['created']
         contacts_encryption = kwargs['instance']
         email = contacts_encryption.contact.email
-        encryption_software = contacts_encryption.encryption_software.name
+        encryption_name = contacts_encryption.encryption_software.name
         fingerprint = contacts_encryption.fingerprint
-        log_message("{}'s {} id: {}".format(email, encryption_software, fingerprint))
+        log_message("starting post save for {} contact's {} crypto".format(email, encryption_name))
 
         if email_in_domain(email):
-            from goodcrypto.mail import user_keys
+            if created:
+                from goodcrypto.mail.message.utils import sync_private_key_via_queue
 
-            user_key = user_keys.get(email, encryption_software)
-            if (user_key is None or user_key.passcode is None):
-                log_message('creating private {} key for {}'.format(encryption_software, email))
-                add_private_key_via_rq(contacts_encryption)
+                log_message('starting to add private {} user key for {}'.format(encryption_name, email))
+                if contacts_encryption.source is None:
+                    contacts_encryption.source = AUTO_GENERATED
+                sync_private_key_via_queue(contacts_encryption)
             elif fingerprint is None:
-                log_message('setting private {} fingerprint for {}'.format(encryption_software, email))
-                set_fingerprint_via_rq(contacts_encryption)
-            else:
-                log_message('{} already has {} crypto software defined'.format(email, encryption_software))
-        elif fingerprint is None:
-            log_message('setting {} fingerprint for {}'.format(encryption_software, email))
-            set_fingerprint_via_rq(contacts_encryption)
-        else:
-            log_message('{} already has {} crypto software defined'.format(email, encryption_software))
+                from goodcrypto.mail.message.utils import sync_fingerprint_via_queue
 
-        log_message("finished post save for contact's crypto")
+                log_message('setting private {} fingerprint for {}'.format(encryption_name, email))
+                sync_fingerprint_via_queue(contacts_encryption)
+            else:
+                log_message("{} already has {} fingerprint: {}".format(email, encryption_name, fingerprint))
+        elif fingerprint is None:
+            from goodcrypto.mail.message.utils import sync_fingerprint_via_queue
+
+            log_message('setting {} fingerprint for {}'.format(encryption_name, email))
+            sync_fingerprint_via_queue(contacts_encryption)
+        else:
+            log_message('{} already has {} crypto software defined'.format(email, encryption_name))
+
+        log_message("finished post save for {} contact's {} crypto".format(email, encryption_name))
 
 def post_delete_contacts_crypto(sender, **kwargs):
     ''' Delete the keys for the contact's encryption. '''
@@ -70,11 +93,48 @@ def post_delete_contacts_crypto(sender, **kwargs):
     if TESTS_RUNNING:
         log_message('tests running so no post delete processing')
     else:
+        from goodcrypto.mail.sync_db_with_keyring import sync_deletion
+
         contacts_encryption = kwargs['instance']
         email = contacts_encryption.contact.email
         log_message("starting post delete for {}'s crypto".format(email))
-        delete_contacts_crypto_via_rq(contacts_encryption)
+        queue_sync(pickle.dumps(contacts_encryption), sync_deletion)
         log_message("finished post delete for {}'s crypto".format(email))
+
+def post_save_user_key(sender, **kwargs):
+    '''
+        Process the user's key record after it's saved.
+    '''
+    if TESTS_RUNNING:
+        log_message('tests running so no post save processing')
+    else:
+        created = kwargs['created']
+        user_key = kwargs['instance']
+        log_message("starting post save for {} after creation: {}".format(user_key, created))
+
+        contacts_encryption = user_key.contacts_encryption
+        email = contacts_encryption.contact.email
+        encryption_name = contacts_encryption.encryption_software.name
+        fingerprint = contacts_encryption.fingerprint
+
+        if fingerprint is None:
+            from goodcrypto.mail.message.utils import sync_fingerprint_via_queue
+
+            log_message('syncing private {} fingerprint for {}'.format(encryption_name, email))
+            sync_fingerprint_via_queue(contacts_encryption)
+
+        if created:
+            from goodcrypto.mail.utils import create_user_and_notify
+            from goodcrypto.mail.utils.notices import notify_user_key_ready
+            from goodcrypto.mail.message.metadata import is_metadata_address
+
+            if not is_metadata_address(email):
+                log_message('notifying {} about new {} key'.format(email, encryption_name))
+                notify_user_key_ready(email)
+
+                # configure a regular user even if the key pair had trouble
+                create_user_and_notify(email)
+        log_message("finished post save for {}".format(user_key))
 
 def post_save_options(sender, **kwargs):
     ''' Process the mail server options record after it's saved.'''
@@ -138,23 +198,22 @@ def add_to_postfix_mta_queue(mail_server_address, goodcrypto_listen_port, mta_li
                     log_message('queueing postfix mta job because master needs configuration. {}'.format(
                         mta_listen_port))
                 redis_connection = Redis(REDIS_HOST, SPECIAL_REDIS_PORT)
-                queue = Queue(name=SPECIAL_RQ, connection=redis_connection, async=True)
+                queue = Queue(name=SPECIAL_RQ, connection=redis_connection)
                 secs_to_wait = DEFAULT_TIMEOUT * (queue.count + 1)
                 job = queue.enqueue_call(configure_mta,
                                          args=[
-                                           b64encode(mail_server_address),
+                                           mail_server_address,
                                            goodcrypto_listen_port, mta_listen_port],
                                          timeout=secs_to_wait)
 
                 result_ok = get_job_results(queue, job, secs_to_wait, mail_server_address)
                 log_message('results from queued job: {}'.format(result_ok))
             else:
-                log_message("postfix main.cf and master.cf do not need to be updated")
                 result_ok = True
 
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -185,20 +244,20 @@ def add_to_postfix_mailname_queue(domain):
 
                 log_message('queueing postfix mailname job for {}'.format(domain))
                 redis_connection = Redis(REDIS_HOST, SPECIAL_REDIS_PORT)
-                queue = Queue(name=SPECIAL_RQ, connection=redis_connection, async=True)
+                queue = Queue(name=SPECIAL_RQ, connection=redis_connection)
                 secs_to_wait = DEFAULT_TIMEOUT * (queue.count + 1)
                 job = queue.enqueue_call(configure_mailname,
-                                         args=[b64encode(domain)],
+                                         args=[domain.encode()],
                                          timeout=secs_to_wait)
 
                 result_ok = get_job_results(queue, job, secs_to_wait, 'mailname')
             else:
-                log_message('mailname does not need to be updated')
                 result_ok = True
+                log_message('postfix mailname does not need to be configured')
 
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 

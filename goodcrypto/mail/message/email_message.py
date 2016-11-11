@@ -1,32 +1,34 @@
 '''
-    Copyright 2014-2015 GoodCrypto
-    Last modified: 2015-11-11
+    Copyright 2014-2016 GoodCrypto
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
-
 import os
+from base64 import b64encode
 from copy import deepcopy
 from email.encoders import encode_base64
 from email.generator import Generator
+from email.header import decode_header
 from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.nonmultipart import MIMENonMultipart
 from email.mime.text import MIMEText
-from email.parser import Parser
-from StringIO import StringIO
+from email.parser import Parser, BytesParser
+from io import IOBase, StringIO
+from quopri import encodestring
 
 from goodcrypto.mail.message import constants
 from goodcrypto.mail.message.inspect_utils import get_charset, is_open_pgp_mime
 from goodcrypto.mail.message.message_exception import MessageException
 from goodcrypto.mail.message.validator import Validator
-from goodcrypto.oce import gpg_constants
+from goodcrypto.oce import constants as oce_constants
 from goodcrypto.utils import i18n
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
-
+from syr.exception import record_exception
+from syr.python import is_string
 
 class EmailMessage(object):
     '''
@@ -68,19 +70,31 @@ class EmailMessage(object):
 
         else:
             try:
-                if isinstance(message_or_file, file) or isinstance(message_or_file, StringIO):
+                if isinstance(message_or_file, IOBase)  or isinstance(message_or_file, StringIO):
                     self.log_message('about to parse a message from a file')
-                    self._message = self.parser.parse(message_or_file)
-                    self.log_message('parsed message')
+                    try:
+                        self._message = self.parser.parse(message_or_file)
+                        self.log_message('parsed message from file')
+                    except TypeError:
+                        message_or_file.seek(0, os.SEEK_SET)
+                        self.parser = BytesParser()
+                        self._message = self.parser.parse(message_or_file)
+                        self.log_message('parsed message from file as bytes')
                 else:
-                    self.log_message('about to parse a message from a string')
-                    self._message = self.parser.parsestr(message_or_file)
-                    self.log_message('parsed message')
+                    try:
+                        self.log_message('about to parse a message from a string')
+                        self._message = self.parser.parsestr(message_or_file)
+                        self.log_message('parsed message from string')
+                    except TypeError:
+                        self.parser = BytesParser()
+                        self._message = self.parser.parsebytes(message_or_file)
+                        self.log_message('parsed message from bytes')
 
                 if not self.validate_message():
                     self._create_good_message_from_bad(message_or_file)
             except Exception:
                 try:
+                    self.log_message('EXCEPTION - see syr.exception.log for details')
                     record_exception()
 
                     self._create_good_message_from_bad(message_or_file)
@@ -106,8 +120,9 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_encrypted_message_name
             >>> with open(get_encrypted_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
-            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
-            'GPG'
+            ...     crypto_software = email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
+            >>> crypto_software == 'GPG'
+            True
         '''
 
         try:
@@ -126,8 +141,9 @@ class EmailMessage(object):
             >>> with open(get_plain_message_name('basic.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.add_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER, 'GPG')
-            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
-            'GPG'
+            ...     crypto_software = email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
+            >>> crypto_software == 'GPG'
+            True
         '''
 
         self._message.__setitem__(key, value)
@@ -141,11 +157,12 @@ class EmailMessage(object):
             >>> with open(get_encrypted_message_name('bouncy-castle.txt')) as input_file:
             ...     email_message = EmailMessage(input_file)
             ...     email_message.change_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER, 'TestGPG')
-            ...     email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
-            'TestGPG'
+            ...     crypto_software = email_message.get_header(constants.ACCEPTED_CRYPTO_SOFTWARE_HEADER)
+            >>> crypto_software == 'TestGPG'
+            True
         '''
 
-        if self._message.has_key(key):
+        if key in self._message:
             self._message.replace_header(key, value)
         else:
             self.add_header(key, value)
@@ -171,7 +188,7 @@ class EmailMessage(object):
             Get the message.
 
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
-            >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+            >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
             >>> email_message = get_basic_email_message()
             >>> email_message.get_message() is not None
             True
@@ -188,7 +205,7 @@ class EmailMessage(object):
 
             # Get a basic message first so we can avoid recursion
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
-            >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+            >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
             >>> basic_email_message = get_basic_email_message().get_message()
             >>> email_message = EmailMessage()
             >>> email_message.get_message().get(mime_constants.FROM_KEYWORD) is None
@@ -200,9 +217,12 @@ class EmailMessage(object):
 
         old_message = self._message
 
-        if type(new_message) is str:
+        if is_string(new_message):
             try:
-                self._message = self.parser.parsestr(new_message)
+                if isinstance(self.parser, Parser):
+                    self._message = self.parser.parsestr(new_message)
+                else:
+                    self._message = self.parser.parsebytes(new_message.encode())
             except:
                 self._message = old_message
                 record_exception()
@@ -223,7 +243,7 @@ class EmailMessage(object):
             this can leave a pretty unmanageable message so we apply our own validation.
 
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
-            >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+            >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
             >>> email_message = get_basic_email_message()
             >>> email_message.validate_message()
             True
@@ -237,7 +257,7 @@ class EmailMessage(object):
                 valid = False
                 self.log_message('message is invalid')
                 self.log_message(validator.get_why())
-        except Exception, AttributeError:
+        except Exception as AttributeError:
             valid = False
             record_exception()
 
@@ -247,13 +267,14 @@ class EmailMessage(object):
         '''
             Gets text from the current Message.
 
-            This method works with both plain and MIME messages, except open pgp mime..
+            This method works with both plain and MIME messages, except open pgp mime.
             If the message is MIMEMultipart, the text is from the first text/plain part.
 
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
-            >>> email_message.get_text()
-            'Test message text'
+            >>> text = email_message.get_text()
+            >>> text == 'Test message text'
+            True
         '''
 
         text = None
@@ -274,16 +295,14 @@ class EmailMessage(object):
                     part = message.get_payload(part_index)
                     content_type = part.get_content_type()
                     if content_type == mime_constants.TEXT_PLAIN_TYPE:
-                        text = part.get_payload(decode=True)
-                        __, self._last_charset = get_charset(part, self._last_charset)
+                        text = self._get_decoded_payload(part)
                         result_ok = True
                     else:
                         self.log_message("body part type is " + content_type)
                     part_index += 1
             else:
-                text = message.get_payload(decode=True)
-                self.log_message("content is a String")
-                __, self._last_charset = get_charset(message, self._last_charset)
+                text = self._get_decoded_payload(message)
+                self.log_message("payload is a: {}".format(type(text)))
 
         return text
 
@@ -299,8 +318,9 @@ class EmailMessage(object):
             >>> email_message = get_basic_email_message()
             >>> email_message.set_text('New test message text')
             True
-            >>> email_message.get_text()
-            'New test message text'
+            >>> text = email_message.get_text()
+            >>> text == 'New test message text'
+            True
         '''
 
         if self.DEBUGGING: self.log_message("setting text:\n{}".format(text))
@@ -318,13 +338,14 @@ class EmailMessage(object):
                 if content_type == mime_constants.TEXT_PLAIN_TYPE:
                     part.set_payload(text)
                     text_set = True
-                    self.log_message('set the first text/plain part found')
+                    self.log_message('the first text/plain part found')
                 else:
-                    self.log_message("body part type is " + content_type)
+                    self.log_message('body part type is {}'.format(content_type))
                 part_index += 1
 
             if not text_set:
                 charset, __ = get_charset(self._message, self._last_charset)
+                self.log_message('no text_set char set: {}'.format(charset))
                 new_part = MIMEText(text, mime_constants.PLAIN_SUB_TYPE, charset)
                 message.attach(new_part)
                 text_set = True
@@ -350,20 +371,17 @@ class EmailMessage(object):
 
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
-            >>> email_message.get_content()
-            'Test message text'
+            >>> text = email_message.get_content()
+            >>> text == 'Test message text'
+            True
         '''
 
         decode = False
-        message = self.get_message()
-        if message.has_key(mime_constants.CONTENT_XFER_ENCODING_KEYWORD):
-            try:
-                encoding = message.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
-                if encoding is not None:
-                    encoding = encoding.lower()
-            except:
-                encoding = ''
-                current_content_type = ''
+        msg = self.get_message()
+        encoding = self.get_header(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+        if encoding is not None:
+            encoding = encoding.lower()
+            self.log_message('payloaded encoded with {}'.format(encoding))
 
             # only use the encoding if it's not a multipart message
             if (encoding == mime_constants.QUOTED_PRINTABLE_ENCODING or
@@ -375,7 +393,9 @@ class EmailMessage(object):
                     self.log_message('decoding payload with {}'.format(encoding))
 
         try:
-            payload = message.get_payload(decode=decode)
+            payload = self._get_decoded_payload(self.get_message(), decode=decode)
+            if self.DEBUGGING: self.log_message('decoded payloaded:\n{}'.format(payload))
+            self.log_message('type of payload: {}'.format(type(payload)))
         except:
             record_exception()
             payload = message.get_payload()
@@ -389,8 +409,9 @@ class EmailMessage(object):
             >>> from goodcrypto_tests.mail.message_utils import get_basic_email_message
             >>> email_message = get_basic_email_message()
             >>> email_message.set_content('New test message text', mime_constants.TEXT_PLAIN_TYPE)
-            >>> email_message.get_content()
-            'New test message text'
+            >>> text = email_message.get_content()
+            >>> text == 'New test message text'
+            True
         '''
 
         # create a new message if one doesn't exist
@@ -402,10 +423,9 @@ class EmailMessage(object):
             current_content_type = content_type
         self.log_message('current content type: {}'.format(current_content_type))
         self.log_message('setting content type: {}'.format(content_type))
-        if self.DEBUGGING:
-            self.log_message('content:\n{}'.format(payload))
+        if self.DEBUGGING: self.log_message('content:\n{}'.format(payload))
 
-        current_encoding = self._message.__getitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
+        current_encoding = self.get_header(mime_constants.CONTENT_XFER_ENCODING_KEYWORD)
         if current_encoding is None:
             self._message.__setitem__(mime_constants.CONTENT_XFER_ENCODING_KEYWORD, mime_constants.BITS_8)
             self.log_message('setting content encoding: {}'.format(mime_constants.BITS_8))
@@ -417,19 +437,24 @@ class EmailMessage(object):
 
             if charset is None:
                 charset, self._last_charset = get_charset(payload, self._last_charset)
+                self.log_message('getting charset from payload: {}'.format(charset))
+            elif self._last_charset is None:
+                self._last_charset = constants.DEFAULT_CHAR_SET
+                self.log_message('setting last charset to default: {}'.format())
             else:
-                if self._last_charset:
-                    self._last_charset = constants.DEFAULT_CHAR_SET
+                self.log_message('using preset charset: {}'.format(charset))
+
             try:
-                self.get_message().set_payload(payload, charset)
+                self.get_message().set_payload(
+                   self.encode_payload(payload, current_encoding), charset=charset)
                 self.log_message('set payload with {} charset'.format(charset))
-            except UnicodeEncodeError:
-                try:
-                    self.get_message().set_payload(payload, self._last_charset)
-                    self.log_message('set payload with {} charset'.format(self._last_charset))
-                except UnicodeEncodeError:
-                    self.get_message().set_payload(payload)
-                    self.log_message('setting payload without charset')
+                if self.DEBUGGING: self.log_message('payload set:\n{}'.format(payload))
+            except UnicodeEncodeError as error:
+                self.log_message(error.reason)
+                self.log_message('start: {} end: {}'.format(error.start, error.end))
+                self.log_message('object: {}'.format(error.object))
+                self.get_message().set_payload(self.encode_payload(payload, current_encoding))
+                self.log_message('setting payload without charset')
             self.get_message().set_type(content_type)
 
         else:
@@ -447,10 +472,11 @@ class EmailMessage(object):
                 if not self.get_message().is_multipart():
                     if charset is None:
                         charset, self._last_charset = get_charset(payload, self._last_charset)
+                        self.log_message('setting content with char set: {}'.format(charset))
                     else:
-                        if self._last_charset:
+                        if self._last_charset is None:
                             self._last_charset = constants.DEFAULT_CHAR_SET
-                    self.get_message().set_payload(payload, charset)
+                    self.get_message().set_payload(self.encode_payload(payload, current_encoding), charset)
                     self.log_message('set payload with {} charset'.format(charset))
                     self.get_message().set_type(content_type)
 
@@ -458,15 +484,39 @@ class EmailMessage(object):
                     if self.DEBUGGING: self.log_message('mime text payload:\n{}'.format(payload))
                     part = MIMEText(payload)
                     if self.DEBUGGING: self.log_message('mime text part:\n{}'.format(part))
-                    part.set_payload(payload)
+                    part.set_payload(self.encode_payload(payload, current_encoding))
                     if self.DEBUGGING: self.log_message('mime text part with payload:\n{}'.format(part))
                     self.get_message().attach(part)
 
                 else:
                     primary, __, secondary = content_type.partition(mime_constants.PRIMARY_TYPE_DELIMITER)
                     part = MIMEBase(primary, secondary)
-                    part.set_payload(payload)
+                    part.set_payload(self.encode_payload(payload, current_encoding))
                     self.get_message().attach(part)
+
+    def encode_payload(self, payload, current_encoding):
+        '''
+            Encode the payload.
+
+            Test extreme case.
+            >>> email_message = EmailMessage()
+            >>> email_message.encode_payload(None, None)
+        '''
+        new_payload = payload
+        if payload is not None and current_encoding is not None:
+            """
+            """
+            if current_encoding == mime_constants.BASE64_ENCODING:
+                if isinstance(payload, str):
+                    payload = payload.encode()
+                new_payload = b64encode(payload)
+                self.log_message('encoding payload with {}'.format(current_encoding))
+            elif current_encoding == mime_constants.QUOTED_PRINTABLE_ENCODING:
+                if isinstance(payload, str):
+                    payload = payload.encode()
+                new_payload = encodestring(payload)
+                self.log_message('encoding payload with {}'.format(current_encoding))
+        return new_payload
 
     def is_probably_pgp(self):
         '''
@@ -480,11 +530,9 @@ class EmailMessage(object):
         '''
 
         is_pgp = is_open_pgp_mime(self.get_message())
-        if is_pgp:
-            self.log_message('message uses open pgp mime')
-        else:
+        if not is_pgp:
             content = self.get_content()
-            if isinstance(content, str):
+            if is_string(content):
                 is_pgp = self.contains_pgp_message_delimters(content)
                 self.log_message('message uses in line pgp: {}'.format(is_pgp))
             elif isinstance(content, list):
@@ -494,7 +542,7 @@ class EmailMessage(object):
                     else:
                         part_content = part
 
-                    if isinstance(part_content, str):
+                    if is_string(part_content):
                         is_pgp = self.contains_pgp_message_delimters(part_content)
                         if is_pgp:
                             self.log_message('part of message uses in line pgp: {}'.format(is_pgp))
@@ -519,8 +567,8 @@ class EmailMessage(object):
         '''
 
         return (isinstance(text, str) and
-                text.find(gpg_constants.BEGIN_PGP_MESSAGE) >= 0 and
-                text.find(gpg_constants.END_PGP_MESSAGE) >= 0)
+                text.find(oce_constants.BEGIN_PGP_MESSAGE) >= 0 and
+                text.find(oce_constants.END_PGP_MESSAGE) >= 0)
 
     def contains_pgp_signature_delimeters(self, text):
         '''
@@ -535,8 +583,8 @@ class EmailMessage(object):
         '''
 
         return (isinstance(text, str) and
-                text.find(gpg_constants.BEGIN_PGP_SIGNATURE) >= 0 and
-                text.find(gpg_constants.END_PGP_SIGNATURE) >= 0)
+                text.find(oce_constants.BEGIN_PGP_SIGNATURE) >= 0 and
+                text.find(oce_constants.END_PGP_SIGNATURE) >= 0)
 
     def get_pgp_signature_blocks(self):
         '''
@@ -554,12 +602,12 @@ class EmailMessage(object):
             ''' Get the signed data. '''
 
             signature_block = None
-            start_index = content.find(gpg_constants.BEGIN_PGP_SIGNED_MESSAGE)
+            start_index = content.find(oce_constants.BEGIN_PGP_SIGNED_MESSAGE)
             if start_index < 0:
-                start_index = content.find(gpg_constants.BEGIN_PGP_SIGNATURE)
-            end_index = content.find(gpg_constants.END_PGP_SIGNATURE)
+                start_index = content.find(oce_constants.BEGIN_PGP_SIGNATURE)
+            end_index = content.find(oce_constants.END_PGP_SIGNATURE)
             if start_index >= 0 and end_index > start_index:
-                signature_block = content[start_index:end_index + len(gpg_constants.END_PGP_SIGNATURE)]
+                signature_block = content[start_index:end_index + len(oce_constants.END_PGP_SIGNATURE)]
 
             return signature_block
 
@@ -584,7 +632,7 @@ class EmailMessage(object):
                 part_index += 1
 
         else:
-            content = self.get_message().get_payload(decode=True)
+            content = self._get_decoded_payload(self.get_message())
             if isinstance(content, str) and self.contains_pgp_signature_delimeters(content):
                 is_signed = True
                 signature_block = get_signed_data(content)
@@ -613,7 +661,7 @@ class EmailMessage(object):
             ''' Remove the signature from the content. '''
 
             # remove the beginning signature lines
-            if content.startswith(gpg_constants.BEGIN_PGP_SIGNED_MESSAGE):
+            if content.startswith(oce_constants.BEGIN_PGP_SIGNED_MESSAGE):
                 begin_sig_lines = ''
                 for line in content.split('\n'):
                     if len(line.strip()) <= 0:
@@ -624,13 +672,13 @@ class EmailMessage(object):
 
 
             # remove the signature itself
-            start_index = content.find(gpg_constants.BEGIN_PGP_SIGNATURE)
-            end_index = content.find(gpg_constants.END_PGP_SIGNATURE)
-            content = content[0:start_index] + content[end_index + len(gpg_constants.END_PGP_SIGNATURE):]
+            start_index = content.find(oce_constants.BEGIN_PGP_SIGNATURE)
+            end_index = content.find(oce_constants.END_PGP_SIGNATURE)
+            content = content[0:start_index] + content[end_index + len(oce_constants.END_PGP_SIGNATURE):]
 
             # remove the extra characters added around the message itself
-            content = content.replace('- {}'.format(gpg_constants.BEGIN_PGP_MESSAGE), gpg_constants.BEGIN_PGP_MESSAGE)
-            content = content.replace('- {}'.format(gpg_constants.END_PGP_MESSAGE), gpg_constants.END_PGP_MESSAGE)
+            content = content.replace('- {}'.format(oce_constants.BEGIN_PGP_MESSAGE), oce_constants.BEGIN_PGP_MESSAGE)
+            content = content.replace('- {}'.format(oce_constants.END_PGP_MESSAGE), oce_constants.END_PGP_MESSAGE)
 
             return content
 
@@ -645,18 +693,21 @@ class EmailMessage(object):
                     if isinstance(part, str):
                         content = part
                     else:
-                        content = part.get_payload()
+                        content = self._get_decoded_payload(part)
                     if self.contains_pgp_signature_delimeters(content):
-                        part.set_payload(remove_signature(content))
+                        charset, __ = get_charset(part)
+                        self.log_message('set payload after removing sig with char set: {}'.format(charset))
+                        part.set_payload(remove_signature(content), charset=charset)
                         self.log_message('extracted signature block from part {}'.format(part_index))
 
             else:
-                content = self.get_message().get_payload(decode=True)
+                content = self._get_decoded_payload(self.get_message())
                 if isinstance(content, str) and self.contains_pgp_signature_delimeters(content):
-                    self.get_message().set_payload(remove_signature(content))
-                    self.log_message('extracted signature block from content')
+                    charset, __ = get_charset(part)
+                    self.get_message().set_payload(remove_signature(content), charset=charset)
+                    self.log_message('extracted signature block from content with char set: {}'.format(charset))
         except:
-            self.log_message('EXCEPTION see goodcrypto.utils.exception.log')
+            self.log_message('EXCEPTION see syr.exception.log')
             record_exception()
 
     def write_to(self, output_file):
@@ -687,7 +738,7 @@ class EmailMessage(object):
 
         result_ok = False
         try:
-            if isinstance(output_file, file):
+            if isinstance(output_file, IOBase):
                 if output_file.closed:
                     with open(output_file.name, 'w') as out:
                         out.write(self.to_string())
@@ -720,7 +771,7 @@ class EmailMessage(object):
             >>> filename = get_plain_message_name('basic.txt')
             >>> with open(filename) as input_file:
             ...     file_content = input_file.read().replace('\\r\\n', '\\n')
-            ...     input_file.seek(os.SEEK_SET)
+            ...     position = input_file.seek(os.SEEK_SET)
             ...     email_message = EmailMessage(input_file)
             ...     file_content.strip() == email_message.to_string().strip()
             True
@@ -732,6 +783,7 @@ class EmailMessage(object):
             msg = self._message
             if charset is None:
                 charset, __ = get_charset(msg, self._last_charset)
+                self.log_message('char set in to_string(): {}'.format(charset))
 
             #  convert the message
             try:
@@ -739,13 +791,14 @@ class EmailMessage(object):
                 message_generator = Generator(file_pointer, mangle_from_=mangle_from, maxheaderlen=78)
                 message_generator.flatten(msg)
                 string = file_pointer.getvalue()
-            except Exception, AttributeError:
+            except Exception as AttributeError:
                 try:
                     self.log_message('unable to flatten message')
+                    record_exception(AttributeError)
 
                     msg = self._message
                     string = msg.as_string()
-                except Exception, AttributeError:
+                except Exception as AttributeError:
                     #  we explicitly want to catch everything here, even NPE
                     self.log_message('unable to convert message as_string')
 
@@ -848,10 +901,10 @@ class EmailMessage(object):
             >>> email_message = EmailMessage()
             >>> name, value, last_name = email_message._parse_header_line(
             ...   'Mime-Version: 1.0', 'Subject')
-            >>> name
-            'Mime-Version'
-            >>> value
-            '1.0'
+            >>> name == 'Mime-Version'
+            True
+            >>> value == '1.0'
+            True
         '''
 
         if line is None:
@@ -877,7 +930,10 @@ class EmailMessage(object):
                 # try adding the header line and see if python can parse it
                 test_message = Message()
                 test_message.__setitem__(name, value)
-                temp_header = self.parser.parsestr(test_message.as_string(unixfrom=False))
+                if isinstance(self.parser, Parser):
+                    temp_header = self.parser.parsestr(test_message.as_string(unixfrom=False))
+                else:
+                    temp_header = self.parser.parsebytes(test_message.as_string(unixfrom=False).encode())
                 if temp_header.__len__() == 0:
                     self.log_message('bad header: {}'.format(line))
                     self.bad_header_lines.append(line)
@@ -923,6 +979,29 @@ class EmailMessage(object):
                 self._message.__delitem__(name)
                 self._message.__setitem__(name, value)
                 self.log_message('set message encoding: {}'.format(value))
+
+    def _get_decoded_payload(self, msg, decode=True):
+        '''
+            Get the payload and decode it if necessary.
+
+            >>> email_message = EmailMessage()
+            >>> email_message._get_decoded_payload(None)
+        '''
+        if msg is None:
+            payload = None
+        else:
+            payload = msg.get_payload(decode=decode)
+
+            if isinstance(payload, bytearray) or isinstance(payload, bytes):
+                charset, __ = get_charset(msg, self._last_charset)
+                self.log_message('decoding payload with char set: {}'.format(charset))
+                try:
+                    payload = payload.decode(encoding=charset)
+                except:
+                    payload = payload.decode(encoding=charset, errors='replace')
+
+
+        return payload
 
     def _create_new_header(self, message_string):
         '''
@@ -979,9 +1058,10 @@ class EmailMessage(object):
             ...    email_message._create_new_body_text('Test new body text')
         '''
 
+        charset, __ = get_charset(self._message, self._last_charset)
+        self.log_message('creating new body text with char set: {}'.format(charset))
         try:
             body_text = ''
-            charset, __ = get_charset(self._message, self._last_charset)
             for line in body:
                 body_text += line.encode(charset)
         except Exception as body_exception:
@@ -994,7 +1074,7 @@ class EmailMessage(object):
             for bad_header_line in self.bad_header_lines:
                 body_text += '  {}\n'.format(bad_header_line)
 
-        self._message.set_payload(body_text)
+        self._message.set_payload(body_text, charset=charset)
 
     def _create_good_message_from_bad(self, source):
         '''
@@ -1010,7 +1090,7 @@ class EmailMessage(object):
             # start with a fresh message
             self._message = Message()
 
-            if isinstance(source, file):
+            if isinstance(source, IOBase):
                 source.seek(os.SEEK_SET)
                 message_string = source.read()
             else:
@@ -1024,7 +1104,6 @@ class EmailMessage(object):
             self.log_message(message_exception)
             record_exception()
             raise MessageException(message_exception)
-
 
     def init_new_message(self, from_addr, to_addr, subject, text=None):
         ''' Initialize a basic new message.
@@ -1056,7 +1135,7 @@ class EmailMessage(object):
             >>> email_message.log_message_exception(Exception, 'message', 'log message')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.exception.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'syr.exception.log'))
             True
         '''
 
@@ -1078,7 +1157,7 @@ class EmailMessage(object):
             >>> email_message.log_exception('test')
             >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.mail.message.email_message.log'))
             True
-            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'goodcrypto.utils.exception.log'))
+            >>> os.path.exists(os.path.join(BASE_LOG_DIR, whoami(), 'syr.exception.log'))
             True
             >>> email_message.log_exception('test', message_exception='message exception')
         '''

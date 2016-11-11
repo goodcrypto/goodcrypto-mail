@@ -1,6 +1,6 @@
 '''
     Copyright 2014-2016 GoodCrypto.
-    Last modified: 2016-03-05
+    Last modified: 2016-11-01
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 
@@ -31,16 +31,18 @@
     </pre>
 '''
 from string import capwords
+
 from goodcrypto.mail import constants, crypto_software
 from goodcrypto.mail.i18n_constants import KEYBLOCK_INVALID
 from goodcrypto.mail.models import Contact, ContactsCrypto, UserKey
-from goodcrypto.mail.utils import email_in_domain
+from goodcrypto.mail.utils import email_in_domain, gen_user_passcode
 from goodcrypto.oce.crypto_exception import CryptoException
 from goodcrypto.oce.key.key_factory import KeyFactory
 from goodcrypto.oce.utils import format_fingerprint, strip_fingerprint
 from goodcrypto.utils import i18n, parse_address, get_email
-from goodcrypto.utils.exception import record_exception
 from goodcrypto.utils.log_file import LogFile
+from syr.exception import record_exception
+from syr.python import is_string
 
 NO_FINGERPRINT_IN_DB = 'There is no {encryption} fingerprint in the database for {email}.'
 
@@ -70,7 +72,7 @@ def is_ok():
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -125,7 +127,7 @@ def get(email):
     except Exception:
         contact = None
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     log_message("got {}: {}".format(address, contact != None))
 
@@ -141,31 +143,31 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
         >>> contact = add(email, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> contact.email
         'thomas@goodcrypto.remote'
+        >>> contact.user_name
+        'Thomas'
+        >>> address = contact.email
+        >>> address = 'thomas@goodcrypto.remote'
         >>> contacts_crypto = ContactsCrypto.objects.get(
         ...    contact=contact, encryption_software=encryption_software)
         >>> contacts_crypto is not None
         True
-        >>> contact.delete()
+        >>> x = contact.delete()
         >>> contact = add(None, encryption_software)
         >>> contact is None
         True
         >>> contact = add(email, None)
-        >>> contact.email
-        'thomas@goodcrypto.remote'
-        >>> contact.user_name
-        'Thomas'
+        >>> contact.email = 'thomas@goodcrypto.remote'
+        >>> contact.user_name = 'Thomas'
         >>> get_contacts_crypto(email)
         []
-        >>> contact.delete()
+        >>> x = contact.delete()
         >>> contact = add(None, None)
         >>> contact is None
         True
         >>> contact = add('_domain_@test.com', None)
-        >>> contact.email
-        '_domain_@test.com'
-        >>> contact.user_name
-        'test.com domain key (system use only)'
-        >>> contact.delete()
+        >>> contact.email = '_domain_@test.com'
+        >>> contact.user_name = 'test.com domain key (system use only)'
+        >>> x = contact.delete()
     '''
 
     try:
@@ -182,6 +184,7 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
                 if user_name is not None and contact.user_name != user_name:
                     contact.user_name = user_name
                     contact.save()
+                    log_message('updated {} user name to {}'.format(email_address, user_name))
             except Contact.DoesNotExist:
                 log_message('creating a contact for {}'.format(email_address))
                 try:
@@ -207,11 +210,11 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
                 contact = Contact.objects.create(email=email_address, user_name=user_name)
             except Exception:
                 record_exception()
-                log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                log_message('EXCEPTION - see syr.exception.log for details')
                 contact = None
 
         if encryption_program is None:
-            log_message("no encryption software defined so not creating contact's crytpo record")
+            log_message("no encryption software defined so not creating contact's crytpo record for {}".format(email))
         else:
             # add a corresponding record for the contact's crypto program
             encryption_software = crypto_software.get(encryption_program)
@@ -224,10 +227,16 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
                     if (fingerprint is not None and
                         strip_fingerprint(contacts_crypto.fingerprint) != strip_fingerprint(fingerprint)):
                         contacts_crypto.fingerprint = format_fingerprint(fingerprint)
+                        if email_in_domain(email):
+                            if contacts.crypto.source is None:
+                                contacts.crypto.source = constants.AUTO_GENERATED
+                            if contacts_crypto.source == constants.AUTO_GENERATED:
+                                contacts_crypto.verified = True
                         contacts_crypto.save()
                 except ContactsCrypto.DoesNotExist:
-                    # if the contact existed, but was set to never encrypt and now we have a key,
-                    # then change the outbound encrypt policy to the default
+                    # if the contact existed without any contact crypto, but was set
+                    # to never encrypt and now we have a key, then change the
+                    # outbound encrypt policy to the default
                     if (not new_contact and
                         contact.outbound_encrypt_policy == constants.NEVER_ENCRYPT_OUTBOUND):
                         contact.outbound_encrypt_policy = constants.DEFAULT_OUTBOUND_ENCRYPT_POLICY
@@ -236,21 +245,16 @@ def add(email, encryption_program, fingerprint=None, passcode=None, source=None)
                     contacts_crypto = add_contacts_crypto(contact, encryption_software,
                         fingerprint=fingerprint, source=source)
 
-                    if passcode is not None and contacts_crypto is not None:
-                        user_key = UserKey.objects.create(
-                          contacts_encryption=contacts_crypto, passcode=passcode)
-                        log_message('created a user key with the passcode predefined')
-
                     log_message("created {} crypto record for {} with {} fingerprint: {}".format(
                         encryption_software, email, fingerprint, contacts_crypto is not None))
                 except:
                     record_exception()
-                    log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+                    log_message('EXCEPTION - see syr.exception.log for details')
 
     except Exception:
         contact = None
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return contact
 
@@ -270,7 +274,7 @@ def delete(email_or_address):
 
     result_ok = True
     try:
-        if isinstance(email_or_address, str) or isinstance(email_or_address, unicode):
+        if is_string(email_or_address):
             name, address = parse_address(email_or_address)
             contact = get(address)
             if contact is None:
@@ -291,7 +295,7 @@ def delete(email_or_address):
     except Exception:
         result_ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return result_ok
 
@@ -328,12 +332,10 @@ def get_contacts_crypto(email, encryption_name=None):
     except ContactsCrypto.DoesNotExist:
         log_message('{} does not use {}'.format(email, encryption_name))
     except Contact.DoesNotExist:
-        log_message('{} does not use the exist in the contacts table'.format(email))
+        log_message('{} does not exist in the contacts table'.format(email))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
-
-    log_message("get_contacts_crypto results: {}".format(query_results))
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return query_results
 
@@ -356,6 +358,7 @@ def add_contacts_crypto(contact, encryption_software, fingerprint=None, source=N
         contacts_crypto = ContactsCrypto.objects.create(
                            contact=contact, encryption_software=encryption_software,
                            fingerprint=formatted_fingerprint, source=source)
+        log_message("created contact crypto for {}: {}".format(contact, contacts_crypto is not None))
 
     return contacts_crypto
 
@@ -378,7 +381,7 @@ def delete_contacts_crypto(email, encryption_name):
         except Exception:
             result_ok = False
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     log_message("deleted {} crypto for {}: {}".format(encryption_name, email, result_ok))
 
@@ -464,7 +467,7 @@ def get_fingerprint(email, encryption_name):
     '''
         Get the fingerprint for the encryption software for this email.
 
-        >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+        >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
         >>> fingerprint, verified, active = get_fingerprint(
         ...    EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> len(fingerprint) > 0
@@ -504,12 +507,41 @@ def get_fingerprint(email, encryption_name):
 
     return fingerprint, verified, active
 
+def get_addresses_with_fingerprint(fingerprint, encryption_name):
+    '''
+        Get all the email addresses with the same fingerprint for the encryption software.
+        If the database only has one record with a matching fingerprint, then return 0.
+
+        >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
+        >>> addresses = get_addresses_with_fingerprint(
+        ...    EDWARD_LOCAL_USER, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        >>> len(addresses) == 0
+        True
+    '''
+
+    addresses = []
+    if fingerprint is None or encryption_name is None:
+        log_message("missing data to get all the contacts with the same fingerprint;: {} encryption: {}".format(
+           fingerprint, encryption_name))
+    else:
+        log_message("getting contacts with {} fingerprint for {}".format(fingerprint, encryption_name))
+        try:
+            records = ContactsCrypto.objects.filter(
+              fingerprint=fingerprint, encryption_software__name=encryption_name)
+            for record in records:
+                addresses.append(record.contact.email)
+            log_message("{} contacts have the same fingerprint".format(len(addresses)))
+        except ContactsCrypto.DoesNotExist:
+            log_message("unable to find any contact's with matching fingerprint")
+
+    return addresses
+
 def is_key_ok(email, encryption_name):
     '''
         Throws a CryptoException if the email address does not have a crypto key, or
         the key has expired, or the key's fingerprint does not match the fingerprint in the database.
 
-        >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER_ADDR
+        >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER_ADDR
         >>> ok, __, active = is_key_ok(EDWARD_LOCAL_USER_ADDR, KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> ok
         True
@@ -518,10 +550,12 @@ def is_key_ok(email, encryption_name):
 
         # In honor of Georg Koppen, works on Tor Browser, Torbutton, and our build automation.
         >>> email = 'Georg <georg@goodcrypto.remote>'
-        >>> is_key_ok(email, KeyFactory.DEFAULT_ENCRYPTION_NAME)
-        Traceback (most recent call last):
-            ...
-        CryptoException: 'There is no key for Georg <georg@goodcrypto.remote>.'
+        >>> try:
+        ...     is_key_ok(email, KeyFactory.DEFAULT_ENCRYPTION_NAME)
+        ...     fail()
+        ... except CryptoException as crypto_exception:
+        ...     crypto_exception.__str__() == 'There is no key for Georg <georg@goodcrypto.remote>.'
+        True
     '''
 
     # we use NO_FINGERPRINT_IN_DB a few times because we don't want to get too technical
@@ -560,6 +594,8 @@ def is_key_ok(email, encryption_name):
                 if contacts_encryption is not None and contacts_encryption.fingerprint is None:
                     database_fingerprint = crypto_fingerprint
                     contacts_encryption.fingerprint = database_fingerprint
+                    if email_in_domain(email) and contacts.crypto.source is None:
+                        contacts.crypto.source = constants.AUTO_GENERATED
                     contacts_encryption.save()
                     log_message('updated {} fingerprint for {}'.format(encryption_name, email))
 
@@ -590,7 +626,7 @@ def get_public_key(email, encryption_software):
     '''
         Get the public key for the encryption software for this email.
 
-        >>> from goodcrypto.oce.constants import EDWARD_LOCAL_USER
+        >>> from goodcrypto.oce.test_constants import EDWARD_LOCAL_USER
         >>> encryption_software = crypto_software.get(KeyFactory.DEFAULT_ENCRYPTION_NAME)
         >>> public_key = get_public_key(EDWARD_LOCAL_USER, encryption_software)
         >>> public_key is not None
@@ -718,7 +754,7 @@ def get_encryption_names(email):
                 encryption_names.append(encryption_name)
                 log_message("{} encryption software: {}".format(email, encryption_name))
         else:
-            log_message("no encryption software for this contact")
+            log_message("no encryption software for {}".format(email))
     else:
         log_message("unable to get address from {}".format(email))
 
@@ -748,7 +784,7 @@ def get_contact_list(encryption_name=None):
             log_message('no contact')
         except Exception:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     else:
         try:
@@ -764,7 +800,7 @@ def get_contact_list(encryption_name=None):
             log_message('no contacts with crypto')
         except Exception:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     return contact_list
 
@@ -774,7 +810,7 @@ def get_metadata_domains():
 
         # Test extreme case. See unittests to see how to use this function.
         >>> type(get_metadata_domains())
-        <type 'list'>
+        <class 'list'>
     '''
 
     from goodcrypto.mail.utils import get_domain_user
@@ -795,7 +831,7 @@ def get_metadata_domains():
                     log_message("metadata domain: {}".format(domain))
     except Exception:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return metadata_list
 

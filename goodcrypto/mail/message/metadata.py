@@ -1,6 +1,6 @@
 '''
     Copyright 2015-2016 GoodCrypto
-    Last modified: 2016-02-12
+    Last modified: 2016-08-03
 
     This file is open source, licensed under GPLv3 <http://www.gnu.org/licenses/>.
 '''
@@ -9,18 +9,17 @@ from datetime import datetime
 
 from goodcrypto.mail import contacts, options, user_keys
 from goodcrypto.mail.constants import AUTO_GENERATED, MESSAGE_HEADER
-from goodcrypto.mail.crypto_rq import add_private_key_via_rq, set_fingerprint_via_rq
 from goodcrypto.mail.internal_settings import get_domain
 from goodcrypto.mail.message import constants
 from goodcrypto.mail.message.inspect_utils import get_charset
 from goodcrypto.mail.message.message_exception import MessageException
-from goodcrypto.mail.utils import get_domain_user
+from goodcrypto.mail.utils import get_domain_user, parse_domain
 from goodcrypto.mail.utils.dirs import get_packet_directory, SafeDirPermissions
 from goodcrypto.oce.crypto_factory import CryptoFactory
-from goodcrypto.utils import get_email, i18n, parse_domain
-from goodcrypto.utils.exception import record_exception
+from goodcrypto.utils import get_email, i18n
 from goodcrypto.utils.log_file import LogFile
 from syr import mime_constants
+from syr.exception import record_exception
 from syr.fs import get_unique_filename
 from syr.message import prep_mime_message
 
@@ -46,7 +45,7 @@ def get_metadata_address(email=None, domain=None):
             domain = parse_domain(email)
         except:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     if domain is None or len(domain.strip()) <= 0:
         log_message('unable to get metadata address without a domain')
@@ -55,7 +54,7 @@ def get_metadata_address(email=None, domain=None):
             metadata_address = '{} domain key (system use only) <{}@{}>'.format(domain, get_domain_user(), domain)
         except:
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     return metadata_address
 
@@ -77,8 +76,9 @@ def is_metadata_address(email):
             if local == get_domain_user():
                 result = True
         except:
+            log_message('unable to partition: {} ({})'.format(email, address))
             record_exception()
-            log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+            log_message('EXCEPTION - see syr.exception.log for details')
 
     return result
 
@@ -97,10 +97,12 @@ def get_metadata_user_details(email, encryption_name):
         metadata_address = get_metadata_address(email=email)
         fingerprint, verified, active = contacts.get_fingerprint(metadata_address, encryption_name)
         if fingerprint is None:
+            from goodcrypto.mail.message.utils import sync_fingerprint_via_queue
+
             ok = False
             log_message('no fingerprint for {}'.format(metadata_address))
             # queue up to get the fingerprint
-            set_fingerprint_via_rq(contacts.get_contacts_crypto(email, encryption_name=encryption_name))
+            sync_fingerprint_via_queue(contacts.get_contacts_crypto(email, encryption_name=encryption_name))
         elif not active:
             ok = False
             log_message('{}  is not active'.format(metadata_address))
@@ -112,7 +114,7 @@ def get_metadata_user_details(email, encryption_name):
     except:
         ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     if not ok:
         metadata_address = None
@@ -147,7 +149,7 @@ def get_from_metadata_user_details(email, encryption_name):
     except:
         ok = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     if not ok:
         metadata_address = passcode = None
@@ -182,13 +184,11 @@ def prep_metadata_key_message(from_user, to_user):
             log_message('missing user data so unable to prepare metadata key message')
 
         else:
-            from goodcrypto.mail.utils import get_encryption_software
-
             # we want to send a message from the original recipient's "no metadata" address
             # to the original sender's "no metadata" address
             remote_metadata_address = get_metadata_address(email=from_user)
             local_metadata_address = get_metadata_address(email=to_user)
-            encryption_software = get_encryption_software(local_metadata_address)
+            encryption_software = contacts.get_encryption_names(local_metadata_address)
 
             extra_headers = get_extra_headers()
             if extra_headers is None:
@@ -205,7 +205,7 @@ def prep_metadata_key_message(from_user, to_user):
     except:
         message = None
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return message, local_metadata_address, remote_metadata_address
 
@@ -234,7 +234,7 @@ def send_metadata_key(from_user, to_user):
     except:
         sent_message = False
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return sent_message
 
@@ -243,8 +243,6 @@ def is_ready_to_protect_metadata(from_user, to_user):
         Determine if encrypt_metadata is True and we have a
         metadata key for both the sender's and recipient's servers.
     '''
-    from goodcrypto.mail.utils import get_encryption_software
-
     if from_user is None or to_user is None:
         ready = False
     else:
@@ -253,7 +251,7 @@ def is_ready_to_protect_metadata(from_user, to_user):
         if ready:
             # first see if we know the metadata address for the recipient's server
             to_metadata_user = get_metadata_address(email=to_user)
-            encryption_names = get_encryption_software(to_metadata_user)
+            encryption_names = contacts.get_encryption_names(to_metadata_user)
             ready = len(encryption_names) > 0
             log_message("{} uses {} encryption programs".format(to_metadata_user, encryption_names))
             for encryption_name in encryption_names:
@@ -268,7 +266,7 @@ def is_ready_to_protect_metadata(from_user, to_user):
         if ready:
             # then see if we know the metadata address for the sender's server
             from_metadata_user = get_metadata_address(email=from_user)
-            encryption_names = get_encryption_software(from_metadata_user)
+            encryption_names = contacts.get_encryption_names(from_metadata_user)
             ready = len(encryption_names) > 0
             log_message("{} uses {} encryption programs".format(from_metadata_user, encryption_names))
             for encryption_name in encryption_names:
@@ -288,14 +286,16 @@ def is_ready_to_protect_metadata(from_user, to_user):
                             from_user, encryption_name=encryption_name)
                     else:
                         user_key = user_keys.get(from_user, encryption_name)
-                        if user_key is None or user_key.passcode is None:
-                            from goodcrypto.mail.message.utils import add_private_key
+                        if user_key is None:
+                            from goodcrypto.mail.message.utils import sync_private_key_via_queue
 
-                            add_private_key_via_rq(contacts_crypto)
+                            sync_private_key_via_queue(contacts_crypto)
                             log_message('started to add private {} key for {}'.format(
                                 encryption_name, from_user))
                         else:
-                            set_fingerprint_via_rq(contacts_crypto)
+                            from goodcrypto.mail.message.utils import sync_fingerprint_via_queue
+
+                            sync_fingerprint_via_queue(contacts_crypto)
                             log_message('started to update {} fingerprint for {}'.format(
                                 encryption_name, from_user))
 
@@ -325,7 +325,7 @@ def packetize(crypto_message, encrypted_with, verification_code):
         message_name = get_unique_filename(dirname, constants.MESSAGE_PREFIX, constants.MESSAGE_SUFFIX)
         with open(message_name, 'wt') as f:
             f.write(crypto_message.get_email_message().to_string())
-            f.write(constants.START_ADDENDUM)
+            f.write('{}'.format(constants.START_ADDENDUM))
             f.write('{}: {}\n'.format(mime_constants.FROM_KEYWORD, crypto_message.smtp_sender()))
             f.write('{}: {}\n'.format(mime_constants.TO_KEYWORD, crypto_message.smtp_recipient()))
             f.write('{}: {}\n'.format(constants.CRYPTED_KEYWORD, crypto_message.is_crypted()))
@@ -334,20 +334,20 @@ def packetize(crypto_message, encrypted_with, verification_code):
             f.write('{}: {}\n'.format(constants.CLEAR_SIGNED_KEYWORD, crypto_message.is_clear_signed()))
             f.write('{}: {}\n'.format(constants.DKIM_SIGNED_KEYWORD, crypto_message.is_dkim_signed()))
             f.write('{}: {}\n'.format(constants.VERIFICATION_KEYWORD, verification_code))
-            f.write(constants.END_ADDENDUM)
+            f.write('{}'.format(constants.END_ADDENDUM))
         log_message('packetized message filename: {}'.format(os.path.basename(message_name)))
     except:
         message_name = None
         crypto_message.set_processed(False)
         error_message = i18n('Unable to packetize message due to an unexpected error.')
         log_message(error_message)
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
         record_exception()
         raise MessageException(value=error_message)
 
     return message_name
 
-def parse_bundled_message(bundled_message):
+def parse_bundled_message(bundled_message_bytes):
     '''
         Parse a message that was bundled.
 
@@ -384,9 +384,15 @@ def parse_bundled_message(bundled_message):
        constants.DKIM_SIGNED_KEYWORD: False,
        constants.VERIFICATION_KEYWORD: None,
     }
-    original_message = sender = recipient = crypted_with = None
+    original_message = sender = recipient = crypted_with = msg = None
     crypted = False
     try:
+        if isinstance(bundled_message_bytes, str):
+            bundled_message = bundled_message_bytes
+        else:
+            bundled_message = bundled_message_bytes.decode()
+
+        log_message('{}'.format(bundled_message)) #DEBUG
         # separate the original message from the addendum
         i = bundled_message.find(constants.START_ADDENDUM)
         if i > 0:
@@ -423,9 +429,12 @@ def parse_bundled_message(bundled_message):
     except UnboundLocalError as unbound_exception:
         # common error for "padding" parts of a bundled message
         log_message(unbound_exception)
+    except UnicodeDecodeError as unicode_decode_error:
+        # common error for "padding" parts of a bundled message
+        log_message(unicode_decode_error)
     except:
         record_exception()
-        log_message('EXCEPTION - see goodcrypto.utils.exception.log for details')
+        log_message('EXCEPTION - see syr.exception.log for details')
 
     return original_message, addendum
 

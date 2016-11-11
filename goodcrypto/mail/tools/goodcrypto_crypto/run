@@ -1,0 +1,10 @@
+#! /bin/bash
+#  Supervise managing crypto via queue
+#  Last modified: 2016-07-04
+
+RQ=/usr/local/bin/rq
+WORKER=worker
+CONFIG=goodcrypto.mail.crypto_queue_settings
+LOG=/var/local/log/goodcrypto/goodcrypto.mail.crypto_queue_settings.log
+
+sudo -u goodcrypto $RQ $WORKER --quiet --config $CONFIG &>$LOG
